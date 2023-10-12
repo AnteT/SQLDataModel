@@ -16,17 +16,17 @@ pip install name-not-yet-determined # working on it!
 import SQLDataModel
 
 # create a SQLDataModel object from any valid source:
-dm_full = SQLDataModel.from_csv('world-cup-2022.csv')
+sdm = SQLDataModel.from_csv('world-cup-2022.csv')
 
 # manipulate it
-dm_sliced = dm.get_rows_at_index_range(1,4)
+sdm_sliced = sdm.get_rows_at_index_range(1,4)
 
 # loop through it:
-for row in dm_full.iter_rows():
+for row in sdm_full.iter_rows():
     print(row)
 
 # view it as a table
-print(dm)
+print(sdm)
 
 ┌────┬─────────────┬────────┬────────────┐
 │    │ team        │   rank │ federation │
@@ -52,7 +52,7 @@ print(dm)
 [17 rows x 3 columns]
 
 # group by columns:
-print(sm.group_by('federation'))
+print(sdm.group_by('federation'))
 
 ┌───┬────────────┬────────┐
 │   │ federation │  count │
@@ -61,11 +61,16 @@ print(sm.group_by('federation'))
 │ 2 │ CONMEBOL   │      4 │
 └───┴────────────┴────────┘
 [2 rows x 2 columns]
+
 # or save it for later as csv:
-dm.to_csv('world_cup_22.csv')
+sdm.to_csv('world_cup_22.csv')
 
 # or to sqlite database:
-dm.to_sql('world_cup_22', 'sqlite.db')
+sdm.to_sql('world_cup_22', 'sqlite.db')
+
+# and get it back again as a new model:
+sdm_new = SQLDataModel.from_sql('select * from world_cup_22', 'sqlite.db')
+
 ```
 ## Contributing
 

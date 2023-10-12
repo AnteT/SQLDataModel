@@ -4,15 +4,15 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-     name='dokr',  
+     name='SQLDataModel',  
      version='0.1',
-     scripts=['dokr'] ,
-     author="Deepak Kumar",
-     author_email="deepak.kumar.iet@gmail.com",
-     description="A Docker and AWS utility package",
+     scripts=['SQLDataModel.py'] ,
+     author="Ante Tonkovic-Capin",
+     author_email="antetc@icloud.com",
+     description="A data model based on in-memory sqlite",
      long_description=long_description,
    long_description_content_type="text/markdown",
-     url="https://github.com/javatechy/dokr",
+     url="https://github.com/AnteT/sql-model",
      packages=setuptools.find_packages(),
      classifiers=[
          "Programming Language :: Python :: 3",
