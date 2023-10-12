@@ -58,30 +58,6 @@ print(sdm.group_by('federation'))
 |---|------------|-------|
 | 1 | UEFA       | 13    |
 | 2 | CONMEBOL   | 4     |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-|   |            |       |
-```python
-# group by columns:
-print(sdm.group_by('federation'))
-```
-
-|   | federation | count |
-|---|------------|-------|
-| 1 | UEFA       | 13    |
-| 2 | CONMEBOL   | 4     |
 
 ```python
 # or save it for later as csv:
