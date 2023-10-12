@@ -1,4 +1,4 @@
-from sqlmodel import SQLModel
+from SQLDataModel import SQLDataModel
 
 wc_headers = ['team','rank','federation']
 wc_data = [
@@ -21,7 +21,7 @@ wc_data = [
  ,['Wales', 19, 'UEFA']
  ]
 
-sm = SQLModel(wc_data,wc_headers)
+sm = SQLDataModel(wc_data,wc_headers)
 print(sm.colorful("#a6d7e8"))
 print(sm.colorful("#b39cf1"))
 print(sm.group_by('federation').colorful("#dba4a4"))
