@@ -13,7 +13,7 @@ pip install SQLDataModel
 ## Usage
 
 ```python
-import SQLDataModel
+from SQLDataModel import SQLDataModel
 
 # create a SQLDataModel object from any valid source:
 sdm = SQLDataModel.from_csv('world-cup-2022.csv')
