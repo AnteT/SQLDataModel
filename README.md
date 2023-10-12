@@ -4,10 +4,10 @@ SQLDataModel is a speedy & lightweight data model with no external dependencies 
 
 ## Installation
 
-Use the package manager [pip](https://pip.pypa.io/en/stable/) to install the package when its uploaded.
+Use the package manager [pip](https://pip.pypa.io/en/stable/) to install SQLDataModel.
 
 ```bash
-pip install SQLDataModel
+python -m pip install SQLDataModel
 ```
 
 ## Usage
@@ -16,58 +16,55 @@ pip install SQLDataModel
 from SQLDataModel import SQLDataModel
 
 # create a SQLDataModel object from any valid source:
-sdm = SQLDataModel.from_csv('world-cup-2022.csv')
+sdm = SQLDataModel.from_csv('data.csv')
 
 # manipulate it
-sdm_sliced = sdm.get_rows_at_index_range(1,4)
-
-# loop through it:
-for row in sdm_full.iter_rows():
-    print(row)
+sdm_sliced = sdm[2:7]
 
 # view it as a table
 print(sdm)
 ```
 
-|    | team        | rank | federation |
-|----|-------------|------|------------|
-| 1  | Argentina   | 3    | CONMEBOL   |
-| 2  | Brazil      | 1    | CONMEBOL   |
-| 3  | Ecuador     | 44   | CONMEBOL   |
-| 4  | Uruguay     | 14   | CONMEBOL   |
-| 5  | Belgium     | 2    | UEFA       |
-| 6  | Croatia     | 12   | UEFA       |
-| 7  | Denmark     | 10   | UEFA       |
-| 8  | England     | 5    | UEFA       |
-| 9  | France      | 4    | UEFA       |
-| 10 | Germany     | 11   | UEFA       |
-| 11 | Netherlands | 8    | UEFA       |
-| 12 | Poland      | 26   | UEFA       |
-| 13 | Portugal    | 9    | UEFA       |
-| 14 | Serbia      | 21   | UEFA       |
-| 15 | Spain       | 7    | UEFA       |
-| 16 | Switzerland | 15   | UEFA       |
-| 17 | Wales       | 19   | UEFA       |
+|     | country | region    | check | total | report date         |
+|-----|---------|-----------|-------|-------|---------------------|
+| 1   | US      | West      | Yes   | 2016  | 2023-08-23 13:11:43 |
+| 2   | US      | West      | No    | 1996  | 2023-08-23 13:11:43 |
+| 3   | US      | West      | Yes   | 1296  | 2023-08-23 13:11:43 |
+| 4   | US      | West      | No    | 2392  | 2023-08-23 13:11:43 |
+| 5   | US      | Northeast | Yes   | 1233  | 2023-08-23 13:11:43 |
+| 6   | US      | Northeast | No    | 3177  | 2023-08-23 13:11:43 |
+| 7   | US      | Midwest   | Yes   | 1200  | 2023-08-23 13:11:43 |
+| 8   | US      | Midwest   | No    | 2749  | 2023-08-23 13:11:43 |
+| 9   | US      | Midwest   | Yes   | 1551  | 2023-08-23 13:11:43 |
 
 ```python
 # group by columns:
-print(sdm.group_by('federation'))
+sdm_group = sdm.group_by('region','check')
+print(sdm_group)
 ```
 
-|   | federation | count |
-|---|------------|-------|
-| 1 | UEFA       | 13    |
-| 2 | CONMEBOL   | 4     |
+| idx | region    | check | count |
+|-----|-----------|-------|-------|
+| 1   | Midwest   | Yes   | 2     |
+| 2   | West      | No    | 2     |
+| 3   | West      | Yes   | 2     |
+| 4   | Midwest   | No    | 1     |
+| 5   | Northeast | No    | 1     |
+| 6   | Northeast | Yes   | 1     |
 
 ```python
+# loop through it:
+for row in sdm.iter_rows():
+    print(row)
+
 # or save it for later as csv:
-sdm.to_csv('world_cup_22.csv')
+sdm.to_csv('data.csv')
 
 # or to sqlite database:
-sdm.to_sql('world_cup_22', 'sqlite.db')
+sdm.to_sql('data', 'sqlite.db')
 
 # and get it back again as a new model:
-sdm_new = SQLDataModel.from_sql('select * from world_cup_22', 'sqlite.db')
+sdm_new = SQLDataModel.from_sql('select * from data', 'sqlite.db')
 
 ```
 ## Contributing

@@ -132,12 +132,14 @@ class SQLDataModel:
         self.sql_c.execute(f"select * from {self.sql_store}")
         return [tuple(self.headers),*self.sql_c.fetchall()] if include_headers else self.sql_c.fetchall()
     
-    def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', *args, **kwargs):
+    def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', include_index:bool=False, *args, **kwargs):
         """writes `SQLDataModel` to specified file in `csv_file` argument, must be compatible `.csv` file extension"""
-        self.sql_c.execute(f"select * from {self.sql_store}")
+        fetch_stmt = self.model_fetch_all_stmt if include_index else self.model_fetch_all_no_index_stmt
+        self.sql_c.execute(fetch_stmt)
+        write_headers = ['index'] + self.headers if include_index else self.headers
         with open(csv_file, 'w', newline='') as csv_file:
             csvwriter = csv.writer(csv_file,delimiter=delimeter,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, *args, **kwargs)
-            csvwriter.writerow(self.headers)
+            csvwriter.writerow(write_headers)
             csvwriter.writerows(self.sql_c.fetchall())
     
     def to_pickle(self, filename:str=None) -> None:
@@ -243,8 +245,8 @@ class SQLDataModel:
     
     def __getitem__(self, slc):
         if isinstance(slc, slice):
-            start_idx = slc.start
-            stop_idx = slc.stop
+            start_idx = slc.start if slc.start is not None else 0
+            stop_idx = slc.stop if slc.stop is not None else self.row_count
             return self.get_rows_at_index_range(start_index=start_idx,stop_index=stop_idx)
         if isinstance(slc, int):
             single_idx = slc
