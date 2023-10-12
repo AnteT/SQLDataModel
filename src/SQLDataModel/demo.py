@@ -25,6 +25,6 @@ sm = SQLDataModel(wc_data,wc_headers)
 print(sm.colorful("#a6d7e8"))
 print(sm.colorful("#b39cf1"))
 print(sm.group_by('federation').colorful("#dba4a4"))
-sm.get_rows_at_index_range(1,4)
+sm = sm.get_rows_at_index_range(1,4)
 for row in sm.iter_rows():
     print(row)

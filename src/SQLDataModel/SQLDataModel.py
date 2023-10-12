@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-import sqlite3, os, csv, sys, datetime
-from typing import ClassVar, Generator
+import sqlite3, os, csv, sys, datetime, pickle
+from typing import ClassVar, Generator, Tuple, Self   
 
 @dataclass
 class DMColorPen:
@@ -95,19 +95,29 @@ class SQLDataModel:
             self.__dict__.update(kwargs)
 
     @classmethod
-    def from_data(cls, data: list[tuple], headers: list[str] = None, max_rows: int = 1_000, min_column_width: int = 6, max_column_width: int = 32, *args, **kwargs):
+    def from_data(cls, data: list[tuple], headers: list[str] = None, max_rows: int = 1_000, min_column_width: int = 6, max_column_width: int = 32, *args, **kwargs) -> Self:
         return cls(data, headers, max_rows, min_column_width, max_column_width, *args, **kwargs)
 
     @classmethod
-    def from_csv(cls, csv_file:str, delimeter:str=',', quotechar:str='"', headers:list[str] = None, *args, **kwargs):
-        """returns a new `SQLModel` from the provided csv file by wrapping the from_data method after grabbing the rows and headers by assuming first row represents column headers"""
+    def from_csv(cls, csv_file:str, delimeter:str=',', quotechar:str='"', headers:list[str] = None, *args, **kwargs) -> Self:
+        """returns a new `SQLDataModel` from the provided csv file by wrapping the from_data method after grabbing the rows and headers by assuming first row represents column headers"""
         with open(csv_file) as csvfile:
             tmp_all_rows = tuple(tuple(row) for row in csv.reader(csvfile, delimiter=delimeter,quotechar=quotechar))
         # return cls(tmp_all_rows[1:],tmp_all_rows[0] if headers is None else headers, max_rows, min_column_width, max_column_width, *args, **kwargs)
         return cls.from_data(tmp_all_rows[1:],tmp_all_rows[0] if headers is None else headers, *args, **kwargs)    
     
     @classmethod
-    def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, max_rows: int = 1_000, min_column_width: int = 4, max_column_width: int = 32, *args, **kwargs):
+    def from_pickle(cls, filename: str = None, *args, **kwargs) -> Self:
+        """returns the `SQLDataModel` object referenced in the `filename` argument if provided
+        \nif `None` the current directory will be scanned for the default `to_pickle()` filename format"""
+        if filename is None:
+            filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
+        with open(filename, 'rb') as f:
+            tot_raw = pickle.load(f) # Tuple of Tuples raw data
+            return cls.from_data(tot_raw[1:],headers=tot_raw[0], *args, **kwargs)
+               
+    @classmethod
+    def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, max_rows: int = 1_000, min_column_width: int = 4, max_column_width: int = 32, *args, **kwargs) -> Self:
         sql_c = sql_connection.cursor()
         sql_c.execute(sql_query)
         data = sql_c.fetchall()
@@ -117,22 +127,31 @@ class SQLDataModel:
         return cls.from_data(data, headers, max_rows, min_column_width, max_column_width, *args, **kwargs)
     
     def to_data(self, include_headers: bool = False) -> list[tuple]:
-        """returns a list of tuples containing all the `SQLModel` data without the headers by default
+        """returns a list of tuples containing all the `SQLDataModel` data without the headers by default
         \nuse `include_headers = True` to return the headers as the first item in returned sequence"""
         self.sql_c.execute(f"select * from {self.sql_store}")
         return [tuple(self.headers),*self.sql_c.fetchall()] if include_headers else self.sql_c.fetchall()
     
     def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', *args, **kwargs):
-        """writes `SQLModel` to specified file in `csv_file` argument, must be compatible `.csv` file extension"""
+        """writes `SQLDataModel` to specified file in `csv_file` argument, must be compatible `.csv` file extension"""
         self.sql_c.execute(f"select * from {self.sql_store}")
         with open(csv_file, 'w', newline='') as csv_file:
             csvwriter = csv.writer(csv_file,delimiter=delimeter,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, *args, **kwargs)
             csvwriter.writerow(self.headers)
             csvwriter.writerows(self.sql_c.fetchall())
-
+    
+    def to_pickle(self, filename:str=None) -> None:
+        """save the `SQLDataModel` instance to the specified `filename`
+        \nby default the name of the invoking python file will be used"""
+        if filename is None:
+            filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
+        serialized_data = tuple(x[1:] for x in self.iter_rows(include_headers=True)) # no need to send sql_store_id aka index to pickle
+        with open(filename, 'wb') as handle:
+            pickle.dump(serialized_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+       
     def to_sql(self, table:str, extern_conn: sqlite3.Connection, replace_existing:bool = True):
-        """inserts `SQLModel` into specified table using the sqlite database connection object provided in one of two modes:
-        \n`replace_existing = True:` deletes the existing table and replaces it with the SQLModel's
+        """inserts `SQLDataModel` into specified table using the sqlite database connection object provided in one of two modes:
+        \n`replace_existing = True:` deletes the existing table and replaces it with the SQLDataModel's
         \n`replace_existing = False:` append to the existing table and executes a deduplication statement immediately after
         \ncurrently only `sqlite3.Connection` types are supported
         """
@@ -158,20 +177,20 @@ class SQLDataModel:
         extern_conn.close()
 
     def to_text(self, filename:str, include_ts:bool=False) -> None:
-        """writes contents of `SQLModel` to specified `filename`, use `include_ts = True` to include timestamp"""
+        """writes contents of `SQLDataModel` to specified `filename`, use `include_ts = True` to include timestamp"""
         contents = f"{datetime.datetime.now().strftime('%B %d %Y %H:%M:%S')} status:\n" + self.__repr__() if include_ts else self.__repr__()
         with open(filename, "w", encoding='utf-8') as text_file:
             text_file.write(contents)
 
     def get_row_at_index(self, index: int) -> tuple:
-        """returns `SQLModel` row at specified `index` as a tuple"""
+        """returns `SQLDataModel` row at specified `index` as a tuple"""
         if index > self.row_count:
             return
         self.sql_c.execute(f"""{self.model_fetch_all_stmt} where {self.sql_store_id} = {index}""")
         return self.sql_c.fetchone()
     
-    def get_rows_at_index_range(self, start_index: int, stop_index: int = None, retain_index:bool=True, **kwargs):
-        """returns `SQLModel` rows from specified `start_index` to specified `stop_index` as a new `SQLModel`
+    def get_rows_at_index_range(self, start_index: int, stop_index: int = None, retain_index:bool=True, **kwargs) -> Self:
+        """returns `SQLDataModel` rows from specified `start_index` to specified `stop_index` as a new `SQLDataModel`
         \nif `stop_index` is not specified or the value exceeds `row_count`, then last row or largest valid index will be used"""
         idx_start = start_index if start_index < self.row_count else 1
         idx_stop = stop_index if stop_index is not None else self.row_count
@@ -218,10 +237,19 @@ class SQLDataModel:
         """
         self.column_alignment = alignment
 
-    def get_shape(self) -> (int, int):
+    def get_shape(self) -> Tuple[int, int]:
         """returns the shape of the data as a tuple of `(rows x columns)`"""
         return (self.row_count,self.column_count)
-        
+    
+    def __getitem__(self, slc):
+        if isinstance(slc, slice):
+            start_idx = slc.start
+            stop_idx = slc.stop
+            return self.get_rows_at_index_range(start_index=start_idx,stop_index=stop_idx)
+        if isinstance(slc, int):
+            single_idx = slc
+            return self.get_row_at_index(index=single_idx) 
+               
     def __repr__(self):
         self.sql_c.execute(f"select * from {self.sql_store} limit {self.max_rows}")
         table_data = self.sql_c.fetchall()
@@ -296,7 +324,7 @@ class SQLDataModel:
         return table_body
 
     def colorful(self,color:str=None):
-        """returns a colorful `repr` of the `SQLModel` object using the hex `color` specified"""
+        """returns a colorful `repr` of the `SQLDataModel` object using the hex `color` specified"""
         if color is None:
             color = "#78bed7"
         color_pen = DMColorPen.create(color)
@@ -373,7 +401,7 @@ class SQLDataModel:
         return color_pen.wrap(table_body)
        
     def query(self, sql_query:str, **kwargs):
-        """returns a new SQLModel object after executing provided sql_query arg"""
+        """returns a new SQLDataModel object after executing provided sql_query arg"""
         self.sql_c.execute(sql_query)
         data = self.sql_c.fetchall()
         headers = [x[0] for x in self.sql_c.description]
@@ -396,7 +424,24 @@ class SQLDataModel:
         self.sql_c.execute(group_by_stmt)
         return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], **kwargs)
     
-    def iter_rows(self) -> Generator[tuple,None,None]:
-        """returns an iterator through all the available data"""
-        self.sql_c.execute(self.model_fetch_all_explicit_stmt)
+    def iter_rows(self, min_row:int=None, max_row:int=None, include_headers:bool=False) -> Generator:
+        """returns a generator object of the rows in the model from `min_row` to `max_row`, usage:
+        \n`for row in sm_obj.iter_rows(min_row=2, max_row=4):`
+        \n\t`print(row)`
+        \n`min_row` and `max_row` are inclusive to values specified
+        \n`include_headers=True` to include headers as first row
+        """
+        if max_row is None:
+            max_row = self.row_count
+        if min_row is None:
+            min_row = 0
+        if include_headers:
+            self.sql_c.execute(f"""select 0 "{self.sql_store_id}",""" + ", ".join(f"""'{x}' "{x}" """ for x in self.headers) + f""" UNION {self.model_fetch_all_stmt} where {self.sql_store_id} >= {min_row} and {self.sql_store_id} <= {max_row} order by {self.sql_store_id} asc""")
+        else:
+            self.sql_c.execute(f"""{self.model_fetch_all_stmt} where {self.sql_store_id} >= {min_row} and {self.sql_store_id} <= {max_row} order by {self.sql_store_id} asc""")
         return (x for x in self.sql_c.fetchall())
+
+    # def iter_rows(self) -> Generator[tuple,None,None]:
+    #     """returns an iterator through all the available data"""
+    #     self.sql_c.execute(self.model_fetch_all_explicit_stmt)
+    #     return (x for x in self.sql_c.fetchall())
