@@ -1,6 +1,21 @@
 from dataclasses import dataclass
 import sqlite3, os, csv, sys, datetime, pickle
 from typing import ClassVar, Generator, Tuple, Self   
+from importlib.util import find_spec
+
+try:
+    import numpy as _np
+except:
+    _has_np = False
+else:
+    _has_np = True
+
+try:
+    import pandas as _pd
+except:
+    _has_pd = False
+else:
+    _has_pd = True
 
 @dataclass
 class DMColorPen:
@@ -105,7 +120,29 @@ class SQLDataModel:
             tmp_all_rows = tuple(tuple(row) for row in csv.reader(csvfile, delimiter=delimeter,quotechar=quotechar))
         # return cls(tmp_all_rows[1:],tmp_all_rows[0] if headers is None else headers, max_rows, min_column_width, max_column_width, *args, **kwargs)
         return cls.from_data(tmp_all_rows[1:],tmp_all_rows[0] if headers is None else headers, *args, **kwargs)    
-    
+
+    @classmethod
+    def from_numpy(cls, array, header_index:int=0, *args, **kwargs) -> Self:
+        """returns a `SQLDataModel` object created from the provided numpy `array`
+        \nuse `header_index` to specific header row, default set to use first row
+        \nnote that `numpy` must be installed in order to use this class method"""
+        if not _has_np:
+            print(f"""{type(cls).__name__} Error:\nRequired package not found, numpy must be installed in order to use the from_numpy method""")
+            sys.exit()
+        data = array.tolist()
+        return cls.from_data(data=data[header_index+1:],headers=data[header_index], *args, **kwargs)
+
+    @classmethod
+    def from_pandas(cls, df, *args, **kwargs) -> Self:
+        """returns a `SQLDataModel` object created from the provided pandas `DataFrame`
+        \nnote that `pandas` must be installed in order to use this class method"""
+        if not _has_pd:
+            print(f"""{type(cls).__name__} Error:\nRequired package not found, pandas must be installed in order to use the from_pandas method""")
+            sys.exit()
+        data = [x[1:] for x in df.itertuples()]
+        headers = df.columns.tolist()
+        return cls.from_data(data=data,headers=headers, *args, **kwargs)
+
     @classmethod
     def from_pickle(cls, filename: str = None, *args, **kwargs) -> Self:
         """returns the `SQLDataModel` object referenced in the `filename` argument if provided
@@ -118,6 +155,15 @@ class SQLDataModel:
                
     @classmethod
     def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, max_rows: int = 1_000, min_column_width: int = 4, max_column_width: int = 32, *args, **kwargs) -> Self:
+        """returns a `SQLDataModel` object created from executing the `sql_query` using the provided `sql_connection`
+        \nif a single word is provided, the query will be wrapped and executed as a select all:
+        \n\t`sdm_obj = SQLDataModel.from_sql("table_name", sqlite3.Connection)` # will be executed as:
+        \n\t`sdm_obj = SQLDataModel.from_sql("select * from table_name", sqlite3.Connection)`
+        \notherwise the full query passed to `sql_query` will be executed verbatim.
+        \nnote that `sql_connection` can be any valid DB API 2.0 compliant connection.
+        """
+        if len(sql_query.split()) == 1:
+            sql_query = f""" select * from {sql_query} """
         sql_c = sql_connection.cursor()
         sql_c.execute(sql_query)
         data = sql_c.fetchall()
@@ -141,6 +187,28 @@ class SQLDataModel:
             csvwriter = csv.writer(csv_file,delimiter=delimeter,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, *args, **kwargs)
             csvwriter.writerow(write_headers)
             csvwriter.writerows(self.sql_c.fetchall())
+    
+    def to_numpy(self):
+        """converts `SQLDataModel` to numpy `array` object of shape (rows, columns)
+        \nnote that `numpy` must be installed to use this method"""
+        if not _has_np:
+            print(f"""{type(self).__name__} Error:\nRequired package not found, numpy must be installed in order to use to_numpy method""")
+            sys.exit()
+        self.sql_c.execute(self.model_fetch_all_explicit_stmt)
+        return _np.vstack([_np.array(['index'] + self.headers),[_np.array(x) for x in self.sql_c.fetchall()]])
+
+    def to_pandas(self):
+        """converts `SQLDataModel` to pandas `DataFrame` object
+        \nnote that `pandas` must be installed to use this method"""
+        if not _has_pd:
+            print(f"""{type(self).__name__} Error:\nRequired package not found, pandas must be installed in order to use to_pandas method""")
+            sys.exit()
+        self.sql_c.execute(self.model_fetch_all_explicit_stmt)
+        raw_data = self.sql_c.fetchall()
+        data = [x[1:] for x in raw_data]
+        indicies = [x[0] for x in raw_data]
+        columns = self.headers
+        return _pd.DataFrame(data=data,columns=columns,index=indicies)
     
     def to_pickle(self, filename:str=None) -> None:
         """save the `SQLDataModel` instance to the specified `filename`
@@ -442,8 +510,15 @@ class SQLDataModel:
         else:
             self.sql_c.execute(f"""{self.model_fetch_all_stmt} where {self.sql_store_id} >= {min_row} and {self.sql_store_id} <= {max_row} order by {self.sql_store_id} asc""")
         return (x for x in self.sql_c.fetchall())
-
-    # def iter_rows(self) -> Generator[tuple,None,None]:
-    #     """returns an iterator through all the available data"""
-    #     self.sql_c.execute(self.model_fetch_all_explicit_stmt)
-    #     return (x for x in self.sql_c.fetchall())
+    
+    def check_if_package_installed_and_imported(self, package:str) -> bool:
+        # check if package is installed
+        module_spec = find_spec(package)
+        if module_spec is None:
+            print(f"""{type(self).__name__} Error:\nModule not installed, {package} must be installed in order to use to_{package} method""")
+            return False
+        # check if package is installed & imported
+        if package not in sys.modules:
+            print(f"""{type(self).__name__} Error:\nModule not imported, {package} must be imported in order to use to_{package} method""")
+            return False
+        return True

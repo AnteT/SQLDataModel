@@ -14,7 +14,7 @@ for row in my_table.iter_rows():
 my_table.to_sql("new_table", psycopg2.Connection)
 ```
 
-Made for those times when you need to move data around but the full pandas, numpy, sqlalchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like pretty printing your table, at  <span style="font-size: 9pt;">$1/1000$</span> the size, 0.03MB vs 30MB
+Made for those times when you need to move data around but the full pandas, numpy, sqlalchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like pretty printing your table, at  <span style="font-size: 10pt;">1/1000</span> the size, 0.03MB vs 30MB
 
 ### Installation
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install SQLDataModel.
@@ -78,5 +78,5 @@ Please make sure to update tests as appropriate.
 [MIT](https://choosealicense.com/licenses/mit/)
 
 
-Thank you!
+Thank you!  
 Ante Tonkovic-Capin
