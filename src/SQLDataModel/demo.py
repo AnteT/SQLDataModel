@@ -15,6 +15,7 @@ data = (
 
 sdm = SQLDataModel(data,headers)
 
+
 print(sdm) # prints standard color
 print(sdm.colorful("#a6d7e8")) # outputs as teal
 print(sdm.colorful("#b39cf1")) # outputs as purple
