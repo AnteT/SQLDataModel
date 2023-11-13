@@ -73,7 +73,7 @@ class SQLDataModel:
                 print(e)
                 sys.exit()
         else:
-            headers = [*(f"column_{i}" for i in range(len(data[0])))]
+            headers = [*(f"col_{i+1}" for i in range(len(data[0])))]
         if retain_index:
             self.headers = headers[1:]
             dtype_slice = 1
@@ -268,6 +268,17 @@ class SQLDataModel:
         # self.sql_c.execute(f"""{self.model_fetch_all_no_index_stmt} where {self.sql_store_id} >= {idx_start} and {self.sql_store_id} <= {idx_stop} order by {self.sql_store_id} asc""")
         self.sql_c.execute(f"""{fetch_stmt} where {self.sql_store_id} >= {idx_start} and {self.sql_store_id} <= {idx_stop} order by {self.sql_store_id} asc""")
         return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], retain_index=retain_index,**kwargs)
+
+    def get_rows_and_cols_at_index_range(self, start_index: int, stop_index: int = None, start_col:int=None, stop_col:int=None, retain_index:bool=True, **kwargs) -> Self:
+        """returns `SQLDataModel` rows from specified `start_index` to specified `stop_index` ranging from `start_col` up to and including `stop_col`
+        \nas a new `SQLDataModel`, if `stop_index` is not specified or the value exceeds `row_count`, then last row or largest valid index will be used"""
+        row_idx_start = start_index if start_index < self.row_count else 1
+        row_idx_stop = stop_index if stop_index is not None else self.row_count
+        col_idx_start = (start_col if ((start_col is not None) and (start_col > 0)) else 1) - 1 # to allow for 1-based column indexing that aligns with default column naming
+        col_idx_stop = stop_col if stop_col is not None else self.column_count
+        fetch_stmt = f"""select "{self.sql_store_id}",{','.join([f'"{col}"' for col in self.headers[col_idx_start:col_idx_stop]])} from "{self.sql_store}" """ if retain_index else f"""select {','.join([f'"{col}"' for col in self.headers[col_idx_start:col_idx_stop]])} from "{self.sql_store}" """
+        self.sql_c.execute(f"""{fetch_stmt} where {self.sql_store_id} >= {row_idx_start} and {self.sql_store_id} <= {row_idx_stop} order by {self.sql_store_id} asc""")
+        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], retain_index=retain_index,**kwargs)
     
     def get_max_rows(self) -> int:
         """returns the current `max_rows` property value"""
@@ -311,11 +322,40 @@ class SQLDataModel:
         """returns the shape of the data as a tuple of `(rows x columns)`"""
         return (self.row_count,self.column_count)
     
-    def __getitem__(self, slc):
+    def __getitem__(self, slc) -> Self:
+        if isinstance(slc, tuple):
+            try:
+                if len(slc) != 2:
+                    raise ValueError(f"{type(self).__name__} Error:\nDimension mismatch: {len(slc)} is not a valid number of arguments for row and column indexes...")
+                row_idxs, col_idxs = slc[0], slc[1]
+                if not isinstance(row_idxs, slice) and not isinstance(row_idxs, int):
+                    raise TypeError(f"{type(self).__name__} Error:\nType mismatch: {type(row_idxs)} is not a valid type for row indexing, please provide a slice type to index rows correctly...")
+                if not isinstance(col_idxs, slice) and not isinstance(col_idxs, int):
+                    raise TypeError(f"{type(self).__name__} Error:\nType mismatch: {type(col_idxs)} is not a valid type for column indexing, please provide a slice type to index columns correctly...")
+            except (ValueError,TypeError) as e:
+                print(e)
+                sys.exit()
+            if isinstance(row_idxs, int):
+                row_target = row_idxs if row_idxs <= self.row_count else self.row_count
+                row_start = row_target
+                row_stop = row_target
+            if isinstance(row_idxs, slice):
+                row_start = row_idxs.start if row_idxs.start is not None else 1
+                row_stop = row_idxs.stop if row_idxs.stop is not None else self.row_count
+            if isinstance(col_idxs, int):
+                col_target = col_idxs if col_idxs <= self.column_count else self.column_count
+                col_start = col_target
+                col_stop = col_target
+            if isinstance(col_idxs, slice):
+                col_start = col_idxs.start if col_idxs.start is not None else 1
+                col_stop = col_idxs.stop if col_idxs.stop is not None else self.column_count
+            return self.get_rows_and_cols_at_index_range(start_index=row_start, stop_index=row_stop, start_col=col_start, stop_col=col_stop)
+        
         if isinstance(slc, slice):
             start_idx = slc.start if slc.start is not None else 0
             stop_idx = slc.stop if slc.stop is not None else self.row_count
             return self.get_rows_at_index_range(start_index=start_idx,stop_index=stop_idx)
+        
         if isinstance(slc, int):
             single_idx = slc
             return self.get_row_at_index(index=single_idx) 
