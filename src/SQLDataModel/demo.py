@@ -15,16 +15,15 @@ data = (
 
 sdm = SQLDataModel(data,headers)
 
-
 print(sdm) # prints standard color
-print(sdm.colorful("#a6d7e8")) # outputs as teal
-print(sdm.colorful("#b39cf1")) # outputs as purple
+sdm.set_display_color("#b39cf1") # outputs as purple
+print(sdm) # prints as purple
 
 sdm_grouped = sdm.group_by('region','check') # group by one or more columns
-print(sdm_grouped.colorful("#dba4a4"))
+sdm_grouped.set_display_color("#dba4a4")
 
 sdm_grouped.to_csv('model-output.csv',include_index=True) # save as csv, sqlite, pickle, text
-sdm = sdm.get_rows_at_index_range(1,4) # slice by method or using python slice indexing [1:4]
+sdm = sdm[1:4] # slice by rows and columns [row:rows, col:cols]
 
 for row in sdm.iter_rows(): # iterate over data
     print(row)

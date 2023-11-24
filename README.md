@@ -35,7 +35,7 @@ sdm = SQLDataModel.from_csv('region_data.csv')
 sdm = SQLDataModel.from_sql('region_data', psycopg2.Connection) 
 
 # or from objects like dicts, lists, tuples, iterables:
-sdm = SQLDataModel.from_data(data=region_data, headers=region_headers)
+sdm = SQLDataModel.from_dict(data=region_data)
 
 # manipulate it
 sdm_sliced = sdm[2:7]
