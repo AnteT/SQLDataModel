@@ -843,6 +843,20 @@ class SQLDataModel:
             print(f'{self.clserror} Invalid or malformed SQL, unable to execute provided SQL query with error {e}...')
             sys.exit()
     
+    def execute_transaction(self, sql_script:str) -> None:
+        """executes prepared `sql_script` script wrapped in a transaction against the current model without the expectation of selection or returned rows"""
+        full_stmt = f"""begin transaction; {sql_script}; end transaction;"""
+        try:
+            self.sql_c.executescript(full_stmt)
+            self.sql_db_conn.commit()
+            rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
+        except Exception as e:
+            self.sql_db_conn.rollback()
+            print(f'{self.clserror} Unable to apply function, SQL execution failed with: {e}')
+            sys.exit()
+        self._set_updated_sql_metadata()        
+        print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')
+
     def __repr__(self):
         display_headers = self.headers
         include_idx = self.display_index
@@ -928,6 +942,8 @@ class SQLDataModel:
             dyn_default_value = f"""{self.headers_to_sql_dtypes_dict[value]}"""
             dyn_copy_existing = f"""update {self.sql_model} set \"{column_name}\" = \"{value}\";"""
         else:
+            if isinstance(value, str):
+                value = f"'{value}'"
             dyn_default_value = f"""{self.static_py_to_sql_map_dict[type(value).__name__]} not null default {value}""" if value is not None else "TEXT"
             dyn_copy_existing = ""
         full_stmt = f"""begin transaction; {create_col_stmt} {dyn_default_value};{dyn_copy_existing} end transaction;"""
@@ -993,3 +1009,163 @@ class SQLDataModel:
         func_signature = ", ".join([f"""{k.replace(" ","_")}:{v}""" for k,v in self.headers_to_py_dtypes_dict.items() if k != self.sql_idx])
         return f"""def func({func_signature}):\n    # apply logic and return value\n    return"""
     
+    def update_at(self, row_idxs:tuple[int], columns:list[str], value:list=None) -> None:
+        """updates `SQLDataModel` at `row_idxs`, `columns` with `value` provided"""
+        if row_idxs is None:
+            row_idxs = tuple(range(self.min_idx, self.max_idx))
+        if columns is None:
+            columns = self.headers
+        col_param_str = ",".join([f""" \"{col}\"=?""" for col in columns])
+        row_idxs = row_idxs if len(row_idxs) != 1 else f"({row_idxs[0]})"
+        update_stmt = f"""update \"{self.sql_model}\" set {col_param_str} where {self.sql_idx} in {row_idxs}"""
+        try:
+            self.sql_c.execute(update_stmt, value)
+            self.sql_db_conn.commit()
+            rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
+        except Exception as e:
+            self.sql_db_conn.rollback()
+            print(f'{self.clserror} Unable to apply function, SQL execution failed with: {e}')
+            sys.exit()
+        self._set_updated_sql_metadata()        
+        print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')        
+
+
+    def __setitem__(self, key_idxs, *value) -> None:
+        """retrieves the row indicies and column indicies and assigns the values to the corresponding model records using the `update_at()` method with value arg"""
+        # print(f'__setitem__ triggered with key: {key_idxs}, value: {value}, type: {type(value).__name__}, length: {len(value)}')
+        if isinstance(value[0], SQLDataModel):
+            value = value[0]
+            if value.row_count == 1:
+                value = (value.data(),)
+            else:
+                self.add_column(key_idxs, value.headers[0])
+                return
+        if isinstance(value[0], list) or isinstance(value[0], tuple):
+            value = value[0]
+            if isinstance(value[0], list) or isinstance(value[0], tuple):
+                print(f'{self.clserror} Invalid value argument: {len(value)} is not a valid shape to assign values, please provide a single value or single list of values...')
+                sys.exit()
+        if not isinstance(value, tuple):
+            value = tuple(value)
+        ### value argument validated and is a tuple of values ###
+        # print(f'__setitem__ triggered with key: {key_idxs}, value: {value}, type: {type(value).__name__}, length: {len(value)}')
+
+        if isinstance(key_idxs, tuple):
+            try:
+                if len(key_idxs) != 2:
+                    raise ValueError(f"{self.clserror} Dimension mismatch: {len(key_idxs)} is not a valid number of arguments for row and column indexes...")
+                row_idxs, col_idxs = key_idxs[0], key_idxs[1]
+                if not isinstance(row_idxs, slice) and not isinstance(row_idxs, int) and not isinstance(row_idxs, tuple):
+                    raise TypeError(f"{self.clserror} Type mismatch: {type(row_idxs)} is not a valid type for row indexing, please provide a slice type to index rows correctly...")
+                if not isinstance(col_idxs, slice) and not isinstance(col_idxs, int) and not isinstance(col_idxs, tuple) and not isinstance(col_idxs, str) and not isinstance(col_idxs, list):
+                    raise TypeError(f"{self.clserror} Type mismatch: {type(col_idxs)} is not a valid type for column indexing, please provide a slice, list or str type to index columns correctly...")
+            except (ValueError,TypeError) as e:
+                print(e)
+                sys.exit()
+            if isinstance(row_idxs, int):
+                row_idxs = (row_idxs,) if row_idxs >= 0 else ((self.max_idx + row_idxs) + 1,) # allows for negative reverse indexing like -1
+            if isinstance(row_idxs, slice):
+                row_start = row_idxs.start if row_idxs.start is not None else self.min_idx
+                row_stop = row_idxs.stop if row_idxs.stop is not None else (self.max_idx+1)
+                row_idxs = tuple(range(row_start, row_stop))
+            if isinstance(col_idxs, int): # multiple discontiguous columns
+                col_idxs = (col_idxs,) if col_idxs <= self.column_count else (self.column_count,)
+            if isinstance(col_idxs, slice): # multiple column range
+                col_start = col_idxs.start if col_idxs.start is not None else 0
+                col_stop = col_idxs.stop if col_idxs.stop is not None else self.column_count
+                col_idxs = tuple(range(col_start, col_stop))
+            if isinstance(col_idxs, str): # single column as string
+                try:
+                    col_target = self.headers.index(col_idxs)
+                except ValueError as e:
+                    print(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
+                    sys.exit()                
+                col_idxs = (col_target,)
+            if isinstance(col_idxs, list): # multiple assumed discontiguous columns as list of strings
+                try:
+                    col_idxs = tuple([self.headers.index(col) for col in col_idxs])
+                except ValueError as e:
+                    print(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
+                    sys.exit()
+            try:
+                columns = [self.headers[col_idx] for col_idx in col_idxs]
+            except Exception as e:
+                print(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
+                sys.exit()                    
+            if (len_val := len(value)) != (len_col := len(columns)):
+                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+                sys.exit()
+            self.update_at(row_idxs=row_idxs,columns=columns, value=value)
+            return
+        ### column indexes by str or list ###
+        if isinstance(key_idxs, str) or isinstance(key_idxs, list):
+            if type(key_idxs) == str:
+                ### create new column if single string provided and is not a current column ###
+                if (key_idxs not in self.headers) and (len(value) == 1):
+                    self.add_column(key_idxs, value=value[0])
+                    return
+                else:
+                    key_idxs = [key_idxs]
+            try:
+                col_idxs = tuple([self.headers.index(col) for col in key_idxs])
+            except ValueError as e:
+                print(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
+                sys.exit()
+            row_idxs = tuple(range(self.min_idx, self.max_idx+1))
+            columns = [self.headers[col_idx] for col_idx in col_idxs]
+            if (len_val := len(value)) != (len_col := len(columns)):
+                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+                sys.exit()            
+            self.update_at(row_idxs=row_idxs,columns=columns, value=value)
+            return
+
+        ### row indexes slice ###
+        if isinstance(key_idxs, slice):
+            start_idx = key_idxs.start if key_idxs.start is not None else self.min_idx
+            stop_idx = key_idxs.stop if key_idxs.stop is not None else self.max_idx
+            row_idxs = tuple(range(start_idx, stop_idx))
+            columns = self.headers
+            if (len_val := len(value)) != (len_col := len(columns)):
+                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+                sys.exit()            
+            self.update_at(row_idxs=row_idxs,columns=columns, value=value)
+        
+        ### single row index ###
+        if isinstance(key_idxs, int):
+            row_idxs = (key_idxs,) if key_idxs >= 0 else ((self.max_idx + key_idxs) + 1,)
+            columns = self.headers
+            if (len_val := len(value)) != (len_col := len(columns)):
+                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+                sys.exit()            
+            self.update_at(row_idxs=row_idxs,columns=columns, value=value)
+        
+
+########################################## run locally ##########################################
+if __name__ == '__main__':
+    headers = ['country','region','check','total','report date']
+    data = (
+        ('US','West','Yes',2016,'2023-08-23 13:11:43')
+        ,('US','West','No',1996,'2023-08-23 13:11:43')
+        ,('US','West','Yes',1296,'2023-08-23 13:11:43')
+        ,('US','West','No',2392,'2023-08-23 13:11:43')
+        ,('US','Northeast','Yes',1233,'2023-08-23 13:11:43')
+        ,('US','Northeast','No',3177,'2023-08-23 13:11:43')
+        ,('US','Midwest','Yes',1200,'2023-08-23 13:11:43')
+        ,('US','Midwest','No',2749,'2023-08-23 13:11:43')
+        ,('US','Midwest','Yes',1551,'2023-08-23 13:11:43')
+    )
+
+    sdm_future = SQLDataModel(data,headers)
+    # print(sdm_future)
+    # sdm_future[5:,'country'] = 'HR'
+    # print(sdm_future)
+    # sdm_future['new_column'] = 0
+    # sdm_future[-1, 'new_column'] = 'first row'
+    sdm_future['first_new_column'] = sdm_future['country']
+    sdm_future['second'] = sdm_future['report date']
+    sdm_future[1,'first_new_column'] = sdm_future[9,'total']
+    sdm_future['third'] = 99
+    sdm_future['fourth'] = sdm_future['check']
+    sdm_future['fourth'] = 4
+    sdm_future[-1,'fourth'] = 444
+    print(sdm_future)
