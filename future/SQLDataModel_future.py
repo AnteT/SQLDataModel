@@ -277,15 +277,20 @@ class SQLDataModel:
         self.set_headers(new_headers)
         return
 
+    def _set_updated_sql_row_metadata(self):
+        rowmeta = self.sql_db_conn.execute(f""" select min({self.sql_idx}), max({self.sql_idx}), count({self.sql_idx}) from {self.sql_model} """).fetchone()
+        self.min_idx, self.max_idx, self.row_count = rowmeta
+
     def _set_updated_sql_metadata(self, return_data:bool=False) -> tuple[list, dict, dict]:
         """sets and optionally returns the header indicies, names and current sql data types from the sqlite pragma function\n\nreturn format (updated_headers, updated_header_dtypes, updated_metadata_dict)"""
-        meta = self.sql_db_conn.execute(f"select cid, name, type from pragma_table_info('{self.sql_model}') order by cid asc").fetchall()
+        meta = self.sql_db_conn.execute(f""" select cid,name,type from pragma_table_info('{self.sql_model}')""").fetchall()
         self.headers = [h[1] for h in meta if h[0] > 0] # ignore idx column
         self.column_count = len(self.headers)
         self.header_dtype_dict = {d[1]: d[2] for d in meta}
         self.headers_to_py_dtypes_dict = {k:self.static_sql_to_py_map_dict[v] if v in self.static_sql_to_py_map_dict.keys() else "str" for (k,v) in self.header_dtype_dict.items() if k != self.sql_idx}
         self.headers_to_sql_dtypes_dict = {k:"TEXT" if v=='str' else "INTEGER" if v=='int' else "REAL" if v=='float' else "TIMESTAMP" if v=='datetime' else "NULL" if v=='NoneType' else "BLOB" for (k,v) in self.headers_to_py_dtypes_dict.items()}
         self.header_idx_dtype_dict = {(m[0]-1): (m[1], m[2]) for m in meta if m[1] != self.sql_idx}
+        
         if return_data:
             return (self.headers,self.header_dtype_dict,self.header_idx_dtype_dict) # format of {header_idx: (header_name, header_dtype)}
 
@@ -724,6 +729,87 @@ class SQLDataModel:
             single_idx = slc
             return self.get_rows_and_cols_at_index_range(start_index=single_idx, stop_index=single_idx, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index) 
         
+    def __len__(self):
+        return self.row_count
+
+    def __repr__(self):
+        display_headers = self.headers
+        include_idx = self.display_index
+        fetch_stmt = self._generate_sql_fetch_stmt_for_idxs(include_idx_col=include_idx)
+        self.sql_c.execute(f"{fetch_stmt} limit {self.max_rows}")
+        table_data = self.sql_c.fetchall()
+        index_width = len(str(max(row[0] for row in table_data))) + 1 if include_idx else 2
+        dyn_idx_include = 1 if include_idx else 0
+        table_body = "" # big things can have small beginnings...
+        table_newline = "\n"
+        display_rows = self.row_count if (self.max_rows is None or self.max_rows > self.row_count) else self.max_rows
+        right_border_width = 3
+        max_rows_to_check = display_rows if display_rows < 15 else 15 # updated as exception to 15
+        col_length_dict = {col:len(str(x)) for col,x in enumerate(display_headers)} # for first row populate all col lengths
+        col_alignment_dict = {i:'<' if v == 'str' else '>' if v != 'float' else '<' for i,v in enumerate(self.headers_to_py_dtypes_dict.values())}
+        for row in range(max_rows_to_check): # each row is indexed in row col length dict and each one will contain its own dict of col lengths
+            current_row = {col:len(str(x)) for col,x in enumerate(table_data[row][dyn_idx_include:])} # start at one to enusre index is skipped and column lengths correctly counted
+            for col_i in range(self.column_count):
+                if current_row[col_i] > col_length_dict[col_i]:
+                    col_length_dict.update({col_i:current_row[col_i]})
+        for col,width in col_length_dict.items():
+            if width < self.min_column_width:
+                col_length_dict[col] = self.min_column_width
+            elif width > self.max_column_width:
+                col_length_dict[col] = self.max_column_width
+        index_fmt = f'│{{:>{index_width}}} │ ' if include_idx else '│ '
+        right_border_fmt = ' │'
+        col_alignment = self.column_alignment # if None columns will be dynmaic aligned based on dtypes
+        columns_fmt = " │ ".join([f"""{{:{col_alignment_dict[i] if col_alignment is None else col_alignment}{col_length}}}""" for i,col_length in col_length_dict.items()]) # col alignment var determines left or right align
+        table_abstract_template = """{index}{columns}{right_border}""" # assumption is each column will handle its right side border only and the last one will be stripped
+        fmt_dict = {'index':index_fmt,'columns':columns_fmt,'right_border':right_border_fmt}
+        table_row_fmt = table_abstract_template.format(**fmt_dict)
+        total_required_width = index_width + sum(col_length_dict.values()) + (self.column_count*3) + right_border_width # extra 2 for right border width
+        try:
+            total_available_width = os.get_terminal_size()[0]
+        except OSError:
+            total_available_width = 100
+        table_truncation_required = False if total_required_width <= total_available_width else True
+        max_cols = self.column_count + 1 # plus 1 for newly added index col in sqlite table
+        max_width = total_required_width
+        if table_truncation_required:
+            ellipsis_suffix_width = 4
+            max_cols, max_width = 0, (index_width + right_border_width + ellipsis_suffix_width) # max width starts with the tax of index and border already included, around 5-7 depending on index width
+            for v in col_length_dict.values():
+                if max_width < total_available_width:
+                    max_width += (v+3)
+                    max_cols += 1
+            if max_width > total_available_width:
+                max_cols -= 1
+                max_width -= (col_length_dict[max_cols] +3)
+            table_row_fmt = """ │ """.join(table_row_fmt.split(""" │ """)[:max_cols+dyn_idx_include]) + """ │""" # no longer required, maybe...? +1 required on max columns since index fmt is included after split leaving the format missing two slots right away if you simply decrease it by 1
+        table_dynamic_newline = f' ...\n' if table_truncation_required else '\n'
+        table_top_bar = table_row_fmt.replace(" │ ","─┬─").replace("│{","┌{").replace(" │","─┐") if include_idx else table_row_fmt.replace(" │ ","─┬─").replace("│ {","┌─{",1).replace(" │","─┐")
+        table_top_bar = table_top_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else table_top_bar.format(*['─' * length for length in col_length_dict.values()])
+        if include_idx:
+            header_row = table_row_fmt.format("",*[str(x)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(x)) > col_length_dict[k] else str(x) for k,x in enumerate(display_headers)]) # for header the first arg will be empty as no index will be used, for the rest it will be the data col key
+        else:
+            header_row = table_row_fmt.format(*[str(x)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(x)) > col_length_dict[k] else str(x) for k,x in enumerate(display_headers)]) # for header the first arg will be empty as no index will be used, for the rest it will be the data col key
+        header_sub_bar = table_row_fmt.replace(" │ ","─┼─").replace("│{","├{").replace(" │","─┤") if include_idx else table_row_fmt.replace(" │ ","─┼─").replace("│ {","├─{",1).replace(" │","─┤")
+        header_sub_bar = header_sub_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else header_sub_bar.format(*['─' * length for length in col_length_dict.values()])
+        table_body += table_top_bar + table_newline
+        table_body += header_row + table_dynamic_newline
+        table_body += header_sub_bar + table_newline
+        for i,row in enumerate(table_data):
+            if i < display_rows:
+                if include_idx:
+                    table_body += table_row_fmt.format(row[0],*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else str(cell) for k,cell in enumerate(row[1:max_cols+1])]) # start at 1 to avoid index col
+                else:
+                    table_body += table_row_fmt.format(*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else str(cell) for k,cell in enumerate(row)]) # start at 1 to avoid index col
+                table_body +=  table_dynamic_newline
+        table_bottom_bar = table_row_fmt.replace(" │ ","─┴─").replace("│{","└{").replace(" │","─┘") if include_idx else table_row_fmt.replace(" │ ","─┴─").replace("│ {","└─{",1).replace(" │","─┘")
+        table_bottom_bar = table_bottom_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else table_bottom_bar.format(*['─' * length for length in col_length_dict.values()])
+        table_signature = f"""\n[{display_rows} rows x {self.column_count} columns]"""
+        # width_truncation_debug_details = f"""\t({max_width} of {total_available_width} available width used with {max_cols -1 if not table_truncation_required else max_cols} columns)""" # include additional debug info with: \ncol dytpes dictionary: {self.column_dtypes}\ncol alignment dict: {col_alignment_dict}"""
+        # table_body += table_bottom_bar + table_signature + width_truncation_debug_details
+        table_body += table_bottom_bar + table_signature # exception change to have less details
+        return table_body if self.display_color is None else self.display_color.wrap(table_body)  
+
     def set_display_color(self, color:str|tuple):
         """sets the table string representation color when `SQLDataModel` is displayed in the terminal, use hex value or a tuple of rgb values:
         \n\t`color='#A6D7E8'` # string with hex value\n\n\t`color=(166, 215, 232)` # tuple of rgb values\n\nNote: by default no color styling is applied"""
@@ -855,85 +941,7 @@ class SQLDataModel:
             print(f'{self.clserror} Unable to apply function, SQL execution failed with: {e}')
             sys.exit()
         self._set_updated_sql_metadata()        
-        print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')
-
-    def __repr__(self):
-        display_headers = self.headers
-        include_idx = self.display_index
-        fetch_stmt = self._generate_sql_fetch_stmt_for_idxs(include_idx_col=include_idx)
-        self.sql_c.execute(f"{fetch_stmt} limit {self.max_rows}")
-        table_data = self.sql_c.fetchall()
-        index_width = len(str(max(row[0] for row in table_data))) + 1 if include_idx else 2
-        dyn_idx_include = 1 if include_idx else 0
-        table_body = "" # big things can have small beginnings...
-        table_newline = "\n"
-        display_rows = self.row_count if (self.max_rows is None or self.max_rows > self.row_count) else self.max_rows
-        right_border_width = 3
-        max_rows_to_check = display_rows if display_rows < 15 else 15 # updated as exception to 15
-        col_length_dict = {col:len(str(x)) for col,x in enumerate(display_headers)} # for first row populate all col lengths
-        col_alignment_dict = {i:'<' if v == 'str' else '>' if v != 'float' else '<' for i,v in enumerate(self.headers_to_py_dtypes_dict.values())}
-        for row in range(max_rows_to_check): # each row is indexed in row col length dict and each one will contain its own dict of col lengths
-            current_row = {col:len(str(x)) for col,x in enumerate(table_data[row][dyn_idx_include:])} # start at one to enusre index is skipped and column lengths correctly counted
-            for col_i in range(self.column_count):
-                if current_row[col_i] > col_length_dict[col_i]:
-                    col_length_dict.update({col_i:current_row[col_i]})
-        for col,width in col_length_dict.items():
-            if width < self.min_column_width:
-                col_length_dict[col] = self.min_column_width
-            elif width > self.max_column_width:
-                col_length_dict[col] = self.max_column_width
-        index_fmt = f'│{{:>{index_width}}} │ ' if include_idx else '│ '
-        right_border_fmt = ' │'
-        col_alignment = self.column_alignment # if None columns will be dynmaic aligned based on dtypes
-        columns_fmt = " │ ".join([f"""{{:{col_alignment_dict[i] if col_alignment is None else col_alignment}{col_length}}}""" for i,col_length in col_length_dict.items()]) # col alignment var determines left or right align
-        table_abstract_template = """{index}{columns}{right_border}""" # assumption is each column will handle its right side border only and the last one will be stripped
-        fmt_dict = {'index':index_fmt,'columns':columns_fmt,'right_border':right_border_fmt}
-        table_row_fmt = table_abstract_template.format(**fmt_dict)
-        total_required_width = index_width + sum(col_length_dict.values()) + (self.column_count*3) + right_border_width # extra 2 for right border width
-        try:
-            total_available_width = os.get_terminal_size()[0]
-        except OSError:
-            total_available_width = 100
-        table_truncation_required = False if total_required_width <= total_available_width else True
-        max_cols = self.column_count + 1 # plus 1 for newly added index col in sqlite table
-        max_width = total_required_width
-        if table_truncation_required:
-            ellipsis_suffix_width = 4
-            max_cols, max_width = 0, (index_width + right_border_width + ellipsis_suffix_width) # max width starts with the tax of index and border already included, around 5-7 depending on index width
-            for v in col_length_dict.values():
-                if max_width < total_available_width:
-                    max_width += (v+3)
-                    max_cols += 1
-            if max_width > total_available_width:
-                max_cols -= 1
-                max_width -= (col_length_dict[max_cols] +3)
-            table_row_fmt = """ │ """.join(table_row_fmt.split(""" │ """)[:max_cols+dyn_idx_include]) + """ │""" # no longer required, maybe...? +1 required on max columns since index fmt is included after split leaving the format missing two slots right away if you simply decrease it by 1
-        table_dynamic_newline = f' ...\n' if table_truncation_required else '\n'
-        table_top_bar = table_row_fmt.replace(" │ ","─┬─").replace("│{","┌{").replace(" │","─┐") if include_idx else table_row_fmt.replace(" │ ","─┬─").replace("│ {","┌─{",1).replace(" │","─┐")
-        table_top_bar = table_top_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else table_top_bar.format(*['─' * length for length in col_length_dict.values()])
-        if include_idx:
-            header_row = table_row_fmt.format("",*[str(x)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(x)) > col_length_dict[k] else str(x) for k,x in enumerate(display_headers)]) # for header the first arg will be empty as no index will be used, for the rest it will be the data col key
-        else:
-            header_row = table_row_fmt.format(*[str(x)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(x)) > col_length_dict[k] else str(x) for k,x in enumerate(display_headers)]) # for header the first arg will be empty as no index will be used, for the rest it will be the data col key
-        header_sub_bar = table_row_fmt.replace(" │ ","─┼─").replace("│{","├{").replace(" │","─┤") if include_idx else table_row_fmt.replace(" │ ","─┼─").replace("│ {","├─{",1).replace(" │","─┤")
-        header_sub_bar = header_sub_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else header_sub_bar.format(*['─' * length for length in col_length_dict.values()])
-        table_body += table_top_bar + table_newline
-        table_body += header_row + table_dynamic_newline
-        table_body += header_sub_bar + table_newline
-        for i,row in enumerate(table_data):
-            if i < display_rows:
-                if include_idx:
-                    table_body += table_row_fmt.format(row[0],*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else str(cell) for k,cell in enumerate(row[1:max_cols+1])]) # start at 1 to avoid index col
-                else:
-                    table_body += table_row_fmt.format(*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else str(cell) for k,cell in enumerate(row)]) # start at 1 to avoid index col
-                table_body +=  table_dynamic_newline
-        table_bottom_bar = table_row_fmt.replace(" │ ","─┴─").replace("│{","└{").replace(" │","─┘") if include_idx else table_row_fmt.replace(" │ ","─┴─").replace("│ {","└─{",1).replace(" │","─┘")
-        table_bottom_bar = table_bottom_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else table_bottom_bar.format(*['─' * length for length in col_length_dict.values()])
-        table_signature = f"""\n[{display_rows} rows x {self.column_count} columns]"""
-        # width_truncation_debug_details = f"""\t({max_width} of {total_available_width} available width used with {max_cols -1 if not table_truncation_required else max_cols} columns)""" # include additional debug info with: \ncol dytpes dictionary: {self.column_dtypes}\ncol alignment dict: {col_alignment_dict}"""
-        # table_body += table_bottom_bar + table_signature + width_truncation_debug_details
-        table_body += table_bottom_bar + table_signature # exception change to have less details
-        return table_body if self.display_color is None else self.display_color.wrap(table_body)    
+        print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')  
 
     def add_column(self, column_name:str, value=None) -> None:
         """adds `column_name` argument as a new column to `SQLDataModel`, populating with the `value` provided or with SQLs null field if `value=None` by default\n\nnote that if a current column name is passed to `value`, that columns values will be used to fill the new column, effectively copying it"""
@@ -1009,6 +1017,31 @@ class SQLDataModel:
         func_signature = ", ".join([f"""{k.replace(" ","_")}:{v}""" for k,v in self.headers_to_py_dtypes_dict.items() if k != self.sql_idx])
         return f"""def func({func_signature}):\n    # apply logic and return value\n    return"""
     
+    def insert_row(self, values:list|tuple=None) -> None:
+        """inserts a row in the `SQLDataModel` at index `self.rowcount+1` with provided `values`, if `values=None`, an empty row with SQL `null` values will be used"""
+        if values is not None:
+            if not isinstance(values,list) and not isinstance(values,tuple):
+                print(f'{self.clserror} Invalid type provided, insert values of type {type(values).__name__} are not valid for inserting a new row, please provide values of type list or tuple...')
+                sys.exit()
+            if isinstance(values,list):
+                values = tuple(values)
+            if (len_val := len(values)) != self.column_count:
+                print(f'{self.clserror} Dimension mismatch {len_val} != {self.column_count}, the number of values provided ({len_val}) must match the current column count ({self.column_count}), please provide the correct dimensions...')
+        else:
+            values = tuple(None for _ in range(self.column_count))
+        insert_cols = ",".join([f"\"{col}\"" for col in self.headers])
+        insert_vals = ",".join(["?" for _ in values])
+        insert_stmt = f"""insert into {self.sql_model}({insert_cols}) values ({insert_vals})"""
+        try:
+            self.sql_c.execute(insert_stmt, values)
+            self.sql_db_conn.commit()
+        except Exception as e:
+            self.sql_db_conn.rollback()
+            print(f'{self.clserror} Unable to update values, SQL execution failed with: {e}')
+            sys.exit()
+        self._set_updated_sql_row_metadata()
+        self._set_updated_sql_metadata()        
+
     def update_at(self, row_idxs:tuple[int], columns:list[str], value:list=None) -> None:
         """updates `SQLDataModel` at `row_idxs`, `columns` with `value` provided"""
         if row_idxs is None:
@@ -1024,32 +1057,26 @@ class SQLDataModel:
             rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
         except Exception as e:
             self.sql_db_conn.rollback()
-            print(f'{self.clserror} Unable to apply function, SQL execution failed with: {e}')
+            print(f'{self.clserror} Unable to update values, SQL execution failed with: {e}')
             sys.exit()
         self._set_updated_sql_metadata()        
         print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')        
 
-
-    def __setitem__(self, key_idxs, *value) -> None:
+    def __setitem__(self, key_idxs, value) -> None:
         """retrieves the row indicies and column indicies and assigns the values to the corresponding model records using the `update_at()` method with value arg"""
-        # print(f'__setitem__ triggered with key: {key_idxs}, value: {value}, type: {type(value).__name__}, length: {len(value)}')
-        if isinstance(value[0], SQLDataModel):
-            value = value[0]
+        if isinstance(value, SQLDataModel):
             if value.row_count == 1:
-                value = (value.data(),)
-            else:
+                value = value.data()
+            elif isinstance(key_idxs, str):
                 self.add_column(key_idxs, value.headers[0])
                 return
-        if isinstance(value[0], list) or isinstance(value[0], tuple):
-            value = value[0]
-            if isinstance(value[0], list) or isinstance(value[0], tuple):
-                print(f'{self.clserror} Invalid value argument: {len(value)} is not a valid shape to assign values, please provide a single value or single list of values...')
+            else:
+                print(f'{self.clserror} Dimension mismatch, assignment target {key_idxs} != {value.row_count} rows of target, provided values must have the same shape for assignment...')
                 sys.exit()
-        if not isinstance(value, tuple):
+        if isinstance(value, list):
             value = tuple(value)
-        ### value argument validated and is a tuple of values ###
-        # print(f'__setitem__ triggered with key: {key_idxs}, value: {value}, type: {type(value).__name__}, length: {len(value)}')
-
+        if not isinstance(value, tuple):
+            value = (value,) # convert to tuple
         if isinstance(key_idxs, tuple):
             try:
                 if len(key_idxs) != 2:
@@ -1132,6 +1159,9 @@ class SQLDataModel:
         
         ### single row index ###
         if isinstance(key_idxs, int):
+            if key_idxs == self.row_count+1: # if index is + 1 of current row count, add values as new row
+                self.insert_row(value)
+                return
             row_idxs = (key_idxs,) if key_idxs >= 0 else ((self.max_idx + key_idxs) + 1,)
             columns = self.headers
             if (len_val := len(value)) != (len_col := len(columns)):
@@ -1141,6 +1171,9 @@ class SQLDataModel:
         
 
 ########################################## run locally ##########################################
+def squared(x):
+    return x**2
+
 if __name__ == '__main__':
     headers = ['country','region','check','total','report date']
     data = (
@@ -1156,16 +1189,13 @@ if __name__ == '__main__':
     )
 
     sdm_future = SQLDataModel(data,headers)
-    # print(sdm_future)
-    # sdm_future[5:,'country'] = 'HR'
-    # print(sdm_future)
-    # sdm_future['new_column'] = 0
-    # sdm_future[-1, 'new_column'] = 'first row'
-    sdm_future['first_new_column'] = sdm_future['country']
-    sdm_future['second'] = sdm_future['report date']
-    sdm_future[1,'first_new_column'] = sdm_future[9,'total']
-    sdm_future['third'] = 99
-    sdm_future['fourth'] = sdm_future['check']
-    sdm_future['fourth'] = 4
-    sdm_future[-1,'fourth'] = 444
+    sdm_future['total_squared'] = sdm_future['total']
+    sdm_future.apply_function_to_column(squared, 'total_squared')
     print(sdm_future)
+    
+    bare = SQLDataModel([[0,0,0]])
+    bare.set_display_color('#A6D7E8')
+    for i in range(100):
+        new_row = bare.row_count+1
+        bare[new_row] = [i,i,i]
+    print(bare)
