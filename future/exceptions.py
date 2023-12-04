@@ -1,14 +1,2 @@
-class DimensionMismatch(Exception):
-    """raised when arguments provided are not of compatible dimensions"""
-    pass
-
-class InvalidHeaderException(Exception):
-    """raised when user provided header is not in the current `SQLDataModel`"""
-    pass
-
-class ModelIndexException(Exception):
-    """raised when `SQLDataModel` index provided is out of bounds of current model"""
-    pass
-
-class InvalidArgumentException(Exception):
-    """raise when an incompatible argument is provided to `SQLDataModel` that requires exiting the program"""
+class DimensionError(Exception):
+    """raised when arguments provided to `SQLDataModel` are not of compatible dimensions, ie trying to join a (10, 4) dimensional model to a (7, 5) dimensional model"""
