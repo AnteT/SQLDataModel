@@ -3,6 +3,7 @@ import sqlite3, os, csv, sys, datetime, pickle, warnings, re
 from typing import Generator, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from exceptions import DimensionMismatch, InvalidHeaderException, ModelIndexException, InvalidArgumentException
 
 try:
     import numpy as _np
@@ -159,7 +160,7 @@ class SQLDataModel:
                 if type(headers) not in (list, tuple):
                     raise TypeError(f"{self.clserror} Invalid header types, {type(headers)} is not a valid type for headers, please provide a tuple or list type...")
                 if len(headers) != len(data[0]):
-                    raise ValueError(f"{self.clserror} Invalid header dimensions, provided headers length {len(headers)} != {len(data[0])} column count, please provide correct dimensions...")                
+                    raise DimensionMismatch(f"{self.clserror} Invalid header dimensions, provided headers length {len(headers)} != {len(data[0])} column count, please provide correct dimensions...")                
                 if type(headers) == tuple:
                     try:
                         headers = list(headers)
@@ -170,7 +171,7 @@ class SQLDataModel:
                         headers = [str(x) for x in headers]
                     except:
                         raise TypeError(f"{self.clserror} Invalid header values, all headers provided must be of type string...")
-            except (TypeError, ValueError) as e:
+            except (TypeError, ValueError, DimensionMismatch) as e:
                 print(e)
                 sys.exit()
         else:
@@ -250,10 +251,10 @@ class SQLDataModel:
             if type(new_headers) not in (list, tuple):
                 raise TypeError(f"{self.clswarning} Invalid header types, type {type(new_headers)} is not a valid type for headers, please provide a tuple or list type...")
             if len(new_headers) != self.column_count:
-                raise ValueError(f"{self.clswarning} Invalid header dimensions, provided headers length {len(new_headers)} != {self.column_count} column count, please provide correct dimensions...")
+                raise DimensionMismatch(f"{self.clswarning} Invalid header dimensions, provided headers length {len(new_headers)} != {self.column_count} column count, please provide correct dimensions...")
             if type(new_headers[0]) not in (str, int, float):
-                raise TypeError(f"{self.clswarning} Invalid header values, type {type(new_headers[0])} is not a valid type for header values, please provide a string type...")
-        except (ValueError, TypeError) as e:
+                raise ValueError(f"{self.clswarning} Invalid header values, type {type(new_headers[0])} is not a valid type for header values, please provide a string type...")
+        except (ValueError, DimensionMismatch, TypeError) as e:
             print(e)
             return
         rename_stmts = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
@@ -300,12 +301,15 @@ class SQLDataModel:
     
     def set_max_rows(self, rows:int) -> None:
         """set `max_rows` to limit rows displayed when `repr` or `print` is called, does not change the maximum rows stored in `SQLDataModel`"""
-        if type(rows) != int:
-            print(f'{self.clswarning} Invalid argument "{rows}", please provide an integer value to set the maximum rows attribute...')
-            return
-        if rows <= 0:
-            print(f'{self.clswarning} Invalid value "{rows}", please provide an integer value >= 1 to set the maximum rows attribute...')
-            return
+        # if type(rows) != int:
+        try:
+            if not isinstance(rows, int):
+                raise TypeError(f'{self.clswarning} Invalid argument "{rows}", please provide an integer value to set the maximum rows attribute...')
+            if rows <= 0:
+                raise ModelIndexException(f'{self.clswarning} Invalid value "{rows}", please provide an integer value >= 1 to set the maximum rows attribute...')
+        except (TypeError, ModelIndexException) as e:
+            print(e)
+            sys.exit()
         self.max_rows = rows
 
     def get_min_column_width(self) -> int:
@@ -339,9 +343,12 @@ class SQLDataModel:
         if alignment is None:
             self.column_alignment = alignment
             return
-        if  (type(alignment) != str) or (alignment not in ('<', '^', '>')):
-            print(f'{self.clswarning} Invalid argument "{alignment}", please provide a valid f-string alignment formatter or set `alignment=None` to use default behaviour...')
-            return
+        try:
+            if (not isinstance(alignment, str)) or (alignment not in ('<', '^', '>')):
+                raise InvalidArgumentException(f'{self.clswarning} Invalid argument "{alignment}", please provide a valid f-string alignment formatter or set `alignment=None` to use default behaviour...')
+        except InvalidArgumentException as e:
+            print(e)
+            sys.exit()
         self.column_alignment = alignment
         return
 
@@ -351,9 +358,12 @@ class SQLDataModel:
 
     def set_display_index(self, display_index:bool) -> None:
         """sets the `display_index` property to enable or disable the inclusion of the `SQLDataModel` index value in print or repr calls, default set to include"""
-        if not isinstance(display_index, bool):
-            print(f'{self.clswarning} Invalid argument "{display_index}", please provide a valid boolean (True | False) value to the `display_index` argument...')
-            return
+        try:
+            if not isinstance(display_index, bool):
+                raise InvalidArgumentException(f'{self.clswarning} Invalid argument "{display_index}", please provide a valid boolean (True | False) value to the `display_index` argument...')
+        except InvalidArgumentException as e:
+            print(e)
+            sys.exit()
         self.display_index = display_index
     
     def get_shape(self) -> tuple[int]:
@@ -397,16 +407,22 @@ class SQLDataModel:
         """returns a `SQLDataModel` object created from the provided numpy `array`
         \nuse `headers` to use a specific header row, default set to assume no headers and treats data as n-dimensional array
         \nnote that `numpy` must be installed in order to use this class method"""
-        if not _has_np:
-            print(f"""{ANSIColor().alert(cls.__name__, 'E')} Required package not found, numpy must be installed in order to use the from_numpy method""")
+        try:
+            if not _has_np:
+                raise ModuleNotFoundError(f"""{ANSIColor().alert(cls.__name__, 'E')} Required package not found, numpy must be installed in order to use the from_numpy method""")
+        except ModuleNotFoundError as e:
+            print(e)
             sys.exit()
         return cls.from_data(data=array.tolist(),headers=headers, *args, **kwargs)
 
     @classmethod
     def from_pandas(cls, df, headers:list[str]=None, *args, **kwargs) -> SQLDataModel:
         """returns a `SQLDataModel` object created from the provided pandas `DataFrame`, note that `pandas` must be installed in order to use this class method"""
-        if not _has_pd:
-            print(f"""{ANSIColor().alert(cls.__name__, 'E')} Required package not found, pandas must be installed in order to use the from_pandas method""")
+        try:
+            if not _has_pd:
+                raise ModuleNotFoundError(f"""{ANSIColor().alert(cls.__name__, 'E')} Required package not found, pandas must be installed in order to use the from_pandas method""")
+        except ModuleNotFoundError as e:
+            print(e)
             sys.exit()
         data = [x[1:] for x in df.itertuples()]
         headers = df.columns.tolist() if headers is None else headers
@@ -420,8 +436,11 @@ class SQLDataModel:
         if (filename is not None) and (len(filename.split(".")) <= 1):
             print(f"{ANSIColor().alert(cls.__name__, 'W')} File extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename...")
             filename += '.sdm'
-        if not Path(filename).is_file():
-            print(f"{ANSIColor().alert(cls.__name__, 'E')} File not found, provided filename \"{filename}\" could not be found, please ensure the filename exists in a valid path...")
+        try:
+            if not Path(filename).is_file():
+                raise InvalidArgumentException(f"{ANSIColor().alert(cls.__name__, 'E')} File not found, provided filename \"{filename}\" could not be found, please ensure the filename exists in a valid path...")
+        except InvalidArgumentException as e:
+            print(e)
             sys.exit()
         with open(filename, 'rb') as f:
             tot_raw = pickle.load(f) # Tuple of Tuples raw data
@@ -518,8 +537,11 @@ class SQLDataModel:
 
     def to_pandas(self, include_index:bool=False, include_headers:bool=True):
         """converts `SQLDataModel` to pandas `DataFrame` object, note that `pandas` must be installed to use this method"""
-        if not _has_pd:
-            print(f"""{self.clserror} Required package not found, pandas must be installed in order to use to_pandas method""")
+        try:
+            if not _has_pd:
+                raise ModuleNotFoundError(f"""{self.clserror} Required package not found, pandas must be installed in order to use to_pandas method""")
+        except ModuleNotFoundError as e:
+            print(e)
             sys.exit()
         self.sql_c.execute(self._generate_sql_fetch_stmt_for_idxs(include_idx_col=include_index))
         raw_data = self.sql_c.fetchall()
@@ -618,11 +640,13 @@ class SQLDataModel:
         row_idx_stop = stop_index if stop_index is not None else self.max_idx
         col_idx_start = start_col if start_col is not None else 0
         col_idx_stop = stop_col if stop_col is not None else self.column_count
-        if (row_idx_start > self.max_idx) or (row_idx_stop < self.min_idx):
-            print(f'{self.clswarning} Row index out of range, row indicies ({row_idx_start}:{row_idx_stop}) out of range for current row indicies of ({self.min_idx}:{self.max_idx})')
-            sys.exit()
-        if  (col_idx_start > self.column_count) or (col_idx_start > col_idx_stop) or (col_idx_stop > self.column_count):
-            print(f'{self.clswarning} Column index out of range, column indicies ({col_idx_start}:{col_idx_stop}) out of range for current column indicies of (0:{self.column_count})')
+        try:
+            if (row_idx_start > self.max_idx) or (row_idx_stop < self.min_idx):
+                raise ModelIndexException(f'{self.clswarning} Row index out of range, row indicies ({row_idx_start}:{row_idx_stop}) out of range for current row indicies of ({self.min_idx}:{self.max_idx})')
+            if  (col_idx_start > self.column_count) or (col_idx_start > col_idx_stop) or (col_idx_stop > self.column_count):
+                raise ModelIndexException(f'{self.clswarning} Column index out of range, column indicies ({col_idx_start}:{col_idx_stop}) out of range for current column indicies of (0:{self.column_count})')
+        except ModelIndexException as e:
+            print(e)
             sys.exit()
         else:
             idx_args = tuple(range(col_idx_start,col_idx_stop)) if col_idx_start != col_idx_stop else (col_idx_start,)
@@ -664,13 +688,13 @@ class SQLDataModel:
         if isinstance(slc, tuple):
             try:
                 if len(slc) != 2:
-                    raise ValueError(f"{self.clserror} Dimension mismatch: {len(slc)} is not a valid number of arguments for row and column indexes...")
+                    raise DimensionMismatch(f"{self.clserror} Dimension mismatch: {len(slc)} is not a valid number of arguments for row and column indexes...")
                 row_idxs, col_idxs = slc[0], slc[1]
                 if not isinstance(row_idxs, slice) and not isinstance(row_idxs, int) and not isinstance(row_idxs, tuple):
                     raise TypeError(f"{self.clserror} Type mismatch: {type(row_idxs)} is not a valid type for row indexing, please provide a slice type to index rows correctly...")
                 if not isinstance(col_idxs, slice) and not isinstance(col_idxs, int) and not isinstance(col_idxs, tuple) and not isinstance(col_idxs, str) and not isinstance(col_idxs, list):
                     raise TypeError(f"{self.clserror} Type mismatch: {type(col_idxs)} is not a valid type for column indexing, please provide a slice, list or str type to index columns correctly...")
-            except (ValueError,TypeError) as e:
+            except (DimensionMismatch,TypeError) as e:
                 print(e)
                 sys.exit()
             if isinstance(row_idxs, int):
@@ -689,7 +713,12 @@ class SQLDataModel:
                 col_stop = col_idxs.stop if col_idxs.stop is not None else self.column_count
             if isinstance(col_idxs, str): # single column as string
                 try:
+                    if col_idxs not in self.headers:
+                        raise InvalidHeaderException(f"{self.clserror} Invalid column provided, \"{col_idxs}\" is not a valid header, use `.get_headers()` method to get current model headers...")
                     col_target = self.headers.index(col_idxs)
+                except InvalidHeaderException as e:
+                    print(e)
+                    sys.exit()
                 except ValueError as e:
                     print(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
                     sys.exit()                
@@ -879,12 +908,18 @@ class SQLDataModel:
         elif type(columns[0]) in (list, tuple):
             columns = columns[0]
         else:
-            print(f'{self.clserror} Invalid columns argument, provided type {type(columns[0]).__name__} is invalid, please provide str, list or tuple type...')
-            sys.exit()
-        for col in columns:
-            if col not in self.headers:
-                print(f'{self.clserror} Invalid group by targets, provided column \"{col}\" does not exist in current model, valid targets:\n{self.headers}')
+            try:
+                raise InvalidArgumentException(f'{self.clserror} Invalid columns argument, provided type {type(columns[0]).__name__} is invalid, please provide str, list or tuple type...')
+            except InvalidArgumentException as e:
+                print(e)
                 sys.exit()
+        try:
+            for col in columns:
+                if col not in self.headers:
+                    raise InvalidHeaderException(f'{self.clserror} Invalid group by targets, provided column \"{col}\" does not exist in current model, valid targets:\n{self.headers}')
+        except InvalidHeaderException as e:
+            print(e)
+            sys.exit()
         columns_group_by = ",".join(f'"{col}"' for col in columns)
         order_by = "count(*)" if order_by_count else columns_group_by
         group_by_stmt = f"""select {columns_group_by}, count(*) as count from "{self.sql_model}" group by {columns_group_by} order by {order_by} desc"""
@@ -909,8 +944,11 @@ class SQLDataModel:
         else:
             if (on_column in self.headers) and (on_column in join_cols):
                 validated_join_col = True
-        if not validated_join_col:
-            print(f"{self.clserror} No shared column found, no matching join column was found in the provided model, ensure one is available or specify one explicitly with on_column='shared_column'")
+        try:
+            if not validated_join_col:
+                raise InvalidArgumentException(f"{self.clserror} No shared column found, no matching join column was found in the provided model, ensure one is available or specify one explicitly with on_column='shared_column'")
+        except InvalidArgumentException as e:
+            print(e)
             sys.exit()
         sqldatamodel.to_sql(join_tablename, self.sql_db_conn)
         join_cols = [x for x in join_cols if x != on_column] # removing shared join column
@@ -974,17 +1012,17 @@ class SQLDataModel:
         if isinstance(column, int):
             try:
                 column = self.headers[column]
-            except Exception as e:
+            except IndexError as e:
                 print(f"{self.clserror} Invalid column index provided, {column} is not a valid column index, use `.column_count` property to get valid range...")
                 sys.exit()
         if isinstance(column, str):
             try:
                 if column not in self.headers:
-                    raise Exception
+                    raise InvalidHeaderException(f"{self.clserror} Invalid column provided, {column} is not valid for current model, use `.get_headers()` method to get model headers...")
                 else:
                     column = column
-            except Exception as e:
-                print(f"{self.clserror} Invalid column provided, {column} is not valid for current model, use `.get_headers()` method to get model headers...")
+            except InvalidHeaderException as e:
+                print(e)
                 sys.exit()
         target_column = column
         try:
@@ -998,8 +1036,11 @@ class SQLDataModel:
         elif func_argcount == self.column_count:
             input_columns = ",".join([f"\"{col}\"" for col in self.headers])
         else:
-            print(f'{self.clserror} Invalid function arg count: {func_argcount}, input args to "{func_name}" must be 1 or {self.column_count} based on the current models structure, ie...\n{self.generate_apply_function_stub()}')
-            sys.exit()
+            try:
+                raise InvalidArgumentException(f'{self.clserror} Invalid function arg count: {func_argcount}, input args to "{func_name}" must be 1 or {self.column_count} based on the current models structure, ie...\n{self.generate_apply_function_stub()}')
+            except InvalidArgumentException as e:
+                print(e)
+                sys.exit()
         sql_apply_update_stmt = f"""update {self.sql_model} set {target_column} = {func_name}({input_columns})"""
         full_stmt = f"""begin transaction; {sql_apply_update_stmt}; end transaction;"""
         try:
@@ -1020,13 +1061,16 @@ class SQLDataModel:
     def insert_row(self, values:list|tuple=None) -> None:
         """inserts a row in the `SQLDataModel` at index `self.rowcount+1` with provided `values`, if `values=None`, an empty row with SQL `null` values will be used"""
         if values is not None:
-            if not isinstance(values,list) and not isinstance(values,tuple):
-                print(f'{self.clserror} Invalid type provided, insert values of type {type(values).__name__} are not valid for inserting a new row, please provide values of type list or tuple...')
+            try:
+                if not isinstance(values,list) and not isinstance(values,tuple):
+                    raise InvalidArgumentException(f'{self.clserror} Invalid type provided, insert values of type {type(values).__name__} are not valid for inserting a new row, please provide values of type list or tuple...')
+                if isinstance(values,list):
+                    values = tuple(values)
+                if (len_val := len(values)) != self.column_count:
+                    raise DimensionMismatch(f'{self.clserror} Dimension mismatch {len_val} != {self.column_count}, the number of values provided ({len_val}) must match the current column count ({self.column_count}), please provide the correct dimensions...')
+            except (InvalidArgumentException,DimensionMismatch) as e:
+                print(e)
                 sys.exit()
-            if isinstance(values,list):
-                values = tuple(values)
-            if (len_val := len(values)) != self.column_count:
-                print(f'{self.clserror} Dimension mismatch {len_val} != {self.column_count}, the number of values provided ({len_val}) must match the current column count ({self.column_count}), please provide the correct dimensions...')
         else:
             values = tuple(None for _ in range(self.column_count))
         insert_cols = ",".join([f"\"{col}\"" for col in self.headers])
@@ -1071,8 +1115,11 @@ class SQLDataModel:
                 self.add_column(key_idxs, value.headers[0])
                 return
             else:
-                print(f'{self.clserror} Dimension mismatch, assignment target {key_idxs} != {value.row_count} rows of target, provided values must have the same shape for assignment...')
-                sys.exit()
+                try:
+                    raise DimensionMismatch(f'{self.clserror} Dimension mismatch, assignment target {key_idxs} != {value.row_count} rows of target, provided values must have the same shape for assignment...')
+                except DimensionMismatch as e:
+                    print(e)
+                    sys.exit()
         if isinstance(value, list):
             value = tuple(value)
         if not isinstance(value, tuple):
@@ -1080,13 +1127,13 @@ class SQLDataModel:
         if isinstance(key_idxs, tuple):
             try:
                 if len(key_idxs) != 2:
-                    raise ValueError(f"{self.clserror} Dimension mismatch: {len(key_idxs)} is not a valid number of arguments for row and column indexes...")
+                    raise DimensionMismatch(f"{self.clserror} Dimension mismatch: {len(key_idxs)} is not a valid number of arguments for row and column indexes...")
                 row_idxs, col_idxs = key_idxs[0], key_idxs[1]
                 if not isinstance(row_idxs, slice) and not isinstance(row_idxs, int) and not isinstance(row_idxs, tuple):
                     raise TypeError(f"{self.clserror} Type mismatch: {type(row_idxs)} is not a valid type for row indexing, please provide a slice type to index rows correctly...")
                 if not isinstance(col_idxs, slice) and not isinstance(col_idxs, int) and not isinstance(col_idxs, tuple) and not isinstance(col_idxs, str) and not isinstance(col_idxs, list):
                     raise TypeError(f"{self.clserror} Type mismatch: {type(col_idxs)} is not a valid type for column indexing, please provide a slice, list or str type to index columns correctly...")
-            except (ValueError,TypeError) as e:
+            except (DimensionMismatch,TypeError) as e:
                 print(e)
                 sys.exit()
             if isinstance(row_idxs, int):
@@ -1103,7 +1150,12 @@ class SQLDataModel:
                 col_idxs = tuple(range(col_start, col_stop))
             if isinstance(col_idxs, str): # single column as string
                 try:
+                    if col_idxs not in self.headers:
+                        raise InvalidHeaderException(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
                     col_target = self.headers.index(col_idxs)
+                except InvalidHeaderException as e:
+                    print(e)
+                    sys.exit()
                 except ValueError as e:
                     print(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
                     sys.exit()                
@@ -1118,9 +1170,12 @@ class SQLDataModel:
                 columns = [self.headers[col_idx] for col_idx in col_idxs]
             except Exception as e:
                 print(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
-                sys.exit()                    
-            if (len_val := len(value)) != (len_col := len(columns)):
-                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+                sys.exit()  
+            try:                  
+                if (len_val := len(value)) != (len_col := len(columns)):
+                    raise DimensionMismatch(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+            except DimensionMismatch as e:
+                print(e)
                 sys.exit()
             self.update_at(row_idxs=row_idxs,columns=columns, value=value)
             return
@@ -1140,8 +1195,11 @@ class SQLDataModel:
                 sys.exit()
             row_idxs = tuple(range(self.min_idx, self.max_idx+1))
             columns = [self.headers[col_idx] for col_idx in col_idxs]
-            if (len_val := len(value)) != (len_col := len(columns)):
-                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+            try:
+                if (len_val := len(value)) != (len_col := len(columns)):
+                    raise DimensionMismatch(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+            except DimensionMismatch as e:
+                print(e)
                 sys.exit()            
             self.update_at(row_idxs=row_idxs,columns=columns, value=value)
             return
@@ -1152,9 +1210,12 @@ class SQLDataModel:
             stop_idx = key_idxs.stop if key_idxs.stop is not None else self.max_idx
             row_idxs = tuple(range(start_idx, stop_idx))
             columns = self.headers
-            if (len_val := len(value)) != (len_col := len(columns)):
-                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
-                sys.exit()            
+            try:
+                if (len_val := len(value)) != (len_col := len(columns)):
+                    raise DimensionMismatch(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+            except DimensionMismatch as e:
+                print(e)
+                sys.exit()
             self.update_at(row_idxs=row_idxs,columns=columns, value=value)
         
         ### single row index ###
@@ -1164,9 +1225,12 @@ class SQLDataModel:
                 return
             row_idxs = (key_idxs,) if key_idxs >= 0 else ((self.max_idx + key_idxs) + 1,)
             columns = self.headers
-            if (len_val := len(value)) != (len_col := len(columns)):
-                print(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
-                sys.exit()            
+            try:
+                if (len_val := len(value)) != (len_col := len(columns)):
+                    raise DimensionMismatch(f'{self.clserror} Dimension mismatch: {len_val} != {len_col}, provided value dimension {len_val} must equal target assignment dimension {len_col} to update model with value...')
+            except DimensionMismatch as e:
+                print(e)
+                sys.exit()
             self.update_at(row_idxs=row_idxs,columns=columns, value=value)
         
 
@@ -1175,7 +1239,7 @@ def squared(x):
     return x**2
 
 if __name__ == '__main__':
-    headers = ['country','region','check','total','report date']
+    headers = ['country','region','check','total', 'report_date']
     data = (
         ('US','West','Yes',2016,'2023-08-23 13:11:43')
         ,('US','West','No',1996,'2023-08-23 13:11:43')
@@ -1187,15 +1251,11 @@ if __name__ == '__main__':
         ,('US','Midwest','No',2749,'2023-08-23 13:11:43')
         ,('US','Midwest','Yes',1551,'2023-08-23 13:11:43')
     )
-
     sdm_future = SQLDataModel(data,headers)
-    sdm_future['total_squared'] = sdm_future['total']
-    sdm_future.apply_function_to_column(squared, 'total_squared')
+    sdm_future['derived'] = ''
+    for row in sdm_future.iter_rows(include_index=True):
+        idx = row[0]
+        total = row[4]
+        derived = 'even' if total % 2 == 0  else 'odd'
+        sdm_future[idx,'derived'] = derived
     print(sdm_future)
-    
-    bare = SQLDataModel([[0,0,0]])
-    bare.set_display_color('#A6D7E8')
-    for i in range(100):
-        new_row = bare.row_count+1
-        bare[new_row] = [i,i,i]
-    print(bare)
