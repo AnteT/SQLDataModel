@@ -1151,7 +1151,7 @@ class SQLDataModel:
             if isinstance(col_idxs, str): # single column as string
                 try:
                     if col_idxs not in self.headers:
-                        raise InvalidHeaderException(f"{self.clserror} Invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
+                        raise InvalidHeaderException(f"{self.clserror} Invalid columns provided, \"{col_idxs}\" not in current model headers, use `.get_headers()` method to get model headers...")
                     col_target = self.headers.index(col_idxs)
                 except InvalidHeaderException as e:
                     print(e)
@@ -1252,7 +1252,8 @@ if __name__ == '__main__':
         ,('US','Midwest','Yes',1551,'2023-08-23 13:11:43')
     )
     sdm_future = SQLDataModel(data,headers)
-    sdm_future['derived'] = ''
+    sdm_future['derived'] = 0
+    sdm_future[2] = (1,2,3,4,5,6)
     for row in sdm_future.iter_rows(include_index=True):
         idx = row[0]
         total = row[4]
