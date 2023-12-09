@@ -4,7 +4,7 @@ from typing import Generator, Callable
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from exceptions import DimensionError
+from exceptions import DimensionError, SQLProgrammingError
 
 try:
     import numpy as _np
@@ -211,7 +211,7 @@ class SQLDataModel:
         headers = headers[dyn_idx_offset:]
         self.headers = headers
         self.column_count = len(self.headers)
-        self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'TIMESTAMP': 'datetime', 'NoneType':'NULL'}
+        self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'TIMESTAMP': 'datetime', 'NoneType':'NULL', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'datetime': 'TIMESTAMP'}
         self.headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
         self.headers_to_sql_dtypes_dict = {k:self.static_py_to_sql_map_dict[v] for (k,v) in self.headers_to_py_dtypes_dict.items()}
@@ -623,6 +623,9 @@ class SQLDataModel:
 ############################################## dunder special methods ##############################################
 ####################################################################################################################
 
+    def __add__(self, value:int) -> SQLDataModel:
+        """implements + operator functionality for compatible `SQLDataModel` operations"""
+
     def __getitem__(self, slc) -> SQLDataModel:
         if isinstance(slc, tuple):
             if len(slc) != 2:
@@ -699,11 +702,34 @@ class SQLDataModel:
     def __setitem__(self, key_idxs, value) -> None:
         """retrieves the row indicies and column indicies and assigns the values to the corresponding model records using the `update_at()` method with value arg"""
         if isinstance(value, SQLDataModel):
-            if value.row_count == 1:
-                value = value.data()
-            elif isinstance(key_idxs, str):
-                self.add_column(key_idxs, value.headers[0])
-                return
+            sdm_other = value # rename it to reflect its another SQLDataModel object
+            if isinstance(key_idxs, str):
+                if key_idxs not in self.headers: # is new column
+                    if sdm_other.headers[0] not in self.headers: # no need to copy over
+                        if sdm_other.row_count == 1:
+                            value = sdm_other.data()
+                        elif sdm_other.row_count == self.row_count:
+                            self.add_column_with_values(key_idxs,[x[0] for x in sdm_other.data()])
+                            return
+                        else:
+                            raise DimensionError(
+                                f'{self.SDMError.wrap_error("DimensionError:")} assignment target {key_idxs} != {value.row_count} rows of target, provided values must have the same shape for assignment...'
+                                )                            
+                        return
+                    else: # just copying over data
+                        self.add_column_with_values(key_idxs, sdm_other.headers[0])
+                        return
+            # if sdm_other.row_count == self.row_count:
+            #     if (key_idxs not in self.headers) and (sdm_other.headers[0] in self.headers): # if new column provided and value is a current column: in sdm["key_idxs"]="current_column"
+            #         self.add_column_with_values(key_idxs, sdm_other.headers[0]) # create new column 
+            #         return
+            #     else:
+            #         print(f'PATH ENTERED!')
+            #         self.add_column_with_values(key_idxs, sdm_other.data()) # create new column 
+            #         return
+            elif isinstance(key_idxs, int):
+                if sdm_other.row_count == 1:
+                    value = sdm_other.data()
             else:
                 raise DimensionError(
                     f'{self.SDMError.wrap_error("DimensionError:")} assignment target {key_idxs} != {value.row_count} rows of target, provided values must have the same shape for assignment...'
@@ -769,9 +795,13 @@ class SQLDataModel:
         if isinstance(key_idxs, str) or isinstance(key_idxs, list):
             if type(key_idxs) == str:
                 ### create new column if single string provided and is not a current column ###
-                if (key_idxs not in self.headers) and (len(value) == 1):
-                    self.add_column(key_idxs, value=value[0])
-                    return
+                if key_idxs not in self.headers:
+                    if len(value) == 1:
+                        self.add_column_with_values(key_idxs, value=value[0])
+                        return
+                    elif len(value) == self.row_count:
+                        self.add_column_with_values(key_idxs, value=value)
+                        return
                 else:
                     key_idxs = [key_idxs]
             for col in key_idxs:
@@ -1011,6 +1041,26 @@ class SQLDataModel:
 ################################################ sql commands ################################################
 ##############################################################################################################
 
+    ### needs more testing, still unstable ###
+    def apply(self, func:Callable) -> SQLDataModel:
+        """applies `func` to the current `SQLDataModel` object and returns a modified `SQLDataModel` by passing its current values to the argument of `func`\n\nnote that the number of `args` in the inspected signature of `func` must equal the current number of `SQLDataModel` columns as all are passed as input to `func`.\n\nThe number of `func` args must match the current number of columns in the model or an `Exception` will be raised\n\nuse `generate_apply_function_stub()` method to return a preconfigured template using current `SQLDataModel` columns and dtypes to assist"""
+        ### get column name from str or index ###
+        if not isinstance(func, Callable):
+            raise TypeError(
+                f'{self.SDMError.wrap_error("TypeError:")} invalid argument for `func`, expected type "Callable" but type "{type(func).__name__}" was provided, please provide a valid python "Callable"...'
+            )
+        try:
+            func_name = func.__name__
+            func_argcount = func.__code__.co_argcount
+            self.sql_db_conn.create_function(func_name, func_argcount, func)
+        except Exception as e:
+            raise SQLProgrammingError(
+                f'{self.SDMError.wrap_error("SQLProgrammingError:")} unable to create function with provided callable "{func}", SQL process failed with: {e}'
+            )
+        input_columns = ",".join([f"\"{col}\"" for col in self.headers])
+        derived_query = f"""select {func_name}({input_columns}) as "{func_name}" from "{self.sql_model}" """
+        return self.fetch_query(derived_query)
+
     def get_model_name(self) -> str:
         """returns the `SQLDataModel` table name currently being used by the model as an alias for any SQL queries executed by the user and internally"""
         return self.sql_model
@@ -1049,8 +1099,9 @@ class SQLDataModel:
         try:
             self.sql_c.execute(sql_query)
         except Exception as e:
-            print(f'{self.SDMError.wrap_error("SQLProgrammingError:")} invalid or malformed SQL, provided query failed with error "{e}"...')
-            sys.exit()
+            raise SQLProgrammingError(
+                f'{self.SDMError.wrap_error("SQLProgrammingError:")} invalid or malformed SQL, provided query failed with error "{e}"...'
+            ) from None
         return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, **kwargs)
 
     def group_by(self, *columns:str, order_by_count:bool=True, **kwargs) -> SQLDataModel:
@@ -1126,34 +1177,74 @@ class SQLDataModel:
             rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
         except Exception as e:
             self.sql_db_conn.rollback()
-            print(f'{self.SDMError.wrap_error("SQLProgrammingError:")} unable to apply function, SQL execution failed with: "{e}"')
-            sys.exit()
+            raise SQLProgrammingError(
+                f'{self.SDMError.wrap_error("SQLProgrammingError:")} unable to execute provided transaction, SQL execution failed with: "{e}"'
+            ) from None
         self._set_updated_sql_metadata()        
         print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')  
 
-    def add_column(self, column_name:str, value=None) -> None:
+    # def add_column(self, column_name:str, value=None) -> None:
+    #     """adds `column_name` argument as a new column to `SQLDataModel`, populating with the `value` provided or with SQLs null field if `value=None` by default\n\nnote that if a current column name is passed to `value`, that columns values will be used to fill the new column, effectively copying it"""
+    #     create_col_stmt = f"""alter table {self.sql_model} add column \"{column_name}\""""
+    #     if (value is not None) and (value in self.headers):
+    #         dyn_default_value = f"""{self.headers_to_sql_dtypes_dict[value]}"""
+    #         dyn_copy_existing = f"""update {self.sql_model} set \"{column_name}\" = \"{value}\";"""
+    #     else:
+    #         if isinstance(value, str):
+    #             value = f"'{value}'"
+    #         dyn_default_value = f"""{self.static_py_to_sql_map_dict[type(value).__name__]} not null default {value}""" if value is not None else "TEXT"
+    #         dyn_copy_existing = ""
+    #     full_stmt = f"""begin transaction; {create_col_stmt} {dyn_default_value};{dyn_copy_existing} end transaction;"""
+    #     print(full_stmt)
+    #     try:
+    #         self.sql_c.executescript(full_stmt)
+    #         self.sql_db_conn.commit()
+    #     except Exception as e:
+    #         self.sql_db_conn.rollback()
+    #         trace_back = sys.exc_info()[2]
+    #         line = trace_back.tb_lineno
+    #         print(f'{self.SDMError.wrap_error("SQLProgrammingError:")} unable to apply function, SQL execution failed with: {e} (line {line})')
+    #         sys.exit()
+    #     self._set_updated_sql_metadata()
+    #     print(f'{self.clssuccess} added new column "{column_name}" to model')
+
+    def add_column_with_values(self, column_name:str, value=None) -> None:
         """adds `column_name` argument as a new column to `SQLDataModel`, populating with the `value` provided or with SQLs null field if `value=None` by default\n\nnote that if a current column name is passed to `value`, that columns values will be used to fill the new column, effectively copying it"""
         create_col_stmt = f"""alter table {self.sql_model} add column \"{column_name}\""""
         if (value is not None) and (value in self.headers):
-            dyn_default_value = f"""{self.headers_to_sql_dtypes_dict[value]}"""
+            dyn_dtype_default_value = f"""{self.headers_to_sql_dtypes_dict[value]}"""
             dyn_copy_existing = f"""update {self.sql_model} set \"{column_name}\" = \"{value}\";"""
-        else:
-            if isinstance(value, str):
-                value = f"'{value}'"
-            dyn_default_value = f"""{self.static_py_to_sql_map_dict[type(value).__name__]} not null default {value}""" if value is not None else "TEXT"
-            dyn_copy_existing = ""
-        full_stmt = f"""begin transaction; {create_col_stmt} {dyn_default_value};{dyn_copy_existing} end transaction;"""
-        try:
-            self.sql_c.executescript(full_stmt)
-            self.sql_db_conn.commit()
-        except Exception as e:
-            self.sql_db_conn.rollback()
-            trace_back = sys.exc_info()[2]
-            line = trace_back.tb_lineno
-            print(f'{self.SDMError.wrap_error("SQLProgrammingError:")} unable to apply function, SQL execution failed with: {e} (line {line})')
-            sys.exit()
-        self._set_updated_sql_metadata()
-        print(f'{self.clssuccess} added new column "{column_name}" to model')
+            sql_script = f"""{create_col_stmt} {dyn_dtype_default_value};{dyn_copy_existing};"""
+            self.execute_transaction(sql_script)
+            return
+        if value is None:
+            sql_script = create_col_stmt
+            self.execute_transaction(sql_script)
+            return
+        if isinstance(value, str|int|float|bool):
+            value = f"'{value}'" if isinstance(value,str) else value
+            dyn_dtype_default_value = f"""{self.static_py_to_sql_map_dict[type(value).__name__]} not null default {value}""" if value is not None else "TEXT"
+            sql_script = f"""{create_col_stmt} {dyn_dtype_default_value};"""
+            self.execute_transaction(sql_script)
+            return
+        if isinstance(value, list|tuple):
+            if (len_values := len(value)) != self.row_count:
+                raise DimensionError(
+                    f'{self.SDMError.wrap_error("DimensionError:")} invalid dimensions "{len_values} != {self.row_count}", provided values have length {len_values} while current row count is {self.row_count}...'
+                )
+            try:
+                seq_dtype = self.static_py_to_sql_map_dict[type(value[0]).__name__]
+            except:
+                raise TypeError(
+                    f'{self.SDMError.wrap_error("TypeError:")} invalid datatype "{type(value[0]).__name__}", please provide a valid and SQL translatable datatype...'
+                ) from None
+            sql_script = f"""{create_col_stmt} {seq_dtype};"""
+            all_model_idxs = tuple(range(self.min_idx, self.max_idx+1)) # plus 1 otherwise range excludes last item and out of range error is triggered during for loop below
+            for i,val in enumerate(value):
+                sql_script += f"""update {self.sql_model} set \"{column_name}\" = \"{val}\" where {self.sql_idx} = {all_model_idxs[i]};"""
+            print(sql_script)
+            self.execute_transaction(sql_script)
+            return
 
     def apply_function_to_column(self, func:Callable, column:str|int) -> None:
         """applies `func` to provided `SQLDataModel` column by passing its current value to the argument of `func`, updating the columns values `func` output\n\nnote that if the number of `args` in the inspected signature of `func`, is more than 1, all of `SQLDataModel` current columns will be provided as input and consequently, the number of `func` args must match the current number of columns in the model or an `Exception` will be raised\n\nuse `generate_apply_function_stub()` method to return a preconfigured template using current `SQLDataModel` columns and dtypes to assist"""
@@ -1257,24 +1348,54 @@ class SQLDataModel:
         print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')        
         
 ########################################## run locally ##########################################
-def squared(x):
-    return x**2
+def squared(check, total):
+    res = ''
+    if check.lower() == 'yes':
+        res += 'yes '
+    else:
+        res += 'no '
+    if total % 2 == 0:
+        res += 'even'
+    else:
+        res += 'odd'
+    return res
+
 
 if __name__ == '__main__':
     headers = ['country','region','check','total', 'report_date']
     data = (
         ('US','West','Yes',2016,'2023-08-01 13:11:43')
-        ,('US','West','No',1996,'2023-08-02 13:11:43')
-        ,('US','West','Yes',1296,'2023-08-03 13:11:43')
+        ,('US','West','No',1995,'2023-08-02 13:11:43')
+        ,('US','West','Yes',1293,'2023-08-03 13:11:43')
         ,('US','West','No',2392,'2023-08-04 13:11:43')
         ,('US','Northeast','Yes',1233,'2023-08-05 13:11:43')
         ,('US','Northeast','No',3177,'2023-08-06 13:11:43')
         ,('US','Midwest','Yes',1200,'2023-08-07 13:11:43')
-        ,('US','Midwest','No',2749,'2023-08-08 13:11:43')
-        ,('US','Midwest','Yes',1551,'2023-08-09 13:11:43')
+        ,('US','Midwest','No',2748,'2023-08-08 13:11:43')
+        ,('US','Midwest','Yes',1559,'2023-08-09 13:11:43')
         ,('US','South','Yes',3998,'2023-08-10 13:11:43')
     )
     sdm_future = SQLDataModel(data,headers)
     sdm_future.set_display_index(True)
-    sdm_future = sdm_future[:]
+    sdm_future = sdm_future[:,['check','total']]
+    sdm_sep = sdm_future.apply(squared)
+    print(sdm_sep)
+    sdm_future['derived_0'] = sdm_future.apply(squared)
+    print(sdm_future)
+    sdm_future['derived_1'] = sdm_future['total']
+    print(sdm_future)
+    sdm_future['derived_2'] = 'static str'
+    print(sdm_future)
+    sdm_future['derived_3'] = None
+    print(sdm_future)
+    sdm_future['derived_4'] = ''
+    print(sdm_future)
+    sdm_future['derived_5'] = True
+    print(sdm_future)
+    sdm_future['derived_6'] = 3.14159
+    print(sdm_future)
+    test_val_iters = [100,101,102,103,104,105,106,107,108,109]
+    sdm_future['derived_7'] = test_val_iters
+    sdm_future[1,-1] = 'rar'
+    sdm_future[10] = sdm_future[1]
     print(sdm_future)
