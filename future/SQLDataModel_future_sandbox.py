@@ -2130,7 +2130,33 @@ class SQLDataModel:
         return f"""def func({func_signature}):\n    # apply logic and return value\n    return"""
     
     def insert_row(self, values:list|tuple=None) -> None:
-        """inserts a row in the `SQLDataModel` at index `self.rowcount+1` with provided `values`, if `values=None`, an empty row with SQL `null` values will be used"""
+        """
+        Inserts a row in the `SQLDataModel` at index `self.rowcount+1` with provided `values`.
+
+        If `values=None`, an empty row with SQL `null` values will be used.
+
+        Parameters:
+        - values (list or tuple, optional): The values to be inserted into the row. 
+        If not provided or set to None, an empty row with SQL `null` values will be inserted.
+
+        Raises:
+        - TypeError: If `values` is provided and is not of type list or tuple.
+        - DimensionError: If the number of values provided does not match the current column count.
+        - SQLProgrammingError: If there is an issue with the SQL execution during the insertion.
+
+        Note:
+        - The method handles the insertion of rows into the SQLDataModel, updates metadata, and commits the changes to the database.
+        - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
+
+        Usage:
+        ```python
+        # Example 1: Insert a row with values
+        sqldm.insert_row([1, 'John Doe', 25])
+
+        # Example 2: Insert an empty row with SQL null values
+        sqldm.insert_row()
+        ```
+        """
         if values is not None:
             if not isinstance(values,list|tuple):
                 raise TypeError(
@@ -2158,29 +2184,64 @@ class SQLDataModel:
         self._set_updated_sql_row_metadata()
         self._set_updated_sql_metadata()        
 
-    def update_at(self, row_idxs:tuple[int], columns:list[str], value:list=None) -> None:
+    def update_index_at(self, row_index:int, column_index:int|str, value=None) -> None:
         """
-        Updates `SQLDataModel` at specified `row_idxs` and `columns` with provided `value`.
+        Updates a specific cell in the `SQLDataModel` at the given row and column indices with the provided value.
 
-        Args:
-            row_idxs (tuple[int]): The row indices to update.
-            columns (list[str]): The columns to update.
-            value (list): The list of values to set for the specified columns.
+        Parameters:
+        - row_index (int): The index of the row to be updated.
+        - column_index (int or str): The index or name of the column to be updated.
+        - value: The new value to be assigned to the specified cell.
 
-        Example:
+        Raises:
+        - TypeError: If row_index is not of type 'int' or if column_index is not of type 'int' or 'str'.
+        - ValueError: If the provided row or column index is outside the current model range.
+        - IndexError: If the provided column index (when specified as an integer) is outside of the current model range.
+        - SQLProgrammingError: If there is an issue with the SQL execution during the update.
+
+        Note:
+        - The method allows updating cells identified by row and column indices in the SQLDataModel.
+        - Handles different index types for rows and columns (int or str).
+        - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
+        - After successful execution, it prints a success message with the number of modified rows.
+
+        Usage:
         ```python
-        sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
-        sqldm.update_at((1, 2), ['column_name', 'column_age'], ['John', 30])
-        ```
+        # Example 1: Update a cell in the first row and second column
+        sqldm.update_index_at(0, 1, 'NewValue')
 
-        """
-        if row_idxs is None:
-            row_idxs = tuple(range(self.min_idx, self.max_idx))
-        if columns is None:
-            columns = self.headers
-        col_param_str = ",".join([f""" \"{col}\"=?""" for col in columns])
-        row_idxs = row_idxs if len(row_idxs) != 1 else f"({row_idxs[0]})"
-        update_stmt = f"""update \"{self.sql_model}\" set {col_param_str} where {self.sql_idx} in {row_idxs}"""
+        # Example 2: Update a cell in the 'Name' column of the third row
+        sqldm.update_index_at(2, 'Name', 'John Doe')
+        ```
+        """        
+        if not isinstance(row_index, int):
+            raise TypeError(
+                ErrorFormat(f"TypeError: invalid row index type '{type(row_index).__name__}', rows must be indexed by type 'int'")
+            )
+        if not isinstance(column_index, int|str):
+            raise TypeError(
+                ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
+            )
+        if row_index < 0:
+            row_index = self.max_idx + (row_index + 1)
+        if row_index < self.min_idx or row_index > self.max_idx:
+            raise ValueError(
+                ErrorFormat(f"ValueError: invalid row index '{row_index}', provided row index is outisde of current model range '{self.min_idx}:{self.max_idx}'")
+            )
+        if isinstance(column_index, int):
+            try:
+                column_index = self.headers[column_index]
+            except IndexError:
+                raise IndexError(
+                    ErrorFormat(f"IndexError: invalid column index '{column_index}', provided column index is outside of current model range '0:{self.column_count-1}'")
+                ) from None
+        if column_index not in self.headers:
+            raise ValueError(
+                ErrorFormat(f"ValueError: invalid column name '{column_index}', use `.get_headers()` to view current valid model headers")
+            )
+        update_stmt = f"""update \"{self.sql_model}\" set {column_index} = ? where {self.sql_idx} = {row_index}"""
+        if not isinstance(value,tuple):
+            value = (value,)
         try:
             self.sql_c.execute(update_stmt, value)
             self.sql_db_conn.commit()
@@ -2191,7 +2252,42 @@ class SQLDataModel:
                 ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
             ) from None
         self._set_updated_sql_metadata()        
-        print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')        
+        print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')
+
+    # def update_at(self, row_idxs:tuple[int], columns:list[str], value:list=None) -> None:
+    #     """
+    #     Updates `SQLDataModel` at specified `row_idxs` and `columns` with provided `value`.
+
+    #     Args:
+    #         row_idxs (tuple[int]): The row indices to update.
+    #         columns (list[str]): The columns to update.
+    #         value (list): The list of values to set for the specified columns.
+
+    #     Example:
+    #     ```python
+    #     sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
+    #     sqldm.update_at((1, 2), ['column_name', 'column_age'], ['John', 30])
+    #     ```
+
+    #     """
+    #     if row_idxs is None:
+    #         row_idxs = tuple(range(self.min_idx, self.max_idx))
+    #     if columns is None:
+    #         columns = self.headers
+    #     col_param_str = ",".join([f""" \"{col}\"=?""" for col in columns])
+    #     row_idxs = row_idxs if len(row_idxs) != 1 else f"({row_idxs[0]})"
+    #     update_stmt = f"""update \"{self.sql_model}\" set {col_param_str} where {self.sql_idx} in {row_idxs}"""
+    #     try:
+    #         self.sql_c.execute(update_stmt, value)
+    #         self.sql_db_conn.commit()
+    #         rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
+    #     except Exception as e:
+    #         self.sql_db_conn.rollback()
+    #         raise SQLProgrammingError(
+    #             ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
+    #         ) from None
+    #     self._set_updated_sql_metadata()        
+    #     print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')        
         
     def _generate_sql_stmt(self, columns:None|slice|tuple|int|str|list[str]=None, rows:None|slice|tuple|int=None, include_index:bool=True, fetch_limit:int=None, execute_fetch:bool=False, **kwargs) -> str|SQLDataModel:
         """
@@ -2418,4 +2514,7 @@ if __name__ == '__main__':
     sdm = SQLDataModel(data,cols)
     sdm.set_display_color('#A6D7E8')
     sdm['bytes_col'] = b'test'
+    sdm.insert_row()
+    print(sdm)
+    sdm.update_index_at(-5,-3,'not empty anymore!')
     print(sdm)
