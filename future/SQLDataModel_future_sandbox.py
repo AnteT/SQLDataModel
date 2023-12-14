@@ -235,7 +235,7 @@ class SQLDataModel:
         - index (int): The index of the column for which to retrieve the name.
 
         Raises:
-        - IndexError: If the provided column index is outside the current column range.
+        - `IndexError`: If the provided column index is outside the current column range.
 
         Returns:
         - str: The name of the column at the specified index.
@@ -268,8 +268,8 @@ class SQLDataModel:
         - new_value (str): The new name for the specified column.
 
         Raises:
-        - IndexError: If the provided column index is outside the current column range.
-        - SQLProgrammingError: If there is an issue with the SQL execution during the column renaming.
+        - `IndexError`: If the provided column index is outside the current column range.
+        - `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
 
         Note:
         - The method allows renaming a column identified by its index in the SQLDataModel.
@@ -321,7 +321,7 @@ class SQLDataModel:
         Renames the current `SQLDataModel` headers to values provided in `new_headers`. Headers must have the same dimensions
         and match existing headers.
 
-        Args:
+        Parameters:
             new_headers (list): A list of new header names. It must have the same dimensions as the existing headers.
 
         Returns:
@@ -368,8 +368,8 @@ class SQLDataModel:
         Reformats the current `SQLDataModel` headers into an uncased normalized form using alphanumeric characters only.
         Wraps `.set_headers()`.
 
-        Args:
-            apply_function (Callable, optional): Specify an alternative normalization pattern. When `None`, the pattern
+        Parameters:
+        - `apply_function` (Callable, optional): Specify an alternative normalization pattern. When `None`, the pattern
                 `'[^0-9a-z _]+'` will be used on uncased values.
 
         Returns:
@@ -408,17 +408,18 @@ class SQLDataModel:
 
     def get_max_rows(self) -> int:
         """
-        Returns the current `max_rows` property value.
+        Retrieves the current value of the `max_rows` property, which determines the maximum rows displayed for `SQLDataModel`.
 
         Returns:
-            int: The current value of the `max_rows` property.
+            int: The current value of the 'max_rows' property.
 
         Example:
-        ```python
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
-        max_rows = sqldm.get_max_rows()
-        print(max_rows)  # Output: 1000
-        ```
+            ```python
+            # Example usage:
+            sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            max_rows = sqldm.get_max_rows()
+            print(max_rows)  # Output: 1000
+            ```
         """
         return self.max_rows
     
@@ -426,7 +427,7 @@ class SQLDataModel:
         """
         Set `max_rows` to limit rows displayed when `repr` or `print` is called, does not change the maximum rows stored in `SQLDataModel`.
 
-        Args:
+        Parameters:
             rows (int): The maximum number of rows to display.
 
         Raises:
@@ -470,7 +471,7 @@ class SQLDataModel:
         """
         Set `min_column_width` as the minimum number of characters per column when `repr` or `print` is called.
 
-        Args:
+        Parameters:
             width (int): The minimum width for each column.
 
         Example:
@@ -501,7 +502,7 @@ class SQLDataModel:
         """
         Set `max_column_width` as the maximum number of characters per column when `repr` or `print` is called.
 
-        Args:
+        Parameters:
             width (int): The maximum width for each column.
 
         Example:
@@ -539,7 +540,7 @@ class SQLDataModel:
         
         Default behavior aligns strings left, integers & floats right, with headers matching value alignment.
 
-        Args:
+        Parameters:
             alignment (str | None): The alignment setting.
 
         Raises:
@@ -583,7 +584,7 @@ class SQLDataModel:
         Sets the `display_index` property to enable or disable the inclusion of the
         `SQLDataModel` index value in print or repr calls, default set to include.
 
-        Args:
+        Parameters:
             display_index (bool): A boolean value (True | False) to determine whether
             to include the index in print or repr calls.
 
@@ -1175,8 +1176,189 @@ class SQLDataModel:
 ############################################## dunder special methods ##############################################
 ####################################################################################################################
 
-    def __add__(self, value:int) -> SQLDataModel:
-        """implements + operator functionality for compatible `SQLDataModel` operations"""
+    def __add__(self, value:str|int|float) -> SQLDataModel:
+        """
+        Implements the + operator functionality for compatible `SQLDataModel` operations.
+
+        Parameters:
+        - `value` (str | int | float): The value to be added to each element in the SQLDataModel.
+
+        Returns:
+        - `SQLDataModel`: A new SQLDataModel resulting from the addition operation.
+
+        Raises:
+        - `TypeError`: If the provided `value` is not a valid type (str, int, or float).
+
+        Example:
+        ```python
+        # Example usage for strings:
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name'])
+        sqldm['Loud Name'] = sqldm['First Name'] + '!'
+
+        # Example usage for integers:
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['Age', 'Years of Service'])
+        sqldm['Age'] = sqldm['Age'] + 7 # it's a cruel world after all
+        ```
+        """
+        if not isinstance(value, str|int|float):
+            raise TypeError(
+                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', addition operations can only be performed on types 'str', 'int' or 'float' ")
+            )
+        if isinstance(value, str|int|float):
+            return self.apply(lambda x: x + value)
+
+    def __sub__(self, value:int|float) -> SQLDataModel:
+        """
+        Implements the - operator functionality for compatible `SQLDataModel` operations.
+
+        Parameters:
+        - `value` (int | float): The value to subtract from each element in the SQLDataModel.
+
+        Returns:
+        - `SQLDataModel`: A new SQLDataModel resulting from the subtraction operation.
+
+        Raises:
+        - `TypeError`: If the provided `value` is not a valid type (int or float).
+
+        Example:
+        ```python
+        # Example usage:
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Numbers'])
+        sqldm['Adjusted Numbers'] = sqldm['Numbers'] - 2.5
+        ```
+        """
+        if not isinstance(value, int|float):
+            raise TypeError(
+                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int' or 'float' ")
+            )
+        if isinstance(value, int|float):
+            return self.apply(lambda x: x - value)
+
+    def __mul__(self, value:int|float) -> SQLDataModel:
+        """
+        Implements the * operator functionality for compatible `SQLDataModel` operations.
+
+        Parameters:
+        - `value` (int | float): The value to multiply each element in the SQLDataModel by.
+
+        Returns:
+        - `SQLDataModel`: A new SQLDataModel resulting from the multiplication operation.
+
+        Raises:
+        - `TypeError`: If the provided `value` is not a valid type (int or float).
+
+        Example:
+        ```python
+        # Example usage:
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Monthly Cost'])
+        new_sdm['Yearly Cost'] = sqldm['Monthly Cost'] * 12
+        ```
+        """
+        if not isinstance(value, int|float):
+            raise TypeError(
+                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', multiplication operations can only be performed on types 'int' or 'float' ")
+            )
+        if isinstance(value, int|float):
+            return self.apply(lambda x: x * value)
+
+    def __truediv__(self, value:int|float) -> SQLDataModel:
+        """
+        Implements the / operator functionality for compatible `SQLDataModel` operations.
+
+        Parameters:
+        - `value` (int | float): The value to divide each element in the SQLDataModel by.
+
+        Returns:
+        - `SQLDataModel`: A new SQLDataModel resulting from the division operation.
+
+        Raises:
+        - `TypeError`: If the provided `value` is not a valid type (int or float).
+        - `ZeroDivisionError`: If `value` is 0.
+
+        Example:
+        ```python
+        # Example usage:
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Yearly Amount'])
+        sqldm['Weekly Amount'] = sqldm['Yearly Amount'] / 52
+        ```
+        """
+        if not isinstance(value, int|float):
+            raise TypeError(
+                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int' or 'float' ")
+            )
+        if isinstance(value, int|float):
+            return self.apply(lambda x: x / value)
+        
+    def __pow__(self, value:int|float) -> SQLDataModel:
+        """
+        Implements the ** operator functionality for compatible `SQLDataModel` operations.
+
+        Parameters:
+        - `value` (int | float): The value to raise each element in the SQLDataModel to.
+
+        Returns:
+        - `SQLDataModel`: A new SQLDataModel resulting from the exponential operation.
+
+        Raises:
+        - `TypeError`: If the provided `value` is not a valid type (int or float).
+
+        Example:
+        ```python
+        # Example usage:
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Numbers'])
+        sqldm['Numbers Squared'] = sqldm['Numbers'] ** 2
+        ```
+        """
+        if not isinstance(value, int|float):
+            raise TypeError(
+                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int' or 'float' ")
+            )
+        if isinstance(value, int|float):
+            return self.apply(lambda x: x ** value)        
+
+    def __iadd__(self, value):
+        return self.__add__(value)
+    
+    def __isub__(self, value):
+        return self.__sub__(value)    
+    
+    def __imul__(self, value):
+        return self.__mul__(value)    
+
+    def __idiv__(self, value):
+        return self.__truediv__(value)
+    
+    def __ipow__(self, value):
+        return self.__pow__(value)
+    
+    def __iter__(self):
+        """
+        Iterates over a range of rows in the `SQLDataModel` based on the current model's row indices.
+
+        Yields:
+            tuple: A row fetched from the `SQLDataModel`.
+
+        Notes:
+            - This iterator fetches rows from the `SQLDataModel` using a SQL statement generated
+            by the `_generate_sql_stmt()` method.
+            - The iteration starts from the 'min_idx' value and continues until
+            'max_out_of_bounds' is reached.
+        
+        Raises:
+            - `StopIteration` when there are no more rows to return.
+
+        Example:
+        ```python
+        # Iterate over all rows in the SQLDataModel
+        for row in sqldm:
+            print(row)
+        ```
+        """        
+        iter_idx = self.min_idx
+        self.sql_c.execute(self._generate_sql_stmt(include_index=True, rows=slice(iter_idx,None)))
+        while iter_idx < self.max_out_of_bounds:
+            yield from (x for x in self.sql_c.fetchall())
+            iter_idx += 1
 
     def __getitem__(self, slc) -> SQLDataModel:
         """
@@ -1228,87 +1410,6 @@ class SQLDataModel:
         validated_rows, validated_columns = validated_indicies
         # print(f'parsed as:\nrows: {validated_rows}\ncols: {validated_columns}')
         return self._generate_sql_stmt(columns=validated_columns,rows=validated_rows, execute_fetch=True)
-
-    def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
-        """
-        Generates and executes a SQL update statement to modify specific rows and columns with provided values in the SQLDataModel.
-
-        Parameters:
-        - `rows_to_update`: A tuple of row indices to be updated. If set to None, it defaults to all rows in the SQLDataModel.
-        - `columns_to_update`: A list of column names to be updated. If set to None, it defaults to all columns in the SQLDataModel.
-        - `values_to_update`: A list of tuples representing values to update in the specified rows and columns.
-
-        Notes:
-        - To create a new column, pass a single header item in a list to the `columns_to_update` parameter.
-        - To copy an existing column, pass the corresponding data is a list of tuples to the `values_to_update` parameter.
-
-        Raises:
-        - `DimensionError` if the shape of the provided values does not match the specified rows and columns.
-        - `TypeError` if the `values_to_update` parameter is not a list or tuple.
-
-        Example:
-        ```python
-        # Update specific rows and columns with provided values
-        sqldm._update_rows_and_columns_with_values(
-            rows_to_update=(1, 2, 3),
-            columns_to_update=["column1", "column2"],
-            values_to_update=[(10, 'A'), (20, 'B'), (30, 'C')]
-        )
-
-        # Create a new column named "new_column" with default values
-        sqldm._update_rows_and_columns_with_values(
-            columns_to_update=["new_column"],
-            values_to_update=[(None,)] * sqldm.row_count
-        )
-        ```
-        """
-        update_sql_script = "" # big things have small beginnings...
-        rows_to_update = rows_to_update if rows_to_update is not None else tuple(range(self.min_idx, self.max_idx+1))
-        columns_to_update = columns_to_update if columns_to_update is not None else self.headers
-        if not isinstance(values_to_update, list|tuple):
-            values_to_update = (values_to_update,)
-            rowwise_update = False
-        else:
-            rowwise_update = True
-        if isinstance(values_to_update, tuple):
-            values_to_update = [values_to_update]        
-        num_rows_to_update = len(rows_to_update)
-        num_columns_to_update = len(columns_to_update)
-        num_value_rows_to_update = len(values_to_update)
-        num_value_columns_to_update = len(values_to_update[0])
-        create_new_column = True if (num_columns_to_update == 1 and columns_to_update[0] not in self.headers) else False
-        if create_new_column:
-            new_column = columns_to_update[0]
-            new_column_py_dtype = type(values_to_update[0][0]).__name__ # should always have an item
-            new_column_sql_dtype = self.static_py_to_sql_map_dict.get(new_column_py_dtype, 'TEXT')
-            update_sql_script += f"""alter table "{self.sql_model}" add column "{new_column}" {new_column_sql_dtype};"""
-        if not rowwise_update:
-            values_to_update = values_to_update[0][0]
-            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes) else f"'{values_to_update}'" if not isinstance(values_to_update,bytes) else f"""'{values_to_update.decode('utf-8')}'"""
-            col_val_param = ','.join([f""" "{column}" = {values_to_update} """ for column in columns_to_update]) 
-            update_sql_script += f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
-            # print(f'final update script generated:\n{update_sql_script}')
-            self.execute_transaction(update_sql_script)
-            self._set_updated_sql_metadata()
-            return            
-        if num_rows_to_update != num_value_rows_to_update:
-            raise DimensionError(
-                ErrorFormat(f"DimensionError: shape mismatch '{num_rows_to_update} != {num_value_rows_to_update}', number of rows to update '{num_rows_to_update}' must match provided number of value rows to update '{num_value_rows_to_update}'")
-            )
-        if num_columns_to_update != num_value_columns_to_update:
-            raise DimensionError(
-                ErrorFormat(f"DimensionError: shape mismatch '{num_columns_to_update} != {num_value_columns_to_update}', number of columns to update '{num_columns_to_update}' must match provided number of value columns to update '{num_value_columns_to_update}'")
-            )             
-        for i, row_index in enumerate(rows_to_update):
-            update_row_prefix = f"""update "{self.sql_model}" set"""
-            update_row_index_suffix = f"""where  {self.sql_idx} = {row_index};"""
-            update_col_value_param = ','.join([f"""\"{col}\"={f"'{values_to_update[i][j]}'" if isinstance(values_to_update[i][j],str) else values_to_update[i][j] if values_to_update[i][j] is not None else 'null'}""" for j,col in enumerate(columns_to_update)])
-            update_row = f"{update_row_prefix} {update_col_value_param} {update_row_index_suffix}"
-            update_sql_script += update_row
-        # print(f'final update script generated:\n{update_sql_script}')
-        self.execute_transaction(update_sql_script)
-        self._set_updated_sql_metadata()
-        return
 
     def __setitem__(self, target_indicies, update_values) -> None:
         """
@@ -1372,6 +1473,20 @@ class SQLDataModel:
         return
 
     def __len__(self):
+        """
+        Returns the `row_count` property for the current `SQLDataModel` which represents the current number of rows in the model.
+
+        Returns:
+            int: The total number of rows in the SQLDataModel.
+
+        Example:
+            ```python
+            # Example usage:
+            sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            num_rows = len(sqldm)
+            print(num_rows)  # Output: 1000
+            ```
+        """        
         return self.row_count
 
     def __repr__(self):
@@ -1475,7 +1590,7 @@ class SQLDataModel:
         """
         Returns a generator object of the rows in the model from `min_row` to `max_row`.
 
-        Args:
+        Parameters:
             min_row (int, optional): The minimum row index to start iterating from (inclusive). Defaults to None.
             max_row (int, optional): The maximum row index to iterate up to (inclusive). Defaults to None.
             include_index (bool, optional): Whether to include the row index in the output. Defaults to False.
@@ -1504,7 +1619,7 @@ class SQLDataModel:
         """
         Returns a generator object of the `SQLDataModel` as namedtuples using current headers as field names.
 
-        Args:
+        Parameters:
             include_idx_col (bool, optional): Whether to include the index column in the namedtuples. Defaults to False.
 
         Yields:
@@ -1529,40 +1644,11 @@ class SQLDataModel:
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_idx_col))
         yield from (Row(*x) for x in self.sql_c.fetchall())
 
-    def _generate_sql_fetch_for_joining_tables(self, base_headers:list[str], join_table:str, join_column:str, join_headers:list[str], join_type:str='left') -> str:
-        base_headers_str = ",".join([f"""a.\"{v[0]}\" as \"{v[0]}\"""" for v in self.header_idx_dtype_dict.values() if v[0] in base_headers])
-        join_headers_str = ",".join([f"""b.\"{col}\" as \"{col}\" """ for col in join_headers])
-        join_type_str = "left join" if join_type == 'left' else 'left outer join'
-        join_predicate_str = f"""from {self.sql_model} a {join_type_str} \"{join_table}\" b on a.\"{join_column}\" = b.\"{join_column}\" """
-        sql_join_stmt = f"""select {base_headers_str}, {join_headers_str} {join_predicate_str}"""
-        return sql_join_stmt
-
-    # def get_rows_and_cols_at_index_range(self, start_index:int=None, stop_index:int=None, start_col:int=None, stop_col:int=None, *args, **kwargs) -> SQLDataModel:
-    #     """returns `SQLDataModel` rows from specified `start_index` to specified `stop_index` ranging from `start_col` up to and including `stop_col`
-    #     \nas a new `SQLDataModel`, if `stop_index` is not specified or the value exceeds `row_count`, then last row or largest valid index will be used"""
-    #     row_idx_start = start_index if start_index is not None else self.min_idx
-    #     row_idx_stop = stop_index if stop_index is not None else self.max_idx
-    #     col_idx_start = start_col if start_col is not None else 0
-    #     col_idx_stop = stop_col if stop_col is not None else self.column_count
-    #     if (row_idx_start > self.max_idx) or (row_idx_stop < self.min_idx):
-    #         raise IndexError(
-    #             ErrorFormat(f'IndexError: row index out of range, row indicies ({row_idx_start}:{row_idx_stop}) out of range for current row indicies of ({self.min_idx}:{self.max_idx})')
-    #             )
-    #     if  (col_idx_start > self.column_count) or (col_idx_start > col_idx_stop) or (col_idx_stop > self.column_count):
-    #         raise IndexError(
-    #             ErrorFormat(f'IndexError: column index out of range, column indicies ({col_idx_start}:{col_idx_stop}) out of range for current column indicies of (0:{self.column_count})')
-    #             )
-    #     else:
-    #         idx_args = tuple(range(col_idx_start,col_idx_stop)) if col_idx_start != col_idx_stop else (col_idx_start,)
-    #         fetch_stmt = self._generate_sql_fetch_stmt_for_idxs(idx_args,include_idx_col=True)
-    #     self.sql_c.execute(f"""{fetch_stmt} where {self.sql_idx} >= {row_idx_start} and {self.sql_idx} <= {row_idx_stop} order by {self.sql_idx} asc""")
-    #     return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description],*args,**kwargs)    
-
     def head(self, n_rows:int=5) -> SQLDataModel:
         """
         Returns the first `n_rows` of the current `SQLDataModel`.
 
-        Args:
+        Parameters:
             n_rows (int, optional): Number of rows to return. Defaults to 5.
 
         Returns:
@@ -1581,7 +1667,7 @@ class SQLDataModel:
         """
         Returns the last `n_rows` of the current `SQLDataModel`.
 
-        Args:
+        Parameters:
             n_rows (int, optional): Number of rows to return. Defaults to 5.
 
         Returns:
@@ -1596,36 +1682,12 @@ class SQLDataModel:
         """
         rows = slice((self.max_idx-n_rows), self.max_idx + 1)
         return self._generate_sql_stmt(rows=rows, execute_fetch=True)
-
-    def _get_sql_create_stmt(self) -> str:
-        """returns the current sql create statement stored in the sqlite_master table of the model database"""
-        self.sql_c.execute("select sql from sqlite_master")
-        return self.sql_c.fetchone()[0]
     
-    # def _get_discontiguous_rows_and_cols(self, rows:tuple=None, cols:tuple=None, *args,**kwargs) -> SQLDataModel:
-    #     if rows is not None:
-    #         if type(rows) == int:
-    #             dyn_rows_stmt = f"where {self.sql_idx} = {rows}"
-    #         if type(rows) == slice:
-    #             dyn_rows_stmt = f"where {self.sql_idx} >= {rows.start if rows.start is not None else self.min_idx} and {self.sql_idx} <= {rows.stop if rows.stop is not None else self.max_idx}"
-    #         if type(rows) == tuple:
-    #             dyn_rows_stmt = f"where {self.sql_idx} in {rows}"
-    #     else:
-    #         dyn_rows_stmt = ""
-    #     if cols is not None:
-    #         if type(cols) == slice:
-    #             cols = tuple(range(cols.start if cols.start is not None else 0, cols.stop if cols.stop is not None else self.column_count))
-    #         if type(cols) == int:
-    #             cols = (cols,)
-    #     fetch_stmt = self._generate_sql_fetch_stmt_for_idxs(idxs=cols, include_idx_col=True) + dyn_rows_stmt # none cols handled by this function
-    #     self.sql_c.execute(fetch_stmt)
-    #     return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description],*args,**kwargs)    
-
     def set_display_color(self, color:str|tuple):
         """
         Sets the table string representation color when `SQLDataModel` is displayed in the terminal.
 
-        Args:
+        Parameters:
             color (str or tuple): Color to set. Accepts hex value (e.g., '#A6D7E8') or tuple of RGB values (e.g., (166, 215, 232)).
 
         Returns:
@@ -1654,40 +1716,86 @@ class SQLDataModel:
     ### needs more testing, still unstable ###
     def apply(self, func:Callable) -> SQLDataModel:
         """
-        Applies `func` to the current `SQLDataModel` object and returns a modified `SQLDataModel` by passing its current values to the argument of `func`.
+        Applies `func` to the current `SQLDataModel` object and returns a modified `SQLDataModel` by passing its
+        current values to the argument of `func` updated with the output.
 
-        Args:
-            func (Callable): A callable function to apply to the `SQLDataModel`.
+        Parameters:
+            - `func` (Callable): A callable function to apply to the `SQLDataModel`.
 
         Returns:
-            SQLDataModel: A modified `SQLDataModel` resulting from the application of `func`.
+            - `SQLDataModel`: A modified `SQLDataModel` resulting from the application of `func`.
 
         Raises:
-            TypeError: If the provided argument for `func` is not a valid callable.
+            - `TypeError`: If the provided argument for `func` is not a valid callable.
+            - `SQLProgrammingError`: If the provided function is not valid based on the current SQL datatypes.
+        ---
+        #### Example 1: Applying to a single column:
 
-        Example:
         ```python
-        def custom_function(value1, value2):
-            # Custom logic here
-            return result
+        # Create the SQLDataModel:
+        sqldm = SQLDataModel.from_csv('employees.csv', headers=['First Name', 'Last Name', 'City', 'State'])
 
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
-        modified_sdm = sqldm.apply(custom_function)
+        # Create the function:
+        def uncase_name(x):
+            return x.lower()
+        
+        # Apply to existing column:
+        sqldm['First Name'] = sqldm['First Name'].apply(uncase_name) # existing column will be updated with new values
+
+        # Or create new one by passing in a new column name:
+        sqldm['New Column'] = sqldm['First Name'].apply(uncase_name) # new column will be created with returned values
         ```
 
-        Note:
+        ---
+        #### Example 2: Applying to multiple columns:
+
+        ```python
+        # Create the function, note that `func` must have the same number of args as the model `.apply()` is called on:
+        def summarize_employee(first, last, city, state)
+            summary = f"{first} {last} is from {city}, {state}"
+        
+        # Create a new 'Employee Summary' column for the returned values:
+        sqldm['Employee Summary'] = sqldm.apply(summarize_employee) # new column after all fields passed `summarize_employee` function arg
+        ```
+
+        ---
+        #### Example 3: Applying a built-in function (e.g., math.sqrt) to each row:
+
+        ```python
+        import math
+
+        # Create the SQLDataModel:
+        sqldm = SQLDataModel.from_csv('number-data.csv', headers=['Number'])
+
+        # Apply the math.sqrt function to the original 'Number' column:
+        sqldm_sqrt = sqldm.apply(math.sqrt)
+        ```
+        
+        ---
+        #### Example 4: Applying a lambda function to create a new calculated column:
+
+        ```python
+        # Create the SQLDataModel:
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
+        
+        # Create a new 'Column3' using the values returned from the lambda function:
+        sqldm['Column3'] = sqldm.apply(lambda x, y: x + y, new_column_name='Sum_Columns')
+        ```
+
+        ---
+        #### Note:
             - The number of `args` in the inspected signature of `func` must equal the current number of `SQLDataModel` columns.
             - The number of `func` args must match the current number of columns in the model, or an `Exception` will be raised.
-            - Use `generate_apply_function_stub()` method to return a preconfigured template using current `SQLDataModel` columns and dtypes to assist.
-
-        """
+            - Use `generate_apply_function_stub()` method to return a preconfigured template using current `SQLDataModel`
+            columns and dtypes to assist.
+        """        
         ### get column name from str or index ###
         if not isinstance(func, Callable):
             raise TypeError(
                 ErrorFormat(f'TypeError: invalid argument for `func`, expected type "Callable" but type "{type(func).__name__}" was provided, please provide a valid python "Callable"...')
             )
         try:
-            func_name = func.__name__
+            func_name = func.__name__.replace('<','').replace('>','')
             func_argcount = func.__code__.co_argcount
             self.sql_db_conn.create_function(func_name, func_argcount, func)
         except Exception as e:
@@ -1718,7 +1826,7 @@ class SQLDataModel:
         """
         Sets the new `SQLDataModel` table name that will be used as an alias for any SQL queries executed by the user or internally.
 
-        Args:
+        Parameters:
             new_name (str): The new table name for the `SQLDataModel`.
 
         Raises:
@@ -1746,47 +1854,63 @@ class SQLDataModel:
         self.sql_model = new_name
         print(f'{self.clssuccess} Successfully renamed primary model alias to "{new_name}"')
 
-    def deduplicate(self, subset:list[str]=None, keep_first:bool=True, print_results:bool=True) -> None:
+    def deduplicate(self, subset:list[str]=None, keep_first:bool=True, inplace:bool=True) -> None|SQLDataModel:
         """
-        Deduplicates the current `SQLDataModel` using all the columns and keeping the first unique row by default.
-
-        Set `subset=['column_1', 'column_2'... 'column_n']` to provide alternate deduplicate targets.
-
-        Use `keep_first=False` to keep the last unique record instead of the first.
+        Removes duplicate rows from the SQLDataModel based on the specified subset of columns. Deduplication occurs inplace by default, otherwise use `inplace=False` to return a new `SQLDataModel`.
 
         Parameters:
-            - subset (list[str], optional): List of columns to consider for deduplication. Default is None, meaning all columns.
-            - keep_first (bool, optional): If True, keeps the first unique row; if False, keeps the last unique row. Default is True.
-            - print_results (bool, optional): If True, prints a message with deduplication results. Default is True.
+            - `subset` (list[str], optional): List of columns to consider when identifying duplicates.
+            If None, all columns are considered. Defaults to None.
+            - `keep_first` (bool, optional): If True, keeps the first occurrence of each duplicated row; otherwise,
+            keeps the last occurrence. Defaults to True.
+            - `inplace` (bool, optional): If True, modifies the current SQLDataModel in-place; otherwise, returns
+            a new SQLDataModel without duplicates. Defaults to True.
 
         Returns:
-            None
+            - None: If `inplace` is True, the method modifies the current SQLDataModel in-place.
+            - SQLDataModel: If `inplace` is False, returns a new SQLDataModel without duplicates.
+
+        Raises:
+            - `ValueError`: If a column specified in `subset` is not found in the SQLDataModel.
 
         Example:
-        ```python
-        model.deduplicate(subset=['column_1', 'column_2'], keep_first=False, print_results=True)
-        ```
-        """
-        # """deduplicates the current `SQLDataModel` using all the columns and keeping the first unique row by default\n\nset `subset=['column_1', 'column_2'... 'column_n']` to provide alternate deduplicate targets\n\nuse `keep_first=False` to keep the last unique record instead of the first"""
+            ```python
+            # Example 1: Deduplicate based on a specific column
+            sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            sqldm.deduplicate(subset='ID', keep_first=True, inplace=True)
+
+            # Example 2: Deduplicate based on multiple columns
+            sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            sqldm_deduped = sqldm.deduplicate(subset=['ID', 'Name'], keep_first=False, inplace=False)
+            ```
+        """        
         dyn_keep_order = 'min' if keep_first else 'max'
-        subset_columns = self.headers if subset is None else subset
-        if type(subset_columns) == str:
-            subset_columns = [subset_columns]
-        sql_dedupe_stmt = f"""delete from "{self.sql_model}" where rowid not in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset_columns)})"""
-        self.sql_c.execute(sql_dedupe_stmt)
-        rows_deleted = self.sql_c.rowcount
-        self.sql_db_conn.commit()
-        new_row_count = self.row_count - rows_deleted
-        self.row_count = new_row_count
-        if print_results:
-            print(f'{self.clssuccess} Deduplicated model, {rows_deleted} duplicate rows have been removed with {new_row_count} rows remaining...')
-        return
+        if subset is not None:
+            if isinstance(subset, str):
+                subset = [subset]
+            for col in subset:
+                if col not in self.headers:
+                    raise ValueError(
+                        ErrorFormat(f"ValueError: column not found '{col}', provided columns in `subset` must be valid columns, use `get_headers()` to view current valid column names")
+                    )
+        else:
+            subset = self.headers
+        if inplace:
+            sql_stmt = f"""delete from "{self.sql_model}" where rowid not in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
+            self.sql_c.execute(sql_stmt)
+            self.sql_db_conn.commit()
+            self._set_updated_sql_metadata()
+            self._set_updated_sql_row_metadata()
+            return
+        else:
+            sql_stmt = f"""select * from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
+            return self.fetch_query(sql_stmt)
 
     def fetch_query(self, sql_query:str, **kwargs) -> SQLDataModel:
         """
         Returns a new `SQLDataModel` object after executing the provided SQL query using the current `SQLDataModel`.
 
-        Args:
+        Parameters:
             sql_query (str): The SQL query to execute.
 
         Keyword Args:
@@ -1821,16 +1945,16 @@ class SQLDataModel:
         """
         Returns a new `SQLDataModel` after performing a group by operation on specified columns.
 
-        Args:
-            *columns (str, list, tuple): Columns to group by. Accepts either individual strings or a list/tuple of strings.
+        Parameters:
+            `*columns` (str, list, tuple): Columns to group by. Accepts either individual strings or a list/tuple of strings.
 
         Keyword Args:
-            order_by_count (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
+            `order_by_count` (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
 
             **kwargs: Additional keyword arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
-            SQLDataModel: A new `SQLDataModel` instance containing the result of the group by operation.
+            `SQLDataModel`: A new `SQLDataModel` instance containing the result of the group by operation.
 
         Raises:
             `TypeError`: If the columns argument is not of type str, list, or tuple.
@@ -1871,19 +1995,19 @@ class SQLDataModel:
             ) from None
         return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, **kwargs)
     
-    def join_model(self, sqldatamodel:SQLDataModel, left:bool=True, on_column:str=None, *args, **kwargs) -> SQLDataModel:
+    def join_model(self, model:SQLDataModel, left:bool=True, on_column:str=None, *args, **kwargs) -> SQLDataModel:
         """
-        Performs a left or right join using the caller `SQLDataModel` as the base table and another `SQLDataModel` instance as the joined table.
+        Performs a left or right join using the caller `SQLDataModel` as the base table and another `model` of type `SQLDataModel` instance as the joined table.
 
-        Args:
-            sqldatamodel (SQLDataModel): The `SQLDataModel` instance to join with.
-            left (bool, optional): If True (default), performs a left join. If False, performs a right join.
-            on_column (str, optional): The shared column used for joining. If None, attempts to automatically find a matching column.
+        Parameters:
+            `model` (SQLDataModel): The `SQLDataModel` instance to join with.
+            `left` (bool, optional): If True (default), performs a left join. If False, performs a right join.
+            `on_column` (str, optional): The shared column used for joining. If None, attempts to automatically find a matching column.
 
             *args, **kwargs: Additional arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
-            SQLDataModel: A new `SQLDataModel` instance containing the result of the join operation.
+            `SQLDataModel`: A new `SQLDataModel` instance containing the result of the join operation.
 
         Raises:
             `DimensionError`: If no shared column is found, or if the provided column is not present in both models.
@@ -1894,11 +2018,10 @@ class SQLDataModel:
         sqldm_2 = SQLDataModel.from_csv('join-data.csv')  # create second model from data
         result = sqldm_1.join_model(sqldm_2, left=True, on_column='shared_column')  # perform left join on a shared column
         ```
-
         """
         validated_join_col = False
         join_tablename = 'f_table'
-        join_cols = sqldatamodel.headers
+        join_cols = model.headers
         if on_column is None:
             for col in join_cols:
                 if col in self.headers:
@@ -1912,7 +2035,7 @@ class SQLDataModel:
             raise DimensionError(
                 ErrorFormat(f"DimensionError: no shared column, no matching join column was found in the provided model, ensure one is available or specify one explicitly with on_column='shared_column'")
                 )
-        sqldatamodel.to_sql(join_tablename, self.sql_db_conn)
+        model.to_sql(join_tablename, self.sql_db_conn)
         join_cols = [x for x in join_cols if x != on_column] # removing shared join column
         sql_join_stmt = self._generate_sql_fetch_for_joining_tables(self.headers, join_tablename, join_column=on_column, join_headers=join_cols, join_type='left' if left else 'right')
         self.sql_c.execute(sql_join_stmt)
@@ -1922,11 +2045,11 @@ class SQLDataModel:
         """
         Executes an arbitrary SQL query against the current model without the expectation of selection or returned rows.
 
-        Args:
-            sql_query (str): The SQL query to execute.
-
+        Parameters:
+        - `sql_query` (str): The SQL query to execute.
+            
         Raises:
-            `SQLProgrammingError`: If the SQL execution fails.
+        - `SQLProgrammingError`: If the SQL execution fails.
 
         Example:
         ```python
@@ -1948,11 +2071,11 @@ class SQLDataModel:
         """
         Executes a prepared SQL script wrapped in a transaction against the current model without the expectation of selection or returned rows.
 
-        Args:
-            sql_script (str): The SQL script to execute within a transaction.
+        Parameters:
+        - `sql_script` (str): The SQL script to execute within a transaction.
 
         Raises:
-            `SQLProgrammingError`: If the SQL execution fails.
+        - `SQLProgrammingError`: If the SQL execution fails.
 
         Example:
         ```python
@@ -1968,26 +2091,26 @@ class SQLDataModel:
         try:
             self.sql_c.executescript(full_stmt)
             self.sql_db_conn.commit()
-            rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
+            # rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
                 ErrorFormat(f'SQLProgrammingError: unable to execute provided transaction, SQL execution failed with: "{e}"')
             ) from None
         self._set_updated_sql_metadata()        
-        print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')  
+        # print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')  
 
     def add_column_with_values(self, column_name:str, value=None) -> None:
         """
         Adds a new column with the specified `column_name` to the `SQLDataModel`. The new column is populated with the values provided in the `value` argument. If `value` is not provided (default), the new column is populated with NULL values.
 
-        Args:
-            column_name (str): The name of the new column to be added.
-            value: The value to populate the new column. If None (default), the column is populated with NULL values. If a valid column name is provided, the values of that column will be used to fill the new column.
+        Parameters:
+        - `column_name` (str): The name of the new column to be added.
+        - `value`: The value to populate the new column. If None (default), the column is populated with NULL values. If a valid column name is provided, the values of that column will be used to fill the new column.
 
         Raises:
-            `DimensionError`: If the length of the provided values does not match the number of rows in the model.
-            `TypeError`: If the data type of the provided values is not supported or translatable to an SQL data type.
+        - `DimensionError`: If the length of the provided values does not match the number of rows in the model.
+        - `TypeError`: If the data type of the provided values is not supported or translatable to an SQL data type.
 
         Example:
         ```python
@@ -2037,14 +2160,14 @@ class SQLDataModel:
         """
         Applies the specified callable function (`func`) to the provided `SQLDataModel` column. The function's output is used to update the values in the column.
 
-        Args:
-            func (Callable): The callable function to apply to the column.
-            column (str | int): The name or index of the column to which the function will be applied.
+        Parameters:
+        - `func` (Callable): The callable function to apply to the column.
+        - `column` (str | int): The name or index of the column to which the function will be applied.
 
         Raises:
-            `TypeError`: If the provided column argument is not a valid type (str or int).
-            `IndexError`: If the provided column index is outside the valid range of column indices.
-            `ValueError`: If the provided column name is not valid for the current model.
+        - `TypeError`: If the provided column argument is not a valid type (str or int).
+        - `IndexError`: If the provided column index is outside the valid range of column indices.
+        - `ValueError`: If the provided column name is not valid for the current model.
 
         Example:
         ```python
@@ -2052,7 +2175,6 @@ class SQLDataModel:
         sqldm.apply_function_to_column(lambda x: x.upper(), column='name')  # apply the function to the 'name' column
         sqldm.apply_function_to_column(lambda x, y: x + y, column=1)  # apply the function to the column at index 1
         ```
-
         """
         ### get column name from str or index ###
         if (not isinstance(column, int)) and (not isinstance(column, str)):
@@ -2133,7 +2255,7 @@ class SQLDataModel:
         If `values=None`, an empty row with SQL `null` values will be used.
 
         Parameters:
-        - values (list or tuple, optional): The values to be inserted into the row. 
+        - `values` (list or tuple, optional): The values to be inserted into the row. 
         If not provided or set to None, an empty row with SQL `null` values will be inserted.
 
         Raises:
@@ -2186,9 +2308,9 @@ class SQLDataModel:
         Updates a specific cell in the `SQLDataModel` at the given row and column indices with the provided value.
 
         Parameters:
-        - row_index (int): The index of the row to be updated.
-        - column_index (int or str): The index or name of the column to be updated.
-        - value: The new value to be assigned to the specified cell.
+        - `row_index` (int): The index of the row to be updated.
+        - `column_index` (int or str): The index or name of the column to be updated.
+        - `value`: The new value to be assigned to the specified cell.
 
         Raises:
         - `TypeError`: If row_index is not of type 'int' or if column_index is not of type 'int' or 'str'.
@@ -2251,41 +2373,6 @@ class SQLDataModel:
         self._set_updated_sql_metadata()        
         print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')
 
-    # def update_at(self, row_idxs:tuple[int], columns:list[str], value:list=None) -> None:
-    #     """
-    #     Updates `SQLDataModel` at specified `row_idxs` and `columns` with provided `value`.
-
-    #     Args:
-    #         row_idxs (tuple[int]): The row indices to update.
-    #         columns (list[str]): The columns to update.
-    #         value (list): The list of values to set for the specified columns.
-
-    #     Example:
-    #     ```python
-    #     sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
-    #     sqldm.update_at((1, 2), ['column_name', 'column_age'], ['John', 30])
-    #     ```
-
-    #     """
-    #     if row_idxs is None:
-    #         row_idxs = tuple(range(self.min_idx, self.max_idx))
-    #     if columns is None:
-    #         columns = self.headers
-    #     col_param_str = ",".join([f""" \"{col}\"=?""" for col in columns])
-    #     row_idxs = row_idxs if len(row_idxs) != 1 else f"({row_idxs[0]})"
-    #     update_stmt = f"""update \"{self.sql_model}\" set {col_param_str} where {self.sql_idx} in {row_idxs}"""
-    #     try:
-    #         self.sql_c.execute(update_stmt, value)
-    #         self.sql_db_conn.commit()
-    #         rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
-    #     except Exception as e:
-    #         self.sql_db_conn.rollback()
-    #         raise SQLProgrammingError(
-    #             ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
-    #         ) from None
-    #     self._set_updated_sql_metadata()        
-    #     print(f'{self.clssuccess} Executed SQL, provided query executed with {rows_modified} rows modified')        
-        
     def _generate_sql_stmt(self, columns:None|slice|tuple|int|str|list[str]=None, rows:None|slice|tuple|int=None, include_index:bool=True, fetch_limit:int=None, execute_fetch:bool=False, **kwargs) -> str|SQLDataModel:
         """
         Generates and optionally executes an SQL statement for querying the `SQLDataModel` based on specified columns and rows.
@@ -2309,8 +2396,8 @@ class SQLDataModel:
         - **kwargs: Additional parameters to initialize a new SQLDataModel if execute_fetch is True.
 
         Returns:
-        - If execute_fetch is False, returns the generated SQL statement as a string.
-        - If execute_fetch is True, executes the SQL statement, creates a new SQLDataModel, and returns it.
+        - If `execute_fetch` is False, returns the generated SQL statement as a string.
+        - If `execute_fetch` is True, executes the SQL statement, creates a new SQLDataModel, and returns it.
 
         Raises:
         - `SQLProgrammingError`: If there is an issue with the SQL execution during fetch.
@@ -2371,12 +2458,155 @@ class SQLDataModel:
                 ) from None
             return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, **kwargs)
 
+    def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
+        """
+        Generates and executes a SQL update statement to modify specific rows and columns with provided values in the SQLDataModel.
+
+        Parameters:
+        - `rows_to_update`: A tuple of row indices to be updated. If set to None, it defaults to all rows in the SQLDataModel.
+        - `columns_to_update`: A list of column names to be updated. If set to None, it defaults to all columns in the SQLDataModel.
+        - `values_to_update`: A list of tuples representing values to update in the specified rows and columns.
+
+        Notes:
+        - To create a new column, pass a single header item in a list to the `columns_to_update` parameter.
+        - To copy an existing column, pass the corresponding data is a list of tuples to the `values_to_update` parameter.
+
+        Raises:
+        - `DimensionError` if the shape of the provided values does not match the specified rows and columns.
+        - `TypeError` if the `values_to_update` parameter is not a list or tuple.
+
+        Example:
+        ```python
+        # Update specific rows and columns with provided values
+        sqldm._update_rows_and_columns_with_values(
+            rows_to_update=(1, 2, 3),
+            columns_to_update=["column1", "column2"],
+            values_to_update=[(10, 'A'), (20, 'B'), (30, 'C')]
+        )
+
+        # Create a new column named "new_column" with default values
+        sqldm._update_rows_and_columns_with_values(
+            columns_to_update=["new_column"],
+            values_to_update=[(None,)] * sqldm.row_count
+        )
+        ```
+        """
+        update_sql_script = "" # big things have small beginnings...
+        rows_to_update = rows_to_update if rows_to_update is not None else tuple(range(self.min_idx, self.max_idx+1))
+        columns_to_update = columns_to_update if columns_to_update is not None else self.headers
+        if not isinstance(values_to_update, list|tuple):
+            values_to_update = (values_to_update,)
+            rowwise_update = False
+        else:
+            rowwise_update = True
+        if isinstance(values_to_update, tuple):
+            values_to_update = [values_to_update]        
+        num_rows_to_update = len(rows_to_update)
+        num_columns_to_update = len(columns_to_update)
+        num_value_rows_to_update = len(values_to_update)
+        num_value_columns_to_update = len(values_to_update[0])
+        create_new_column = True if (num_columns_to_update == 1 and columns_to_update[0] not in self.headers) else False
+        if create_new_column:
+            new_column = columns_to_update[0]
+            new_column_py_dtype = type(values_to_update[0][0]).__name__ # should always have an item
+            new_column_sql_dtype = self.static_py_to_sql_map_dict.get(new_column_py_dtype, 'TEXT')
+            update_sql_script += f"""alter table "{self.sql_model}" add column "{new_column}" {new_column_sql_dtype};"""
+        if not rowwise_update:
+            values_to_update = values_to_update[0][0]
+            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes) else f"'{values_to_update}'" if not isinstance(values_to_update,bytes) else f"""'{values_to_update.decode('utf-8')}'"""
+            col_val_param = ','.join([f""" "{column}" = {values_to_update} """ for column in columns_to_update]) 
+            update_sql_script += f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
+            # print(f'final update script generated:\n{update_sql_script}')
+            self.execute_transaction(update_sql_script)
+            self._set_updated_sql_metadata()
+            return            
+        if num_rows_to_update != num_value_rows_to_update:
+            raise DimensionError(
+                ErrorFormat(f"DimensionError: shape mismatch '{num_rows_to_update} != {num_value_rows_to_update}', number of rows to update '{num_rows_to_update}' must match provided number of value rows to update '{num_value_rows_to_update}'")
+            )
+        if num_columns_to_update != num_value_columns_to_update:
+            raise DimensionError(
+                ErrorFormat(f"DimensionError: shape mismatch '{num_columns_to_update} != {num_value_columns_to_update}', number of columns to update '{num_columns_to_update}' must match provided number of value columns to update '{num_value_columns_to_update}'")
+            )             
+        for i, row_index in enumerate(rows_to_update):
+            update_row_prefix = f"""update "{self.sql_model}" set"""
+            update_row_index_suffix = f"""where  {self.sql_idx} = {row_index};"""
+            update_col_value_param = ','.join([f"""\"{col}\"={f"'{values_to_update[i][j].replace("'","''")}'" if isinstance(values_to_update[i][j],str) else values_to_update[i][j] if values_to_update[i][j] is not None else 'null'}""" for j,col in enumerate(columns_to_update)])
+            update_row = f"{update_row_prefix} {update_col_value_param} {update_row_index_suffix}"
+            update_sql_script += update_row
+        # print(f'final update script generated:\n{update_sql_script}')
+        self.execute_transaction(update_sql_script)
+        self._set_updated_sql_metadata()
+        return
+
+    def _generate_sql_fetch_for_joining_tables(self, base_headers:list[str], join_table:str, join_column:str, join_headers:list[str], join_type:str='left') -> str:
+        """
+        Generates a SQL SELECT statement for joining tables, called by the `join_model()` method for performning left or right joins.
+
+        Usage:
+            Constructs a SQL SELECT statement to join the base table (specified by 'base_headers') with another table
+            (specified by 'join_table') based on a common column ('join_column'). The columns to be selected from
+            the base and joined tables are specified by 'base_headers' and 'join_headers', respectively.
+
+        Parameters:
+            - base_headers (list[str]): List of column names to be selected from the base table.
+            - join_table (str): Name of the table to be joined with the base table.
+            - join_column (str): Common column used as the join predicate between the base and joined tables.
+            - join_headers (list[str]): List of column names to be selected from the joined table.
+            - join_type (str, optional): Type of join ('left' by default). Can be 'left' or 'left outer'.
+
+        Returns:
+            str: A SQL SELECT statement for joining tables.
+
+        Example:
+        ```python
+        # Example usage:
+        sql_stmt = sqldm._generate_sql_fetch_for_joining_tables(
+            base_headers=['ID', 'Name', 'Value'],
+            join_table='other_table',
+            join_column='ID',
+            join_headers=['Description', 'Category'],
+            join_type='left'
+        )
+        print(sql_stmt)
+        ```
+        """
+        base_headers_str = ",".join([f"""a.\"{v[0]}\" as \"{v[0]}\"""" for v in self.header_idx_dtype_dict.values() if v[0] in base_headers])
+        join_headers_str = ",".join([f"""b.\"{col}\" as \"{col}\" """ for col in join_headers])
+        join_type_str = "left join" if join_type == 'left' else 'left outer join'
+        join_predicate_str = f"""from {self.sql_model} a {join_type_str} \"{join_table}\" b on a.\"{join_column}\" = b.\"{join_column}\" """
+        sql_join_stmt = f"""select {base_headers_str}, {join_headers_str} {join_predicate_str}"""
+        return sql_join_stmt
+
+    def _get_sql_create_stmt(self) -> str:
+        """
+        Retrieves the SQL CREATE statement used to create the SQLDataModel database.
+
+        Queries the sqlite_master table to fetch the SQL CREATE statement that was used
+        to create the underlying database of the SQLDataModel.
+
+        Returns:
+            str: The SQL CREATE statement for the SQLDataModel database.
+
+        Notes:
+            - This method provides insight into the structure of the database schema.
+
+        Example:
+        ```python
+        # Retrieve the SQL CREATE statement for the SQLDataModel database
+        create_stmt = instance_of_SQLDataModel._get_sql_create_stmt()
+        print(create_stmt)
+        ```
+        """
+        self.sql_c.execute("select sql from sqlite_master")
+        return self.sql_c.fetchone()[0]
+
     def validate_indicies(self, indicies, strict_validation:bool=True) -> tuple[int|slice, list[str]]:
         """
         Validates and returns indices for accessing rows and columns in the `SQLDataModel`.
 
         Parameters:
-        - indicies: Specifies the indices for rows and columns. It can be of various types:
+        - `indicies`: Specifies the indices for rows and columns. It can be of various types:
         - int: Single row index.
         - slice: Range of row indices.
         - tuple: Tuple of disconnected row indices.
@@ -2384,7 +2614,7 @@ class SQLDataModel:
         - list: List of column names.
         - tuple[int|slice, str|list]: Two-dimensional indexing with rows and columns.
 
-        - strict_validation (bool, optional): If True, performs strict validation for column names against the current model headers.
+        - `strict_validation` (bool, optional): If True, performs strict validation for column names against the current model headers.
         Default is True.
 
         Returns:
@@ -2554,15 +2784,10 @@ class SQLDataModel:
         validated_column_indicies = col_indicies
         return (validated_row_indicies, validated_column_indicies)
 
-
 ########################################## run locally ##########################################
 if __name__ == '__main__':
     cols = ['string', 'integer', 'float', 'bit', 'datetime', 'bool', 'empty', 'null']
     data = create_placeholder_data(5,8)
     sdm = SQLDataModel(data,cols)
     sdm.set_display_color('#A6D7E8')
-    sdm['bytes_col'] = b'test'
-    sdm.insert_row()
-    print(sdm)
-    sdm.update_index_at(-5,-3,'not empty anymore!')
     print(sdm)
