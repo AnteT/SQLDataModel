@@ -190,8 +190,9 @@ class SQLDataModel:
         self.display_index = display_index
         self.row_count = len(data)
         had_idx = True if headers[0] == self.sql_idx else False
-        self.max_idx = max([row[0] for row in data]) if had_idx else self.row_count
         self.min_idx = min([row[0] for row in data]) if had_idx else 0
+        self.max_idx = max([row[0] for row in data]) if had_idx else (self.row_count -1) # since indexing starts at zero now, these are the lower and upper bound indicies
+        self.max_out_of_bounds = self.max_idx + 1 # to upper bound for sql statement generation while retaining conventional slicing methods
         dyn_idx_offset,dyn_idx_bind,dyn_add_idx_insert = (1, "?,", f"\"{self.sql_idx}\",") if had_idx else (0, "", "")
         headers = headers[dyn_idx_offset:]
         self.headers = headers
@@ -312,7 +313,6 @@ class SQLDataModel:
         headers = sqldm.get_headers()
         print(headers) # outputs: ['First Name', 'Last Name', 'Salary']
         ```
-
         """
         return self.headers
     
@@ -337,7 +337,6 @@ class SQLDataModel:
         sqldm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
         sqldm.set_headers(['First_Name', 'Last_Name', 'Payment'])
         ```
-
         """
         if not isinstance(new_headers,list|tuple):
             raise TypeError(
@@ -382,7 +381,6 @@ class SQLDataModel:
         sqldm.normalize_headers()
         sqldm.get_headers() # now outputs ['first_name', 'last_name', 'salary']
         ```
-
         """
         if apply_function is None:
             apply_function = lambda x: "_".join(x.strip() for x in re.sub('[^0-9a-z _]+', '', x.lower()).split('_') if x !='')
@@ -393,6 +391,7 @@ class SQLDataModel:
     def _set_updated_sql_row_metadata(self):
         rowmeta = self.sql_db_conn.execute(f""" select min({self.sql_idx}), max({self.sql_idx}), count({self.sql_idx}) from "{self.sql_model}" """).fetchone()
         self.min_idx, self.max_idx, self.row_count = rowmeta
+        self.max_out_of_bounds = self.max_idx + 1
 
     def _set_updated_sql_metadata(self, return_data:bool=False) -> tuple[list, dict, dict]:
         """sets and optionally returns the header indicies, names and current sql data types from the sqlite pragma function\n\nreturn format (updated_headers, updated_header_dtypes, updated_metadata_dict)"""
@@ -420,7 +419,6 @@ class SQLDataModel:
         max_rows = sqldm.get_max_rows()
         print(max_rows)  # Output: 1000
         ```
-
         """
         return self.max_rows
     
@@ -440,7 +438,6 @@ class SQLDataModel:
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
         sqldm.set_max_rows(500)
         ```
-
         """
         # if type(rows) != int:
         if not isinstance(rows, int):
@@ -466,7 +463,6 @@ class SQLDataModel:
         min_width = sqldm.get_min_column_width()
         print(min_width)  # Output: 6
         ```
-
         """
         return self.min_column_width
     
@@ -1598,7 +1594,7 @@ class SQLDataModel:
         print(tail_result)
         ```
         """
-        rows = slice((self.max_idx-n_rows), self.max_idx)
+        rows = slice((self.max_idx-n_rows), self.max_idx + 1)
         return self._generate_sql_stmt(rows=rows, execute_fetch=True)
 
     def _get_sql_create_stmt(self) -> str:
@@ -2224,7 +2220,7 @@ class SQLDataModel:
                 ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
             )
         if row_index < 0:
-            row_index = self.max_idx + row_index
+            row_index = self.max_out_of_bounds + row_index
         if row_index < self.min_idx or row_index > self.max_idx:
             raise ValueError(
                 ErrorFormat(f"ValueError: invalid row index '{row_index}', provided row index is outisde of current model range '{self.min_idx}:{self.max_idx}'")
@@ -2351,13 +2347,13 @@ class SQLDataModel:
         headers_str = ",".join([f'"{col}"' for col in columns])
         if isinstance(rows, slice):
             min_row = rows.start if rows.start is not None else self.min_idx
-            max_row = rows.stop if rows.stop is not None else self.max_idx
+            max_row = rows.stop if rows.stop is not None else self.max_out_of_bounds
             rows_str = f"where {self.sql_idx} >= {min_row} and {self.sql_idx} < {max_row}"
         elif isinstance(rows, tuple):
             rows_str = f"where {self.sql_idx} in {rows}" if len(rows) > 1 else f"where {self.sql_idx} in ({rows[0]})"
         elif isinstance(rows, int):
             if rows < 0:
-                rows = self.max_idx + rows
+                rows = self.max_out_of_bounds + rows
             rows_str = f"where {self.sql_idx} = {rows}"
         else:
             rows_str = ""
@@ -2421,7 +2417,7 @@ class SQLDataModel:
         if isinstance(indicies, int):
             row_index = indicies
             if row_index < 0:
-                row_index = self.max_idx + row_index
+                row_index = self.max_out_of_bounds + row_index
             if row_index < self.min_idx:
                 raise ValueError(
                     ErrorFormat(f"ValueError: invalid row index '{row_index}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
@@ -2435,12 +2431,12 @@ class SQLDataModel:
         if isinstance(indicies, slice):
             row_slice = indicies
             start_idx = row_slice.start if row_slice.start is not None else self.min_idx
-            stop_idx = row_slice.stop if row_slice.stop is not None else self.max_idx
+            stop_idx = row_slice.stop if row_slice.stop is not None else self.max_out_of_bounds
             if start_idx < self.min_idx:
                 raise ValueError(
                     ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
-            if stop_idx > self.max_idx:
+            if stop_idx > self.max_out_of_bounds:
                 raise ValueError(
                     ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )                
@@ -2459,7 +2455,7 @@ class SQLDataModel:
                     raise ValueError(
                         ErrorFormat(f"ValueError: '{col}' is not one of the current model headers, use `.get_headers()` method to view current valid headers...")
                     )
-            return (slice(self.min_idx,self.max_idx), col_index)
+            return (slice(self.min_idx,self.max_out_of_bounds), col_index)
         ### indexing by rows and columns ###        
         if not isinstance(indicies, tuple):
             raise TypeError(
@@ -2477,12 +2473,12 @@ class SQLDataModel:
             )
         if isinstance(row_indicies, int):
             if row_indicies < 0:
-                row_indicies = self.max_idx + row_indicies
+                row_indicies = self.max_out_of_bounds + row_indicies
             if row_indicies < self.min_idx:
                 raise ValueError(
                     ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
-            if row_indicies > self.max_idx:
+            if row_indicies > self.max_out_of_bounds:
                 raise ValueError(
                     ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
@@ -2504,12 +2500,12 @@ class SQLDataModel:
             validated_row_indicies = row_indicies
         else: # is slice
             start_idx = row_indicies.start if row_indicies.start is not None else self.min_idx
-            stop_idx = row_indicies.stop if row_indicies.stop is not None else self.max_idx
+            stop_idx = row_indicies.stop if row_indicies.stop is not None else self.max_out_of_bounds
             if start_idx < self.min_idx:
                 raise ValueError(
                     ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
-            if stop_idx > self.max_idx:
+            if stop_idx > self.max_out_of_bounds:
                 raise ValueError(
                     ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )    
