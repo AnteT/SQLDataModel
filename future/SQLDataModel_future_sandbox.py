@@ -1,6 +1,6 @@
 from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, warnings, re
-from typing import Generator, Callable
+from typing import Generator, Callable, Literal
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
@@ -128,9 +128,6 @@ class SQLDataModel:
     """
     def __init__(self, data:list[list], headers:list[str]=None, max_rows:int=1_000, min_column_width:int=6, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, *args, **kwargs):
         self.clsname = type(self).__name__
-        self.SDMError = ANSIColor(text_color=(247,141,160),text_bold=True)
-        self.clserror = ANSIColor(text_bold=True).alert(self.clsname, 'E')
-        self.clswarning = ANSIColor(text_bold=True).alert(self.clsname, 'W')
         self.clssuccess = ANSIColor(text_bold=True).alert(self.clsname, 'S')
         if not isinstance(data, list|tuple):
             raise TypeError(
@@ -232,17 +229,17 @@ class SQLDataModel:
         Retrieves the name of the column in the `SQLDataModel` at the specified index.
 
         Parameters:
-        - index (int): The index of the column for which to retrieve the name.
+            - `index` (int): The index of the column for which to retrieve the name.
 
         Raises:
-        - `IndexError`: If the provided column index is outside the current column range.
+            - `IndexError`: If the provided column index is outside the current column range.
 
         Returns:
-        - str: The name of the column at the specified index.
+            - str: The name of the column at the specified index.
 
         Note:
-        - The method allows retrieving the name of a column identified by its index in the SQLDataModel.
-        - Handles negative indices by adjusting them relative to the end of the column range.
+            - The method allows retrieving the name of a column identified by its index in the SQLDataModel.
+            - Handles negative indices by adjusting them relative to the end of the column range.
 
         Usage:
         ```python
@@ -264,17 +261,17 @@ class SQLDataModel:
         Renames a column in the `SQLDataModel` at the specified index with the provided new value.
 
         Parameters:
-        - index (int): The index of the column to be renamed.
-        - new_value (str): The new name for the specified column.
+            - `index` (int): The index of the column to be renamed.
+            - `new_value` (str): The new name for the specified column.
 
         Raises:
-        - `IndexError`: If the provided column index is outside the current column range.
-        - `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
+            - `IndexError`: If the provided column index is outside the current column range.
+            - `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
 
         Note:
-        - The method allows renaming a column identified by its index in the SQLDataModel.
-        - Handles negative indices by adjusting them relative to the end of the column range.
-        - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
+            - The method allows renaming a column identified by its index in the SQLDataModel.
+            - Handles negative indices by adjusting them relative to the end of the column range.
+            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
 
         Usage:
         ```python
@@ -322,15 +319,15 @@ class SQLDataModel:
         and match existing headers.
 
         Parameters:
-            new_headers (list): A list of new header names. It must have the same dimensions as the existing headers.
+            `new_headers` (list): A list of new header names. It must have the same dimensions as the existing headers.
 
         Returns:
-            None
+            `None`
 
         Raises:
-            TypeError: If the `new_headers` type is not a valid type (list or tuple).
-            DimensionError: If the length of `new_headers` does not match the column count.
-            TypeError: If the type of the first element in `new_headers` is not a valid type (str, int, or float).
+            - `TypeError`: If the `new_headers` type is not a valid type (list or tuple).
+            - `DimensionError`: If the length of `new_headers` does not match the column count.
+            - `TypeError`: If the type of the first element in `new_headers` is not a valid type (str, int, or float).
 
         Example:
         ```python
@@ -369,7 +366,7 @@ class SQLDataModel:
         Wraps `.set_headers()`.
 
         Parameters:
-        - `apply_function` (Callable, optional): Specify an alternative normalization pattern. When `None`, the pattern
+            - `apply_function` (Callable, optional): Specify an alternative normalization pattern. When `None`, the pattern
                 `'[^0-9a-z _]+'` will be used on uncased values.
 
         Returns:
@@ -428,11 +425,11 @@ class SQLDataModel:
         Set `max_rows` to limit rows displayed when `repr` or `print` is called, does not change the maximum rows stored in `SQLDataModel`.
 
         Parameters:
-            rows (int): The maximum number of rows to display.
+            - `rows` (int): The maximum number of rows to display.
 
         Raises:
-            TypeError: If the provided argument is not an integer.
-            IndexError: If the provided value is less than or equal to 0.
+            - `TypeError`: If the provided argument is not an integer.
+            - `IndexError`: If the provided value is less than or equal to 0.
 
         Example:
         ```python
@@ -472,7 +469,7 @@ class SQLDataModel:
         Set `min_column_width` as the minimum number of characters per column when `repr` or `print` is called.
 
         Parameters:
-            width (int): The minimum width for each column.
+            - `width` (int): The minimum width for each column.
 
         Example:
         ```python
@@ -503,7 +500,7 @@ class SQLDataModel:
         Set `max_column_width` as the maximum number of characters per column when `repr` or `print` is called.
 
         Parameters:
-            width (int): The maximum width for each column.
+            - `width` (int): The maximum width for each column.
 
         Example:
         ```python
@@ -529,22 +526,23 @@ class SQLDataModel:
         """
         return self.column_alignment
     
-    def set_column_alignment(self, alignment:str|None) -> None:
+    def set_column_alignment(self, alignment:Literal['<', '^', '>']=None) -> None:
         """
         Set `column_alignment` as the default alignment behavior when `repr` or `print` is called.
+        
         Options:
-        - `column_alignment = None`: Default behavior, dynamically aligns columns based on value types.
-        - `column_alignment = '<'`: Left-align all column values.
-        - `column_alignment = '^'`: Center-align all column values.
-        - `column_alignment = '>'`: Right-align all column values.
+            - `column_alignment = None`: Default behavior, dynamically aligns columns based on value types.
+            - `column_alignment = '<'`: Left-align all column values.
+            - `column_alignment = '^'`: Center-align all column values.
+            - `column_alignment = '>'`: Right-align all column values.
         
         Default behavior aligns strings left, integers & floats right, with headers matching value alignment.
 
         Parameters:
-            alignment (str | None): The alignment setting.
+            - `alignment` (str | None): The alignment setting.
 
         Raises:
-            TypeError: If the provided alignment is not a valid f-string alignment formatter.
+            - `TypeError`: If the provided alignment is not a valid f-string alignment formatter.
 
         Example:
         ```python
@@ -585,11 +583,11 @@ class SQLDataModel:
         `SQLDataModel` index value in print or repr calls, default set to include.
 
         Parameters:
-            display_index (bool): A boolean value (True | False) to determine whether
+            - `display_index` (bool): A boolean value (True | False) to determine whether
             to include the index in print or repr calls.
 
         Raises:
-            TypeError: If the provided argument is not a boolean value.
+            - `TypeError`: If the provided argument is not a boolean value.
 
         Example:
         ```python
@@ -629,14 +627,14 @@ class SQLDataModel:
         Returns a new `SQLDataModel` from the provided CSV file.
 
         Parameters:
-            - csv_file (str): The path to the CSV file.
-            - delimiter (str, optional): The delimiter used in the CSV file. Default is ','.
-            - quotechar (str, optional): The character used for quoting fields. Default is '"'.
-            - headers (list[str], optional): List of column headers. If None, the first row of the CSV file is assumed to contain headers.
-            - *args, **kwargs: Additional arguments to be passed to the SQLDataModel constructor.
+            - `csv_file` (str): The path to the CSV file.
+            - `delimiter` (str, optional): The delimiter used in the CSV file. Default is ','.
+            - `quotechar` (str, optional): The character used for quoting fields. Default is '"'.
+            - `headers` (list[str], optional): List of column headers. If None, the first row of the CSV file is assumed to contain headers.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            SQLDataModel: The SQLDataModel object created from the provided CSV file.
+            `SQLDataModel`: The SQLDataModel object created from the provided CSV file.
 
         Example:
         ```python
@@ -1058,7 +1056,7 @@ class SQLDataModel:
         ```
         """
         if (filename is not None) and (len(filename.split(".")) <= 1):
-            print(f"{self.clswarning} File extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename...")
+            print(WarnFormat(f"{type(self).__name__}Warning: extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename..."))
             filename += '.sdm'
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
@@ -1688,7 +1686,7 @@ class SQLDataModel:
         Sets the table string representation color when `SQLDataModel` is displayed in the terminal.
 
         Parameters:
-            color (str or tuple): Color to set. Accepts hex value (e.g., '#A6D7E8') or tuple of RGB values (e.g., (166, 215, 232)).
+        - `color` (str or tuple): Color to set. Accepts hex value (e.g., '#A6D7E8') or tuple of RGB values (e.g., (166, 215, 232)).
 
         Returns:
             None
@@ -2000,11 +1998,10 @@ class SQLDataModel:
         Performs a left or right join using the caller `SQLDataModel` as the base table and another `model` of type `SQLDataModel` instance as the joined table.
 
         Parameters:
-            `model` (SQLDataModel): The `SQLDataModel` instance to join with.
-            `left` (bool, optional): If True (default), performs a left join. If False, performs a right join.
-            `on_column` (str, optional): The shared column used for joining. If None, attempts to automatically find a matching column.
-
-            *args, **kwargs: Additional arguments to pass to the `SQLDataModel` constructor.
+            - `model` (SQLDataModel): The `SQLDataModel` instance to join with.
+            - `left` (bool, optional): If True (default), performs a left join. If False, performs a right join.
+            - `on_column` (str, optional): The shared column used for joining. If None, attempts to automatically find a matching column.
+            - `*args`, `**kwargs`: Additional arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
             `SQLDataModel`: A new `SQLDataModel` instance containing the result of the join operation.
@@ -2158,7 +2155,7 @@ class SQLDataModel:
 
     def apply_function_to_column(self, func:Callable, column:str|int) -> None:
         """
-        Applies the specified callable function (`func`) to the provided `SQLDataModel` column. The function's output is used to update the values in the column.
+        Applies the specified callable function (`func`) to the provided `SQLDataModel` column. The function's output is used to update the values in the column. For broader uses or more input flexibility, see related method `apply()`.
 
         Parameters:
         - `func` (Callable): The callable function to apply to the column.
@@ -2251,21 +2248,20 @@ class SQLDataModel:
     def insert_row(self, values:list|tuple=None) -> None:
         """
         Inserts a row in the `SQLDataModel` at index `self.rowcount+1` with provided `values`.
-
         If `values=None`, an empty row with SQL `null` values will be used.
 
         Parameters:
-        - `values` (list or tuple, optional): The values to be inserted into the row. 
-        If not provided or set to None, an empty row with SQL `null` values will be inserted.
+            - `values` (list or tuple, optional): The values to be inserted into the row. 
+            If not provided or set to None, an empty row with SQL `null` values will be inserted.
 
         Raises:
-        - `TypeError`: If `values` is provided and is not of type list or tuple.
-        - `DimensionError`: If the number of values provided does not match the current column count.
-        - `SQLProgrammingError`: If there is an issue with the SQL execution during the insertion.
+            - `TypeError`: If `values` is provided and is not of type list or tuple.
+            - `DimensionError`: If the number of values provided does not match the current column count.
+            - `SQLProgrammingError`: If there is an issue with the SQL execution during the insertion.
 
         Note:
-        - The method handles the insertion of rows into the SQLDataModel, updates metadata, and commits the changes to the database.
-        - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
+            - The method handles the insertion of rows into the SQLDataModel, updates metadata, and commits the changes to the database.
+            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
 
         Usage:
         ```python
@@ -2308,21 +2304,21 @@ class SQLDataModel:
         Updates a specific cell in the `SQLDataModel` at the given row and column indices with the provided value.
 
         Parameters:
-        - `row_index` (int): The index of the row to be updated.
-        - `column_index` (int or str): The index or name of the column to be updated.
-        - `value`: The new value to be assigned to the specified cell.
+            - `row_index` (int): The index of the row to be updated.
+            - `column_index` (int or str): The index or name of the column to be updated.
+            - `value`: The new value to be assigned to the specified cell.
 
         Raises:
-        - `TypeError`: If row_index is not of type 'int' or if column_index is not of type 'int' or 'str'.
-        - `ValueError`: If the provided row index is outside the current model range.
-        - `IndexError`: If the provided column index (when specified as an integer) is outside of the current model range.
-        - `SQLProgrammingError`: If there is an issue with the SQL execution during the update.
+            - `TypeError`: If row_index is not of type 'int' or if column_index is not of type 'int' or 'str'.
+            - `ValueError`: If the provided row index is outside the current model range.
+            - `IndexError`: If the provided column index (when specified as an integer) is outside of the current model range.
+            - `SQLProgrammingError`: If there is an issue with the SQL execution during the update.
 
         Note:
-        - The method allows updating cells identified by row and column indices in the SQLDataModel.
-        - Handles different index types for rows and columns (int or str).
-        - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
-        - After successful execution, it prints a success message with the number of modified rows.
+            - The method allows updating cells identified by row and column indices in the SQLDataModel.
+            - Handles different index types for rows and columns (int or str).
+            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
+            - After successful execution, it prints a success message with the number of modified rows.
 
         Usage:
         ```python
@@ -2606,23 +2602,21 @@ class SQLDataModel:
         Validates and returns indices for accessing rows and columns in the `SQLDataModel`.
 
         Parameters:
-        - `indicies`: Specifies the indices for rows and columns. It can be of various types:
-        - int: Single row index.
-        - slice: Range of row indices.
-        - tuple: Tuple of disconnected row indices.
-        - str: Single column name.
-        - list: List of column names.
-        - tuple[int|slice, str|list]: Two-dimensional indexing with rows and columns.
-
-        - `strict_validation` (bool, optional): If True, performs strict validation for column names against the current model headers.
-        Default is True.
+            - `indicies`: Specifies the indices for rows and columns. It can be of various types:
+            - int: Single row index.
+            - slice: Range of row indices.
+            - tuple: Tuple of disconnected row indices.
+            - str: Single column name.
+            - list: List of column names.
+            - tuple[int|slice, str|list]: Two-dimensional indexing with rows and columns.
+            - `strict_validation` (bool, optional): If True, performs strict validation for column names against the current model headers. Default is True.
 
         Returns:
-        - Tuple containing validated row indices and column indices.
+            Tuple containing validated row indices and column indices.
 
         Raises:
-        - `TypeError`: If the type of indices is invalid.
-        - `ValueError`: If the indices are outside the current model range or if a column is not found in the current model headers.
+            - `TypeError`: If the type of indices is invalid.
+            - `ValueError`: If the indices are outside the current model range or if a column is not found in the current model headers.
 
         Usage:
         ```python
