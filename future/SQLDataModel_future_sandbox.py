@@ -235,7 +235,7 @@ class SQLDataModel:
             - `IndexError`: If the provided column index is outside the current column range.
 
         Returns:
-            - str: The name of the column at the specified index.
+            - `str`: The name of the column at the specified index.
 
         Note:
             - The method allows retrieving the name of a column identified by its index in the SQLDataModel.
@@ -243,8 +243,23 @@ class SQLDataModel:
 
         Usage:
         ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the sample model
+        sqldm = SQLDataModel(data,headers)
+
         # Example: Get the name of the column at index 1
         column_name = sqldm.get_header_at_index(1)
+
+        # Outputs column: 'first'
         print(column_name)
         ```
         """
@@ -651,15 +666,15 @@ class SQLDataModel:
         Returns a new `SQLDataModel` from the provided data.
 
         Parameters:
-            - data (list[list]): The data to populate the SQLDataModel.
-            - headers (list[str], optional): List of column headers. If None, no headers are used.
-            - max_rows (int, optional): The maximum number of rows to include in the SQLDataModel. Default is 1,000.
-            - min_column_width (int, optional): The minimum width for each column. Default is 6.
-            - max_column_width (int, optional): The maximum width for each column. Default is 32.
-            - *args, **kwargs: Additional arguments to be passed to the SQLDataModel constructor.
+            - `data` (list[list]): The data to populate the SQLDataModel.
+            - `headers` (list[str], optional): List of column headers. If None, no headers are used.
+            - `max_rows` (int, optional): The maximum number of rows to include in the SQLDataModel. Default is 1,000.
+            - `min_column_width` (int, optional): The minimum width for each column. Default is 6.
+            - `max_column_width` (int, optional): The maximum width for each column. Default is 32.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            SQLDataModel: The SQLDataModel object created from the provided data.
+            `SQLDataModel`: The SQLDataModel object created from the provided data.
 
         Example:
         ```python
@@ -672,23 +687,31 @@ class SQLDataModel:
     @classmethod
     def from_dict(cls, data:dict, max_rows:int=1_000, min_column_width:int=6, max_column_width:int=32, *args, **kwargs) -> SQLDataModel:
         """
-        Returns a new `SQLDataModel` instance from the provided dictionary.
+        Create a new `SQLDataModel` instance from the provided dictionary.
 
         Parameters:
-            - data (dict): The dictionary to convert to a SQLDataModel. If keys are of type int, they will be used as row indexes; otherwise, keys will be used as headers.
-            - max_rows (int, optional): The maximum number of rows to include in the SQLDataModel. Default is 1,000.
-            - min_column_width (int, optional): The minimum width for each column. Default is 6.
-            - max_column_width (int, optional): The maximum width for each column. Default is 32.
-            - *args, **kwargs: Additional arguments to be passed to the SQLDataModel constructor.
+            - `data` (dict): The dictionary to convert to a SQLDataModel.
+            If keys are of type int, they will be used as row indexes; otherwise, keys will be used as headers.
+            - `max_rows` (int, optional): The maximum number of rows to include in the SQLDataModel. Default is 1,000.
+            - `min_column_width` (int, optional): The minimum width for each column. Default is 6.
+            - `max_column_width` (int, optional): The maximum width for each column. Default is 32.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            SQLDataModel: The SQLDataModel object created from the provided dictionary.
+            `SQLDataModel`: The SQLDataModel object created from the provided dictionary.
+
+        Raises:
+            - `TypeError`: If the provided dictionary values are not of type 'list', 'tuple', or 'dict'.
 
         Example:
         ```python
         data_dict = {1: [10, 'A'], 2: [20, 'B'], 3: [30, 'C']}
         sdm_obj = SQLDataModel.from_dict(data_dict)
         ```
+
+        Note:
+            - The method determines the structure of the SQLDataModel based on the format of the provided dictionary.
+            - If the keys are integers, they are used as row indexes; otherwise, keys are used as headers.
         """
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
         if rowwise:
@@ -696,11 +719,20 @@ class SQLDataModel:
             headers = ['sdmidx',*[f'col_{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
             return cls([tuple([k,*v]) for k,v in data.items()], headers, max_rows=max_rows, min_column_width=min_column_width, max_column_width=max_column_width, *args, **kwargs)
         else:
-            headers = [k for k in data.keys()]
-            column_count = len(headers)
-            row_count = len(data[next(iter(data))])
-            data = [x for x in data.values()]
-            data = [tuple([data[j][row] for j in range(column_count)]) for row in range(row_count)]
+            first_key_val = data[next(iter(data))]
+            if isinstance(first_key_val, dict):
+                headers = list(data.keys())
+                data = [[data[col][val] for col in headers] for val in data.keys()]
+            elif isinstance(first_key_val, list|tuple):
+                headers = [k for k in data.keys()]
+                column_count = len(headers)
+                row_count = len(first_key_val)
+                data = [x for x in data.values()]
+                data = [tuple([data[j][row] for j in range(column_count)]) for row in range(row_count)]
+            else:
+                raise TypeError(
+                    ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
+                )
             return cls(data, headers, max_rows=max_rows, min_column_width=min_column_width, max_column_width=max_column_width, *args, **kwargs)
         
     @classmethod
@@ -709,21 +741,21 @@ class SQLDataModel:
         Returns a `SQLDataModel` object created from the provided numpy `array`.
 
         Parameters:
-            - array (numpy.ndarray): The numpy array to convert to a SQLDataModel.
-            - headers (list of str, optional): The list of headers to use for the SQLDataModel. If None, no headers will be used, and the data will be treated as an n-dimensional array. Default is None.
-            - *args, **kwargs: Additional arguments to be passed to the SQLDataModel constructor.
+            - `array` (numpy.ndarray): The numpy array to convert to a SQLDataModel.
+            - `headers` (list of str, optional): The list of headers to use for the SQLDataModel. If None, no headers will be used, and the data will be treated as an n-dimensional array. Default is None.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            SQLDataModel: The SQLDataModel object created from the numpy array.
+            `SQLDataModel`: The SQLDataModel object created from the numpy array.
+
+        Raises:
+            - `ModuleNotFoundError`: If the required package `numpy` is not found.
 
         Example:
         ```python
         import numpy as np
         sdm_obj = SQLDataModel.from_numpy(np.array([[1, 'a'], [2, 'b'], [3, 'c']]), headers=['Number', 'Letter'])
         ```
-
-        Raises:
-            - ModuleNotFoundError: If the required package `numpy` is not found.
         """
         if not _has_np:
             raise ModuleNotFoundError(
@@ -737,21 +769,22 @@ class SQLDataModel:
         Returns a `SQLDataModel` object created from the provided pandas `DataFrame`. Note that `pandas` must be installed in order to use this class method.
 
         Parameters:
-            - df (pandas.DataFrame): The pandas DataFrame to convert to a SQLDataModel.
-            - headers (list of str, optional): The list of headers to use for the SQLDataModel. If None, the columns of the DataFrame will be used. Default is None.
-            - *args, **kwargs: Additional arguments to be passed to the SQLDataModel constructor.
+            - `df` (pandas.DataFrame): The pandas DataFrame to convert to a SQLDataModel.
+            - `headers` (list of str, optional): The list of headers to use for the SQLDataModel. If None, the columns of the DataFrame will be used. Default is None.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            SQLDataModel: The SQLDataModel object created from the pandas DataFrame.
+            `SQLDataModel`: The SQLDataModel object created from the pandas DataFrame.
+
+        Raises:
+            - `ModuleNotFoundError`: If the required package `pandas` is not found.
 
         Example:
         ```python
         import pandas as pd
+
         sqldm = SQLDataModel.from_pandas(pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']}))
         ```
-
-        Raises:
-            - ModuleNotFoundError: If the required package `pandas` is not found.
         """
         if not _has_pd:
             raise ModuleNotFoundError(
@@ -767,19 +800,19 @@ class SQLDataModel:
         Returns the `SQLDataModel` object from the provided `filename`. If `None`, the current directory will be scanned for the default `to_pickle()` format.
 
         Parameters:
-            - filename (str, optional): The name of the pickle file to load. If None, the current directory will be scanned for the default filename. Default is None.
-            - *args, **kwargs: Additional arguments to be passed to the SQLDataModel constructor.
+            - `filename` (str, optional): The name of the pickle file to load. If None, the current directory will be scanned for the default filename. Default is None.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            SQLDataModel: The SQLDataModel object created from the loaded pickle file.
+            `SQLDataModel`: The SQLDataModel object created from the loaded pickle file.
+
+        Raises:
+            - `FileNotFoundError`: If the provided filename could not be found or does not exist.
 
         Example:
         ```python
         sdm_obj = SQLDataModel.from_pickle("data.sdm")
         ```
-
-        Raises:
-            - FileNotFoundError: If the provided filename could not be found or does not exist.
         """
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
@@ -812,38 +845,83 @@ class SQLDataModel:
     @classmethod
     def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, *args, **kwargs) -> SQLDataModel:
         """
-        Returns a `SQLDataModel` object created from executing the `sql_query` using the provided `sql_connection`.
+        Create a `SQLDataModel` object by executing the provided SQL query using the specified SQL connection.
 
-        If a single word is provided, the query will be wrapped and executed as a select all:
+        If a single word is provided as the `sql_query`, the method wraps it and executes a select all:
         ```python
         sqldm = SQLDataModel.from_sql("table_name", sqlite3.Connection)
         ```
-        This will be executed as:
+        This is equivalent to:
         ```python
         sqldm = SQLDataModel.from_sql("select * from table_name", sqlite3.Connection)
         ```
 
-        Otherwise, the full query passed to `sql_query` will be executed verbatim.
-
-        Note that `sql_connection` can be any valid DB API 2.0 compliant connection.
-
         Parameters:
-            - sql_query (str): The SQL query to execute and create the SQLDataModel.
-            - sql_connection (sqlite3.Connection): The SQLite3 database connection object.
-            - *args, **kwargs: Additional arguments to be passed to the SQLDataModel constructor.
+            - `sql_query` (str): The SQL query to execute and create the SQLDataModel.
+            - `sql_connection` (sqlite3.Connection): The SQLite3 database connection object.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            SQLDataModel: The SQLDataModel object created from the executed SQL query.
-
-        Example:
-        ```python
-        sqldm = SQLDataModel.from_sql("SELECT * FROM my_table", my_sqlite_connection)
-        ```
+            `SQLDataModel`: The SQLDataModel object created from the executed SQL query.
 
         Raises:
-            - WarnFormat: If the provided SQL connection has not been tested, a warning is issued.
-            - SQLProgrammingError: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
-            - DimensionError: If the provided SQL query returns no data.
+            - `WarnFormat`: If the provided SQL connection has not been tested, a warning is issued.
+            - `SQLProgrammingError`: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
+            - `DimensionError`: If the provided SQL query returns no data.
+
+        ---
+        Example with sqlite3:
+        ```python
+        import SQLDataModel, sqlite3
+
+        # Create connection object
+        sqlite_db_conn = sqlite3.connect('./database/users.db')
+
+        # Basic usage with a select query
+        sqldm = SQLDataModel.from_sql("SELECT * FROM my_table", sqlite_db_conn)
+
+        # When a single word is provided, it is treated as a table name for a select all query
+        sqldm_table = SQLDataModel.from_sql("my_table", sqlite_db_conn)
+        ```
+        ---
+        Example with psycopg2:
+        ```python
+        import SQLDataModel, psycopg2
+
+        # Create connection object
+        pg_db_conn = psycopg2.connect('dbname=users user=postgres password=postgres')
+        
+        # Basic usage with a select query
+        sqldm = SQLDataModel.from_sql("SELECT * FROM my_table", pg_db_conn)
+
+        # When a single word is provided, it is treated as a table name for a select all query
+        sqldm_table = SQLDataModel.from_sql("my_table", pg_db_conn)
+        ```        
+        ---
+        Example with pyodbc:
+        ```python
+        import SQLDataModel, pyodbc
+
+        # Create connection object
+        sqls_db_conn = pyodbc.connect("DRIVER={SQL Server};SERVER=host;DATABASE=db;UID=user;PWD=pw;")
+        
+        # Basic usage with a select query
+        sqldm = SQLDataModel.from_sql("SELECT * FROM my_table", sqls_db_conn)
+
+        # When a single word is provided, it is treated as a table name for a select all query
+        sqldm_table = SQLDataModel.from_sql("my_table", sqls_db_conn)
+        ```    
+        ---
+        Supported database connection APIs:
+            - `sqlite3`
+            - `psycopg2`
+            - `pyodbc`
+            - `cx_Oracle`
+            - `teradatasql`
+
+        Note:
+            - Connections with write access can be used in the `to_sql()` method for writing to the same connection types.
+            - Unsupported connection object will output a `SQLDataModelWarning` advising unstable or undefined behaviour.
         """
         ### type checking connection to ensure compatible ###
         db_dialect = type(sql_connection).__module__.split('.')[0].lower()
@@ -875,13 +953,12 @@ class SQLDataModel:
 
     def data(self, include_index:bool=False, include_headers:bool=False) -> list[tuple]:
         """
-        Returns the `SQLDataModel` data as a list of tuples for multiple rows or as a single tuple for individual rows.
-
+        Returns the `SQLDataModel` data as a list of tuples for multiple rows or as a single tuple for individual rows. 
         Data is returned without index and headers by default. Use `include_headers=True` or `include_index=True` to modify.
 
         Parameters:
-            - include_index (bool, optional): If True, includes the index in the result; if False, excludes the index. Default is False.
-            - include_headers (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
+            - `include_index` (bool, optional): If True, includes the index in the result; if False, excludes the index. Default is False.
+            - `include_headers` (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
 
         Returns:
             list: The list of tuples representing the SQLDataModel data.
@@ -902,22 +979,30 @@ class SQLDataModel:
     def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', include_index:bool=False, *args, **kwargs):
         """
         Writes `SQLDataModel` to the specified file in the `csv_file` argument.
-
         The file must have a compatible `.csv` file extension.
 
         Parameters:
-            - csv_file (str): The name of the CSV file to which the data will be written.
-            - delimiter (str, optional): The delimiter to use for separating values. Default is ','.
-            - quotechar (str, optional): The character used to quote fields. Default is '"'.
-            - include_index (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
-            - *args, **kwargs: Additional arguments to be passed to the `csv.writer` constructor.
+            - `csv_file` (str): The name of the CSV file to which the data will be written.
+            - `delimiter` (str, optional): The delimiter to use for separating values. Default is ','.
+            - `quotechar` (str, optional): The character used to quote fields. Default is '"'.
+            - `include_index` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
+            - `*args`, `**kwargs`: Additional arguments to be passed to the `csv.writer` constructor.
 
         Returns:
             None
 
         Example:
         ```python
-        sqldm.to_csv("output.csv", delimiter=';', include_index=True)
+        import SQLDataModel
+
+        # Create instance
+        sqldm = SQLDataModel.from_csv('raw-data.csv')
+
+        # Save SQLDataModel to csv file in data directory:
+        sqldm.to_csv("./data/analysis.csv", include_index=True)
+
+        # Save SQLDataModel as tab separated values instead:
+        sqldm.to_csv("./data/analysis.csv", delimiter='\\t', include_index=False)
         ```
         """
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_index))
@@ -930,20 +1015,41 @@ class SQLDataModel:
 
     def to_dict(self, rowwise:bool=True) -> dict:
         """
-        Returns a dictionary from `SQLDataModel` using index rows as keys.
-        
-        Set `rowwise=False` to use model headers as keys instead.
+        Convert the `SQLDataModel` to a dictionary, using either index rows or model headers as keys.
 
         Parameters:
-            - rowwise (bool, optional): If True, uses index rows as keys; if False, uses model headers as keys. Default is True.
+            - `rowwise` (bool, optional): If True, use index rows as keys; if False, use model headers as keys. Default is True.
 
         Returns:
-            dict: The dictionary representation of the SQLDataModel.
+            `dict`: The dictionary representation of the SQLDataModel.
 
-        Example:
+        Examples:
         ```python
+        import SQLDataModel
+
+        # Convert to a dictionary using index rows as keys
+        result_dict = sqldm.to_dict(rowwise=True)
+
+        # Example of output format:
+        result_dict = {
+             0: ['john', 'smith', 'new york']
+            ,1: ['sarah', 'west', 'chicago']
+        }
+
+        # Convert to a dictionary using model headers as keys
         result_dict = sqldm.to_dict(rowwise=False)
+
+        # Example of output format when not rowwise:
+        result_dict = {
+            "first_name" : ['john', 'sarah']
+            "last_name" : ['smith', 'west']
+            "city" : ['new york', 'chicago']
+        }
         ```
+        Note:
+            - The method uses all of the underlying data, to selectively output simple index the SQLDataModel instance.
+            - If `rowwise` is True, each index row is a key, and its corresponding values are a tuple of the row data.
+            - If `rowwise` is False, each model header is a key, and its corresponding values are a tuple of the column data.
         """
         self.sql_c.execute(self._generate_sql_stmt(include_index=True))
         if rowwise:
@@ -956,44 +1062,86 @@ class SQLDataModel:
     def to_list(self, include_index:bool=True, include_headers:bool=False) -> list[tuple]:
         """
         Returns a list of tuples containing all the `SQLDataModel` data without the headers by default.
-
         Use `include_headers=True` to return the headers as the first item in the returned sequence.
 
         Parameters:
-            - include_index (bool, optional): If True, includes the index in the result; if False, excludes the index. Default is True.
-            - include_headers (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
+            - `include_index` (bool, optional): If True, includes the index in the result; if False, excludes the index. Default is True.
+            - `include_headers` (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
 
         Returns:
-            list: The list of tuples representing the SQLDataModel data.
+            `list`: The list of tuples representing the SQLDataModel data.
 
         Example:
         ```python
+        import SQLDataModel
+
+        # Output the data with indicies but without headers:
         result_list = sqldm.to_list(include_index=True, include_headers=False)
+
+        # Format of output:
+        output_list = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'patrick', 'mcdouglas', 42)
+        ]
+
+        # Output the data without indicies and with headers:
+        result_list = sqldm.to_list(include_index=False, include_headers=True)
+
+        # Format of output:
+        output_list = [
+            ('first', 'last', 'age')
+            ,('john', 'smith', 27)
+            ,('sarah', 'west', 29)
+            ,('patrick', 'mcdouglas', 42)
+        ]
         ```
         """
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_index))
         return [tuple([x[0] for x in self.sql_c.description]),*self.sql_c.fetchall()] if include_headers else self.sql_c.fetchall()
     
-    def to_numpy(self, include_index:bool=False, include_headers:bool=False):
+    def to_numpy(self, include_index:bool=False, include_headers:bool=False) -> _np.ndarray:
         """
-        Converts `SQLDataModel` to a NumPy `array` object of shape (rows, columns).
-
+        Converts `SQLDataModel` to a NumPy `ndarray` object of shape (rows, columns).
         Note that NumPy must be installed to use this method.
 
         Parameters:
-            - include_index (bool, optional): If True, includes the model index in the result. Default is False.
-            - include_headers (bool, optional): If True, includes column headers in the result. Default is False.
+            - `include_index` (bool, optional): If True, includes the model index in the result. Default is False.
+            - `include_headers` (bool, optional): If True, includes column headers in the result. Default is False.
 
         Returns:
-            NumPy array: The converted NumPy array.
+            `numpy.ndarray`: The model's data converted into a NumPy array.
 
         Example:
         ```python
-        result_array = sqldm.to_numpy(include_index=True, include_headers=False)
+        import SQLDataModel, numpy
+
+        # Create the numpy array with default parameters, no indicies or headers
+        result_array = sqldm.to_numpy()
+
+        # Example output format
+        result_array = numpy.ndarray([
+            ['john' 'smith' '27']
+            ,['sarah' 'west' '29']
+            ,['mike' 'harlin' '36']
+            ,['pat' 'douglas' '42']
+        ])
+
+        # Create the numpy array with with indicies and headers
+        result_array = sqldm.to_numpy(include_index=True, include_headers=True)
+
+        # Example of output format
+        result_array = numpy.ndarray([
+            ['idx' 'first' 'last' 'age']
+            ,['0' 'john' 'smith' '27']
+            ,['1' 'sarah' 'west' '29']
+            ,['2' 'mike' 'harlin' '36']
+            ,['3' 'pat' 'douglas' '42']
+        ])
         ```
 
         Raises:
-            ModuleNotFoundError: If NumPy is not installed.
+            - `ModuleNotFoundError`: If NumPy is not installed.
         """
         if not _has_np:
             raise ModuleNotFoundError(
@@ -1005,26 +1153,28 @@ class SQLDataModel:
             return _np.vstack([_np.array([x[0] for x in self.sql_c.description]),[_np.array(x) for x in self.sql_c.fetchall()]])
         return _np.array([_np.array(x) for x in self.sql_c.fetchall()])
 
-    def to_pandas(self, include_index:bool=False, include_headers:bool=True):
+    def to_pandas(self, include_index:bool=False, include_headers:bool=True) -> _pd.DataFrame:
         """
         Converts `SQLDataModel` to a Pandas `DataFrame` object.
-
         Note that Pandas must be installed to use this method.
 
         Parameters:
-            - include_index (bool, optional): If True, includes the model index in the result. Default is False.
-            - include_headers (bool, optional): If True, includes column headers in the result. Default is True.
+            - `include_index` (bool, optional): If True, includes the model index in the result. Default is False.
+            - `include_headers` (bool, optional): If True, includes column headers in the result. Default is True.
 
         Returns:
-            Pandas DataFrame: The converted Pandas DataFrame.
+            `pandas.DataFrame`: The model's data converted to a Pandas DataFrame.
 
         Example:
         ```python
+        import SQLDataModel, pandas
+
+        # Output the model data as a pandas dataframe
         result_df = sqldm.to_pandas(include_index=True, include_headers=False)
         ```
 
         Raises:
-            ModuleNotFoundError: If Pandas is not installed.
+            `ModuleNotFoundError`: If Pandas is not installed.
         """
         if not _has_pd:
             raise ModuleNotFoundError(
@@ -1044,15 +1194,35 @@ class SQLDataModel:
         By default, the name of the invoking Python file will be used.
 
         Parameters:
-            - filename (str, optional): The name of the file to which the instance will be saved. If not provided,
+            - `filename` (str, optional): The name of the file to which the instance will be saved. If not provided,
             the invoking Python file's name with a ".sdm" extension will be used.
 
         Returns:
-            None
+            `None`
 
         Example:
         ```python
+        import SQLDataModel
+
+        headers = ['sdmidx', 'first', 'last', 'age']
+        data = [
+         (0, 'john', 'smith', 27)
+        ,(1, 'sarah', 'west', 29)
+        ,(2, 'mike', 'harlin', 36)
+        ,(3, 'pat', 'douglas', 42)
+        ]
+        
+        # Create the SQLDataModel object
+        sqldm = SQLDataModel(data, headers)
+
+        # Save the model's data as a pickle file "output.sdm"
         sqldm.to_pickle("output.sdm")
+
+        # Alternatively, leave blank to use the current file's name:
+        sqldm.to_pickle()
+
+        # This way the same data can be recreated later by calling the from_pickle() method from the same project:
+        sqldm = SQLDataModel.from_pickle()
         ```
         """
         if (filename is not None) and (len(filename.split(".")) <= 1):
@@ -1067,30 +1237,53 @@ class SQLDataModel:
 
     def to_sql(self, table:str, extern_conn:sqlite3.Connection, replace_existing:bool=True, include_index:bool=True) -> None:
         """
-        Inserts `SQLDataModel` into the specified table using the SQLite database connection object provided in one of two modes:
-        
-        - `replace_existing = True:` Deletes the existing table and replaces it with the SQLDataModel's.
-        - `replace_existing = False:` Appends to the existing table and executes a deduplication statement immediately after.
-        
+        Insert the `SQLDataModel` into the specified table using the provided SQLite database connection object.
+
+        Two modes are available:
+        - `replace_existing=True`: Deletes the existing table and replaces it with the SQLDataModel's data.
+        - `replace_existing=False`: Appends to the existing table and performs deduplication immediately after.
+
         Use `SQLDataModel.get_supported_sql_connections()` to view supported connections.
         Use `include_index=True` to retain the model index in the target table.
 
         Parameters:
-            - table (str): The name of the table where data will be inserted.
-            - extern_conn (sqlite3.Connection): The SQLite database connection object.
-            - replace_existing (bool, optional): If True, replaces the existing table; if False, appends to the existing table. Default is True.
-            - include_index (bool, optional): If True, retains the model index in the target table. Default is True.
+            - `table` (str): The name of the table where data will be inserted.
+            - `extern_conn` (sqlite3.Connection): The SQLite database connection object.
+            - `replace_existing` (bool, optional): If True, replaces the existing table; if False, appends to the existing table. Default is True.
+            - `include_index` (bool, optional): If True, retains the model index in the target table. Default is True.
 
         Returns:
-            None
-
-        Example:
-        ```python
-        sqldm.to_sql("my_table", sqlite_connection, replace_existing=True, include_index=False)
-        ```
+            `None`
 
         Raises:
-            SQLProgrammingError: If the provided SQL connection is not open.
+            - `SQLProgrammingError`: If the provided SQL connection is not open.
+        ---
+        Example:
+
+        ```python
+        import SQLDataModel, sqlite3
+
+        # Create connection object
+        sqlite_db_conn = sqlite3.connect('./database/users.db')
+
+        # Basic usage with insert, replace existing table, and exclude index
+        sqldm.to_sql("my_table", sqlite_db_conn, replace_existing=True, include_index=False)
+
+        # Append to the existing table and perform deduplication
+        sqldm.to_sql("my_table", sqlite_db_conn, replace_existing=False, include_index=True)
+        ```
+
+        ---
+        Supported database connection APIs:
+        - `sqlite3`
+        - `psycopg2`
+        - `pyodbc`
+        - `cx_Oracle`
+        - `teradatasql`
+
+        Note:
+        - Connections with write access can be used in the `to_sql()` method for writing to the same connection types.
+        - Unsupported connection objects will output a `SQLDataModelWarning` advising unstable or undefined behavior.
         """
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_index))
         model_data = [x for x in self.sql_c.fetchall()] # using new process
@@ -1124,14 +1317,16 @@ class SQLDataModel:
         Writes contents of `SQLDataModel` to the specified `filename` as text representation.
 
         Parameters:
-            - filename (str): The name of the file to which the contents will be written.
-            - include_ts (bool, optional): If True, includes a timestamp in the file. Default is False.
+            - `filename` (str): The name of the file to which the contents will be written.
+            - `include_ts` (bool, optional): If True, includes a timestamp in the file. Default is False.
 
         Returns:
             None
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm.to_text("output.txt", include_ts=True)
         ```
         """
@@ -1145,19 +1340,19 @@ class SQLDataModel:
         Stores the `SQLDataModel` internal in-memory database to a local disk database.
 
         Parameters:
-        - db (str, optional): The filename or path of the target local disk database.
-        If not provided (None), the current filename will be used as a default target.
-
-        Note:
-        - The method connects to the specified local disk database using sqlite3.
-        - It performs a backup of the in-memory database to the local disk database.
-        - If `db=None`, the current filename is used as the default target.
-        - After successful backup, it prints a success message indicating the creation of the local database.
+            - `db` (str, optional): The filename or path of the target local disk database.
+            If not provided (None), the current filename will be used as a default target.
 
         Raises:
-        - sqlite3.Error: If there is an issue with the SQLite database operations during backup.
+            - `sqlite3.Error`: If there is an issue with the SQLite database operations during backup.
 
-        Usage:
+        Note:
+            - The method connects to the specified local disk database using sqlite3.
+            - It performs a backup of the in-memory database to the local disk database.
+            - If `db=None`, the current filename is used as the default target.
+            - After successful backup, it prints a success message indicating the creation of the local database.
+
+        Example:
         ```python
         # Example 1: Store the in-memory database to a local disk database with a specific filename
         sqldm.to_local_db("local_database.db")
@@ -1589,19 +1784,18 @@ class SQLDataModel:
         Returns a generator object of the rows in the model from `min_row` to `max_row`.
 
         Parameters:
-            min_row (int, optional): The minimum row index to start iterating from (inclusive). Defaults to None.
-            max_row (int, optional): The maximum row index to iterate up to (inclusive). Defaults to None.
-            include_index (bool, optional): Whether to include the row index in the output. Defaults to False.
-            include_headers (bool, optional): Whether to include headers as the first row. Defaults to False.
+            - `min_row` (int, optional): The minimum row index to start iterating from (inclusive). Defaults to None.
+            - `max_row` (int, optional): The maximum row index to iterate up to (inclusive). Defaults to None.
+            - `include_index` (bool, optional): Whether to include the row index in the output. Defaults to False.
+            - `include_headers` (bool, optional): Whether to include headers as the first row. Defaults to False.
 
         Yields:
-            Generator: Rows from the specified range, including headers if specified.
-
-        Raises:
-            None
+            - `Generator`: Rows from the specified range, including headers if specified.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
         for row in sqldm.iter_rows(min_row=2, max_row=4):
             print(row)
@@ -1618,16 +1812,18 @@ class SQLDataModel:
         Returns a generator object of the `SQLDataModel` as namedtuples using current headers as field names.
 
         Parameters:
-            include_idx_col (bool, optional): Whether to include the index column in the namedtuples. Defaults to False.
+            - `include_idx_col` (bool, optional): Whether to include the index column in the namedtuples. Defaults to False.
 
         Yields:
-            Generator: Namedtuples representing rows with field names based on current headers.
+            - `Generator`: Namedtuples representing rows with field names based on current headers.
 
         Raises:
-            ValueError: Raised if headers are not valid Python identifiers. Use `normalize_headers()` method to fix.
+            - `ValueError`: Raised if headers are not valid Python identifiers. Use `normalize_headers()` method to fix.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
         for row_tuple in sqldm.iter_tuples(include_idx_col=True):
             print(row_tuple)
@@ -1647,13 +1843,15 @@ class SQLDataModel:
         Returns the first `n_rows` of the current `SQLDataModel`.
 
         Parameters:
-            n_rows (int, optional): Number of rows to return. Defaults to 5.
+            - `n_rows` (int, optional): Number of rows to return. Defaults to 5.
 
         Returns:
-            SQLDataModel: A new `SQLDataModel` instance containing the specified number of rows.
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the specified number of rows.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
         head_result = sqldm.head(3)
         print(head_result)
@@ -1666,13 +1864,15 @@ class SQLDataModel:
         Returns the last `n_rows` of the current `SQLDataModel`.
 
         Parameters:
-            n_rows (int, optional): Number of rows to return. Defaults to 5.
+            - `n_rows` (int, optional): Number of rows to return. Defaults to 5.
 
         Returns:
-            SQLDataModel: A new `SQLDataModel` instance containing the specified number of rows.
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the specified number of rows.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
         tail_result = sqldm.tail(3)
         print(tail_result)
@@ -1686,13 +1886,15 @@ class SQLDataModel:
         Sets the table string representation color when `SQLDataModel` is displayed in the terminal.
 
         Parameters:
-        - `color` (str or tuple): Color to set. Accepts hex value (e.g., '#A6D7E8') or tuple of RGB values (e.g., (166, 215, 232)).
+            - `color` (str or tuple): Color to set. Accepts hex value (e.g., '#A6D7E8') or tuple of RGB values (e.g., (166, 215, 232)).
 
         Returns:
-            None
+            - None
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
         sqldm.set_display_color('#A6D7E8')
         ```
@@ -1711,7 +1913,6 @@ class SQLDataModel:
 ################################################ sql commands ################################################
 ##############################################################################################################
 
-    ### needs more testing, still unstable ###
     def apply(self, func:Callable) -> SQLDataModel:
         """
         Applies `func` to the current `SQLDataModel` object and returns a modified `SQLDataModel` by passing its
@@ -1730,6 +1931,8 @@ class SQLDataModel:
         #### Example 1: Applying to a single column:
 
         ```python
+        import SQLDataModel
+
         # Create the SQLDataModel:
         sqldm = SQLDataModel.from_csv('employees.csv', headers=['First Name', 'Last Name', 'City', 'State'])
 
@@ -1748,6 +1951,8 @@ class SQLDataModel:
         #### Example 2: Applying to multiple columns:
 
         ```python
+        import SQLDataModel
+        
         # Create the function, note that `func` must have the same number of args as the model `.apply()` is called on:
         def summarize_employee(first, last, city, state)
             summary = f"{first} {last} is from {city}, {state}"
@@ -1760,7 +1965,7 @@ class SQLDataModel:
         #### Example 3: Applying a built-in function (e.g., math.sqrt) to each row:
 
         ```python
-        import math
+        import SQLDataModel, math
 
         # Create the SQLDataModel:
         sqldm = SQLDataModel.from_csv('number-data.csv', headers=['Number'])
@@ -1773,6 +1978,8 @@ class SQLDataModel:
         #### Example 4: Applying a lambda function to create a new calculated column:
 
         ```python
+        import SQLDataModel
+
         # Create the SQLDataModel:
         sqldm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
         
@@ -1809,10 +2016,12 @@ class SQLDataModel:
         Returns the `SQLDataModel` table name currently being used by the model as an alias for any SQL queries executed by the user and internally.
 
         Returns:
-            str: The current `SQLDataModel` table name.
+            - `str`: The current `SQLDataModel` table name.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
         model_name = sqldm.get_model_name()
         print(f'The model is currently using the table name: {model_name}')
@@ -1825,13 +2034,15 @@ class SQLDataModel:
         Sets the new `SQLDataModel` table name that will be used as an alias for any SQL queries executed by the user or internally.
 
         Parameters:
-            new_name (str): The new table name for the `SQLDataModel`.
+            - `new_name` (str): The new table name for the `SQLDataModel`.
 
         Raises:
-            SQLProgrammingError: If unable to rename the model table due to SQL execution failure.
+            - `SQLProgrammingError`: If unable to rename the model table due to SQL execution failure.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
         sqldm.set_model_name('custom_table')
         ```
@@ -1865,22 +2076,23 @@ class SQLDataModel:
             a new SQLDataModel without duplicates. Defaults to True.
 
         Returns:
-            - None: If `inplace` is True, the method modifies the current SQLDataModel in-place.
-            - SQLDataModel: If `inplace` is False, returns a new SQLDataModel without duplicates.
+            - `None`: If `inplace` is True, the method modifies the current SQLDataModel in-place.
+            - `SQLDataModel`: If `inplace` is False, returns a new SQLDataModel without duplicates.
 
         Raises:
             - `ValueError`: If a column specified in `subset` is not found in the SQLDataModel.
 
         Example:
-            ```python
-            # Example 1: Deduplicate based on a specific column
-            sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
-            sqldm.deduplicate(subset='ID', keep_first=True, inplace=True)
+        ```python
+        import SQLDataModel
+        # Example 1: Deduplicate based on a specific column
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+        sqldm.deduplicate(subset='ID', keep_first=True, inplace=True)
 
-            # Example 2: Deduplicate based on multiple columns
-            sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
-            sqldm_deduped = sqldm.deduplicate(subset=['ID', 'Name'], keep_first=False, inplace=False)
-            ```
+        # Example 2: Deduplicate based on multiple columns
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+        sqldm_deduped = sqldm.deduplicate(subset=['ID', 'Name'], keep_first=False, inplace=False)
+        ```
         """        
         dyn_keep_order = 'min' if keep_first else 'max'
         if subset is not None:
@@ -1944,19 +2156,18 @@ class SQLDataModel:
         Returns a new `SQLDataModel` after performing a group by operation on specified columns.
 
         Parameters:
-            `*columns` (str, list, tuple): Columns to group by. Accepts either individual strings or a list/tuple of strings.
+            - `*columns` (str, list, tuple): Columns to group by. Accepts either individual strings or a list/tuple of strings.
 
         Keyword Args:
-            `order_by_count` (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
-
-            **kwargs: Additional keyword arguments to pass to the `SQLDataModel` constructor.
+            - `order_by_count` (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
+            - `**kwargs`: Additional keyword arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
-            `SQLDataModel`: A new `SQLDataModel` instance containing the result of the group by operation.
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the group by operation.
 
         Raises:
-            `TypeError`: If the columns argument is not of type str, list, or tuple.
-            `ValueError`: If any specified column does not exist in the current model.
+            - `TypeError`: If the columns argument is not of type str, list, or tuple.
+            - `ValueError`: If any specified column does not exist in the current model.
 
         Example:
         ```python
@@ -2004,13 +2215,15 @@ class SQLDataModel:
             - `*args`, `**kwargs`: Additional arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
-            `SQLDataModel`: A new `SQLDataModel` instance containing the result of the join operation.
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the join operation.
 
         Raises:
-            `DimensionError`: If no shared column is found, or if the provided column is not present in both models.
+            - `DimensionError`: If no shared column is found, or if the provided column is not present in both models.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm_1 = SQLDataModel.from_csv('base-data.csv')  # create first model from data
         sqldm_2 = SQLDataModel.from_csv('join-data.csv')  # create second model from data
         result = sqldm_1.join_model(sqldm_2, left=True, on_column='shared_column')  # perform left join on a shared column
@@ -2043,13 +2256,15 @@ class SQLDataModel:
         Executes an arbitrary SQL query against the current model without the expectation of selection or returned rows.
 
         Parameters:
-        - `sql_query` (str): The SQL query to execute.
+            - `sql_query` (str): The SQL query to execute.
             
         Raises:
-        - `SQLProgrammingError`: If the SQL execution fails.
+            - `SQLProgrammingError`: If the SQL execution fails.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
         sqldm.execute_query('UPDATE table SET column = value WHERE condition')  # execute an update query
         ```
@@ -2069,13 +2284,15 @@ class SQLDataModel:
         Executes a prepared SQL script wrapped in a transaction against the current model without the expectation of selection or returned rows.
 
         Parameters:
-        - `sql_script` (str): The SQL script to execute within a transaction.
+            - `sql_script` (str): The SQL script to execute within a transaction.
 
         Raises:
-        - `SQLProgrammingError`: If the SQL execution fails.
+            - `SQLProgrammingError`: If the SQL execution fails.
 
         Example:
         ```python
+        import SQLDataModel
+
         sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
         transaction_script = '''
             UPDATE table1 SET column1 = value1 WHERE condition1;
@@ -2102,19 +2319,25 @@ class SQLDataModel:
         Adds a new column with the specified `column_name` to the `SQLDataModel`. The new column is populated with the values provided in the `value` argument. If `value` is not provided (default), the new column is populated with NULL values.
 
         Parameters:
-        - `column_name` (str): The name of the new column to be added.
-        - `value`: The value to populate the new column. If None (default), the column is populated with NULL values. If a valid column name is provided, the values of that column will be used to fill the new column.
+            - `column_name` (str): The name of the new column to be added.
+            - `value`: The value to populate the new column. If None (default), the column is populated with NULL values. If a valid column name is provided, the values of that column will be used to fill the new column.
 
         Raises:
-        - `DimensionError`: If the length of the provided values does not match the number of rows in the model.
-        - `TypeError`: If the data type of the provided values is not supported or translatable to an SQL data type.
+            - `DimensionError`: If the length of the provided values does not match the number of rows in the model.
+            - `TypeError`: If the data type of the provided values is not supported or translatable to an SQL data type.
 
         Example:
         ```python
-        sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
-        sqldm.add_column_with_values('new_column', value=42)  # add a new column with default value 42
-        sqldm.add_column_with_values('new_column', value='existing_column')  # add a new column by copying values from an existing column
-        sqldm.add_column_with_values('new_column', value=[1, 2, 3, 4, 5])  # add a new column with values provided as a list
+        import SQLDataModel
+
+        # Create model from data
+        sqldm = SQLDataModel.from_csv('data.csv')
+
+        # Add new column with default value 42
+        sqldm.add_column_with_values('new_column', value=42)
+
+        # Add new column by copying values from an existing column
+        sqldm.add_column_with_values('new_column', value='existing_column')
         ```
         """
         create_col_stmt = f"""alter table {self.sql_model} add column \"{column_name}\""""
@@ -2158,19 +2381,26 @@ class SQLDataModel:
         Applies the specified callable function (`func`) to the provided `SQLDataModel` column. The function's output is used to update the values in the column. For broader uses or more input flexibility, see related method `apply()`.
 
         Parameters:
-        - `func` (Callable): The callable function to apply to the column.
-        - `column` (str | int): The name or index of the column to which the function will be applied.
+            - `func` (Callable): The callable function to apply to the column.
+            - `column` (str | int): The name or index of the column to which the function will be applied.
 
         Raises:
-        - `TypeError`: If the provided column argument is not a valid type (str or int).
-        - `IndexError`: If the provided column index is outside the valid range of column indices.
-        - `ValueError`: If the provided column name is not valid for the current model.
+            - `TypeError`: If the provided column argument is not a valid type (str or int).
+            - `IndexError`: If the provided column index is outside the valid range of column indices.
+            - `ValueError`: If the provided column name is not valid for the current model.
 
         Example:
         ```python
-        sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
-        sqldm.apply_function_to_column(lambda x: x.upper(), column='name')  # apply the function to the 'name' column
-        sqldm.apply_function_to_column(lambda x, y: x + y, column=1)  # apply the function to the column at index 1
+        import SQLDataModel
+
+        # Create the model
+        sqldm = SQLDataModel.from_csv('data.csv')
+
+        # Apply upper() method using lambda function to column `name`
+        sqldm.apply_function_to_column(lambda x: x.upper(), column='name')
+
+        # Apply addition through lambda function to column at index 1
+        sqldm.apply_function_to_column(lambda x, y: x + y, column=1)
         ```
         """
         ### get column name from str or index ###
@@ -2227,11 +2457,16 @@ class SQLDataModel:
         Generates a function template using the current `SQLDataModel` to format function arguments for the `apply_function_to_column()` method.
 
         Returns:
-            str: A string representing the function template.
+            - `str`: A string representing the function template.
 
         Example:
         ```python
-        sqldm = SQLDataModel.from_csv('data.csv')  # create model from data
+        import SQLDataModel
+
+        # Create the model
+        sqldm = SQLDataModel.from_csv('data.csv')
+
+        # Create and print the function signature template
         stub = sqldm.generate_apply_function_stub()
         print(stub)
         ```
@@ -2265,6 +2500,8 @@ class SQLDataModel:
 
         Usage:
         ```python
+        import SQLDataModel
+
         # Example 1: Insert a row with values
         sqldm.insert_row([1, 'John Doe', 25])
 
@@ -2322,6 +2559,19 @@ class SQLDataModel:
 
         Usage:
         ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the model with sample data
+        sqldm = SQLDataModel(data,headers)
+
         # Example 1: Update a cell in the first row and second column
         sqldm.update_index_at(0, 1, 'NewValue')
 
@@ -2374,44 +2624,66 @@ class SQLDataModel:
         Generates and optionally executes an SQL statement for querying the `SQLDataModel` based on specified columns and rows.
 
         Parameters:
-        - columns (None, slice, tuple, int, str, list[str], optional): Specifies the columns to include in the SQL statement.
-        - None: All columns will be used.
-        - slice: Range of columns using a slice.
-        - tuple: Discontiguous columns using indices as ints.
-        - int: Single column using index as an int.
-        - str: Single column using column name.
-        - list[str]: List of column names.
-        - rows (None, slice, tuple, int, optional): Specifies the rows to include in the SQL statement.
-        - None: All rows will be used.
-        - slice: Range of rows using a slice.
-        - tuple: Discontiguous rows using indices as ints.
-        - int: Single row using index as an int.
-        - include_index (bool, optional): Whether to include the index column in the SQL statement. Default is True.
-        - fetch_limit (int, optional): Limits the number of rows fetched. Default is None (no limit).
-        - execute_fetch (bool, optional): If True, executes the generated SQL statement and returns a new SQLDataModel. If False, returns the generated SQL statement only.
-        - **kwargs: Additional parameters to initialize a new SQLDataModel if execute_fetch is True.
+            - columns (None, slice, tuple, int, str, list[str], optional): Specifies the columns to include in the SQL statement.
+            - None: All columns will be used.
+            - slice: Range of columns using a slice.
+            - tuple: Discontiguous columns using indices as ints.
+            - int: Single column using index as an int.
+            - str: Single column using column name.
+            - list[str]: List of column names.
+            - rows (None, slice, tuple, int, optional): Specifies the rows to include in the SQL statement.
+            - None: All rows will be used.
+            - slice: Range of rows using a slice.
+            - tuple: Discontiguous rows using indices as ints.
+            - int: Single row using index as an int.
+            - include_index (bool, optional): Whether to include the index column in the SQL statement. Default is True.
+            - fetch_limit (int, optional): Limits the number of rows fetched. Default is None (no limit).
+            - execute_fetch (bool, optional): If True, executes the generated SQL statement and returns a new SQLDataModel. If False, returns the generated SQL statement only.
+            - **kwargs: Additional parameters to initialize a new SQLDataModel if execute_fetch is True.
 
         Returns:
-        - If `execute_fetch` is False, returns the generated SQL statement as a string.
-        - If `execute_fetch` is True, executes the SQL statement, creates a new SQLDataModel, and returns it.
+            - If `execute_fetch` is False, returns the generated SQL statement as a string.
+            - If `execute_fetch` is True, executes the SQL statement, creates a new SQLDataModel, and returns it.
 
         Raises:
-        - `SQLProgrammingError`: If there is an issue with the SQL execution during fetch.
+            - `SQLProgrammingError`: If there is an issue with the SQL execution during fetch.
 
         Usage:
         ```python
-        sqldm = self._generate_sql_stmt(columns=['col_1'], rows=(1,4,9), execute_fetch=True) # executes and returns SQLDataModel
-        sql_stmt = self._generate_sql_stmt(rows=2) # generates and returns fetch stmt for row at index 2 only
-        columns = ['col_1', 'col_2'] # ordering relevant
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+        
+        # Create the model using sample data
+        sqldm = SQLDataModel(data,headers)
+
+        # Generates statement and executes, returning values as new SQLDataModel
+        sqldm = self._generate_sql_stmt(columns=['first'], rows=(0,2,3), execute_fetch=True)
+
+        # Generates only statement for data at row index 2
+        sql_stmt = self._generate_sql_stmt(rows=2)
+
+        # Ordering of columns determines ordering of data
+        columns = ['first', 'last']
+
+        # Indexing can be done by the following parameters, types:
         rows = slice(1,10) # slice for range of rows
         rows = (1,3,5,9) # tuple for discontiguous rows
         rows = 2 # int for single row
-        columns, rows = None, None # all columns and rows will be used
+        columns = ['first', 'last']
+        columns = slice(1,3)
+        columns = 3
         ```
 
         Note:
-        - Use `execute_fetch=False` to generate the SQL statement string only.
-        - Use `execute_fetch=True` to execute the generated SQL statement and return its result.
+            - Use `execute_fetch=False` to generate the SQL statement string only.
+            - Use `execute_fetch=True` to execute the generated SQL statement and return its result.
         """
         if isinstance(columns, slice): # slice of column range
             min_col = columns.start if columns.start is not None else 0
@@ -2459,20 +2731,22 @@ class SQLDataModel:
         Generates and executes a SQL update statement to modify specific rows and columns with provided values in the SQLDataModel.
 
         Parameters:
-        - `rows_to_update`: A tuple of row indices to be updated. If set to None, it defaults to all rows in the SQLDataModel.
-        - `columns_to_update`: A list of column names to be updated. If set to None, it defaults to all columns in the SQLDataModel.
-        - `values_to_update`: A list of tuples representing values to update in the specified rows and columns.
+            - `rows_to_update`: A tuple of row indices to be updated. If set to None, it defaults to all rows in the SQLDataModel.
+            - `columns_to_update`: A list of column names to be updated. If set to None, it defaults to all columns in the SQLDataModel.
+            - `values_to_update`: A list of tuples representing values to update in the specified rows and columns.
 
         Notes:
-        - To create a new column, pass a single header item in a list to the `columns_to_update` parameter.
-        - To copy an existing column, pass the corresponding data is a list of tuples to the `values_to_update` parameter.
+            - To create a new column, pass a single header item in a list to the `columns_to_update` parameter.
+            - To copy an existing column, pass the corresponding data is a list of tuples to the `values_to_update` parameter.
 
         Raises:
-        - `DimensionError` if the shape of the provided values does not match the specified rows and columns.
-        - `TypeError` if the `values_to_update` parameter is not a list or tuple.
+            - `DimensionError` if the shape of the provided values does not match the specified rows and columns.
+            - `TypeError` if the `values_to_update` parameter is not a list or tuple.
 
         Example:
         ```python
+        import SQLDataModel
+
         # Update specific rows and columns with provided values
         sqldm._update_rows_and_columns_with_values(
             rows_to_update=(1, 2, 3),
@@ -2545,17 +2819,19 @@ class SQLDataModel:
             the base and joined tables are specified by 'base_headers' and 'join_headers', respectively.
 
         Parameters:
-            - base_headers (list[str]): List of column names to be selected from the base table.
-            - join_table (str): Name of the table to be joined with the base table.
-            - join_column (str): Common column used as the join predicate between the base and joined tables.
-            - join_headers (list[str]): List of column names to be selected from the joined table.
-            - join_type (str, optional): Type of join ('left' by default). Can be 'left' or 'left outer'.
+            - `base_headers` (list[str]): List of column names to be selected from the base table.
+            - `join_table` (str): Name of the table to be joined with the base table.
+            - `join_column` (str): Common column used as the join predicate between the base and joined tables.
+            - `join_headers` (list[str]): List of column names to be selected from the joined table.
+            - `join_type` (str, optional): Type of join ('left' by default). Can be 'left' or 'left outer'.
 
         Returns:
             str: A SQL SELECT statement for joining tables.
 
         Example:
         ```python
+        import SQLDataModel
+
         # Example usage:
         sql_stmt = sqldm._generate_sql_fetch_for_joining_tables(
             base_headers=['ID', 'Name', 'Value'],
@@ -2577,20 +2853,34 @@ class SQLDataModel:
     def _get_sql_create_stmt(self) -> str:
         """
         Retrieves the SQL CREATE statement used to create the SQLDataModel database.
-
         Queries the sqlite_master table to fetch the SQL CREATE statement that was used
         to create the underlying database of the SQLDataModel.
 
         Returns:
-            str: The SQL CREATE statement for the SQLDataModel database.
+            - `str`: The SQL CREATE statement for the SQLDataModel database.
 
         Notes:
             - This method provides insight into the structure of the database schema.
 
         Example:
         ```python
+        import SQLDataModel
+        
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the sample model
+        sqldm = SQLDataModel(data,headers)
+
         # Retrieve the SQL CREATE statement for the SQLDataModel database
-        create_stmt = instance_of_SQLDataModel._get_sql_create_stmt()
+        create_stmt = sqldm._get_sql_create_stmt()
+
+        # Print the returned statement
         print(create_stmt)
         ```
         """
@@ -2612,7 +2902,7 @@ class SQLDataModel:
             - `strict_validation` (bool, optional): If True, performs strict validation for column names against the current model headers. Default is True.
 
         Returns:
-            Tuple containing validated row indices and column indices.
+            - `tuple` containing validated row indices and column indices.
 
         Raises:
             - `TypeError`: If the type of indices is invalid.
@@ -2620,22 +2910,35 @@ class SQLDataModel:
 
         Usage:
         ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the sample model
+        sqldm = SQLDataModel(data,headers)
+
         # Example 1: Validate a single row index
         validated_row_index, validated_columns = model.validate_indicies(3)
 
         # Example 2: Validate a range of row indices and a list of column names
-        validated_row_indices, validated_columns = model.validate_indicies((2, 4, 6), ['col_1', 'col_2'])
+        validated_row_indices, validated_columns = model.validate_indicies((0, 2, 3), ['first', 'last'])
 
         # Example 3: Validate a slice for row indices and a single column name
-        validated_row_indices, validated_columns = model.validate_indicies(slice(1, 5), 'col_3')
+        validated_row_indices, validated_columns = model.validate_indicies(slice(1, 2), 'col_3')
 
         # Example 4: Validate two-dimensional indexing with rows and columns
-        validated_row_indices, validated_columns = model.validate_indicies((slice(1, 5), ['col_1', 'col_2']))
+        validated_row_indices, validated_columns = model.validate_indicies((slice(0, 3), ['first', 'last']))
         ```
 
         Note:
-        - For two-dimensional indexing, the first element represents rows, and the second element represents columns.
-        - Strict validation ensures that column names are checked against the current model headers.
+            - For two-dimensional indexing, the first element represents rows, and the second element represents columns.
+            - Strict validation ensures that column names are checked against the current model headers.
         """
         ### single row index ###
         if isinstance(indicies, int):
