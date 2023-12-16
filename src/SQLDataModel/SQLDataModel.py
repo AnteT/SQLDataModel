@@ -4,8 +4,8 @@ from typing import Generator, Callable, Literal
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from exceptions import DimensionError, SQLProgrammingError
-from ANSIColor import ANSIColor
+from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
+from SQLDataModel.ANSIColor import ANSIColor
 
 try:
     import numpy as _np
@@ -60,7 +60,7 @@ def WarnFormat(warn:str) -> str:
 def create_placeholder_data(n_rows:int, n_cols:int) -> list[list]:
     return [[f"value {i}" if i%2==0 else i**2 for i in range(n_cols-6)] + [3.1415, 'bit', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), True, '', None] for _ in range(n_rows)]
 
-@dataclass # speeds up instantiation ~4% as dataclass
+@dataclass
 class SQLDataModel:
     """
     ## SQLDataModel 
@@ -78,7 +78,7 @@ class SQLDataModel:
     sdm = SQLDM.from_sql("select * from source_table", source_db_conn)
     
     # execute arbitrary SQL to transform the model
-    sdm = sdm.fetch_query("select first_name, last_name, dob, job_title from sdmmodel where job_title = "sales" ")
+    sdm = sdm.fetch_query("select first_name, last_name, dob, job_title from sdm where job_title = "sales" ")
     sdm.set_headers(["first", "last", "dob", "position"])
 
     # iterate through the data
@@ -177,8 +177,8 @@ class SQLDataModel:
                         ) from None
         else:
             headers = [f"col_{x}" for x in range(len(data[0]))]
-        self.sql_idx = "sdmidx"
-        self.sql_model = "sdmmodel"
+        self.sql_idx = "idx"
+        self.sql_model = "sdm"
         self.max_rows = max_rows
         self.min_column_width = min_column_width
         self.max_column_width = max_column_width
@@ -386,12 +386,51 @@ class SQLDataModel:
         return
 
     def _set_updated_sql_row_metadata(self):
+        """
+        Updates metadata related to the SQL data model, including minimum and maximum index values,
+        the total number of rows, and the upper bound index value, to update relevant properties after rows have been added or removed.
+
+        Attributes updated:
+            - `self.min_idx`: Minimum index value in the SQL model.
+            - `self.max_idx`: Maximum index value in the SQL model.
+            - `self.row_count`: Total number of rows in the SQL model.
+            - `self.max_out_of_bounds`: Upper bound index value, calculated as max_idx + 1.
+
+        Note: 
+            - This method assumes that the SQLDataModel instance has already established a connection to the
+              underlying SQL database (sql_db_conn) and has specified the relevant SQL index column (default idx) and
+              model table name (default sdm).
+        """        
         rowmeta = self.sql_db_conn.execute(f""" select min({self.sql_idx}), max({self.sql_idx}), count({self.sql_idx}) from "{self.sql_model}" """).fetchone()
         self.min_idx, self.max_idx, self.row_count = rowmeta
         self.max_out_of_bounds = self.max_idx + 1
 
     def _set_updated_sql_metadata(self, return_data:bool=False) -> tuple[list, dict, dict]:
-        """sets and optionally returns the header indicies, names and current sql data types from the sqlite pragma function\n\nreturn format (updated_headers, updated_header_dtypes, updated_metadata_dict)"""
+        """
+        Sets and optionally returns the header indices, names, and current SQL data types from the SQLite PRAGMA function to ensure all properties are correctly updated following modifications to the `SQLDataModel`.
+
+        Parameters:
+            - `return_data` (bool, optional): If True, returns a tuple containing updated header indices, header names,
+            and header data types. Defaults to False.
+
+        Returns:
+            - `tuple`: If `return_data` is True, returns a tuple in the format (updated_headers, updated_header_dtypes,
+            updated_metadata_dict).
+
+        Attributes updated:
+            - `self.headers`: List of header names in the SQL model.
+            - `self.column_count`: Total number of columns in the SQL model.
+            - `self.header_dtype_dict`: Dictionary mapping header names to their corresponding SQL data types.
+            - `self.headers_to_py_dtypes_dict`: Dictionary mapping header names to their corresponding Python data types.
+            - `self.headers_to_sql_dtypes_dict`: Dictionary mapping header names to their corresponding SQL data types.
+            - `self.header_idx_dtype_dict`: Dictionary mapping header indices to tuples containing header name and data type.
+
+        Note: 
+            - This method assumes that the SQLDataModel instance has already established a connection to the
+              underlying SQL database (sql_db_conn) and has specified the relevant SQL index column (default idx),
+              model table name (default sdm), and a mapping of SQL data types to Python data types
+              (static_sql_to_py_map_dict).
+        """
         meta = self.sql_db_conn.execute(f""" select cid,name,type from pragma_table_info('{self.sql_model}')""").fetchall()
         self.headers = [h[1] for h in meta if h[0] > 0] # ignore idx column
         self.column_count = len(self.headers)
@@ -408,7 +447,7 @@ class SQLDataModel:
         Retrieves the current value of the `max_rows` property, which determines the maximum rows displayed for `SQLDataModel`.
 
         Returns:
-            int: The current value of the 'max_rows' property.
+            - `int`: The current value of the 'max_rows' property.
 
         Example:
             ```python
@@ -701,7 +740,7 @@ class SQLDataModel:
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
         if rowwise:
             # column_count = len(data[next(iter(data))])
-            headers = ['sdmidx',*[f'col_{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
+            headers = ['idx',*[f'col_{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
             return cls([tuple([k,*v]) for k,v in data.items()], headers, max_rows=max_rows, min_column_width=min_column_width, max_column_width=max_column_width, *args, **kwargs)
         else:
             first_key_val = data[next(iter(data))]
@@ -1189,7 +1228,7 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
-        headers = ['sdmidx', 'first', 'last', 'age']
+        headers = ['idx', 'first', 'last', 'age']
         data = [
          (0, 'john', 'smith', 27)
         ,(1, 'sarah', 'west', 29)
@@ -1894,6 +1933,57 @@ class SQLDataModel:
         except:
             print(WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code..."))
 
+    def where(self, predicate:str) -> SQLDataModel:
+        """
+        Filters the rows of the current `SQLDataModel` object based on the specified SQL predicate and returns a
+        new `SQLDataModel` containing only the rows that satisfy the condition. Only the predicates are needed as the statement prepends the select clause as "select [current model columns] where [`predicate`]", see below for detailed examples.
+
+        Parameters:
+            - `predicate` (str): The SQL predicate used for filtering rows that follows the 'where' keyword in a normal SQL statement.
+
+        Returns:
+            - `SQLDataModel`: A new `SQLDataModel` containing rows that satisfy the specified predicate.
+
+        Raises:
+            - `TypeError`: If the provided `predicate` argument is not of type `str`.
+            - `SQLProgrammingError`: If the provided string is invalid or malformed SQL when executed against the model
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the model with sample data
+        sqldm = SQLDataModel(data,headers)
+
+        # Filter model by 'age' < 30
+        sqldm_filtered = sqldm.where('age < 30')
+
+        # Filter by first name and age
+        sqldm_johns = sqldm.where("first = 'john' and age >= 45")
+        ```
+        Notes:
+            - `predicate` can be any valid SQL, for example ordering can be acheived without any filtering by simple using the argument '(1=1) order by "age" asc'
+            - This method allows you to filter rows in the SQLDataModel based on a specified SQL predicate. The resulting
+            - SQLDataModel contains only the rows that meet the condition specified in the `predicate`. 
+            - It is essential to provide a valid SQL predicate as a string for proper filtering. 
+            - If the predicate is not a valid string, a `TypeError` is raised.
+        """        
+        if not isinstance(predicate, str):
+            raise TypeError(
+                ErrorFormat(f"TypeError: invalid predicate type '{type(predicate).__name__}' received, argument must be of type 'str'")
+            )
+        fetch_stmt = f""" select * from "{self.sql_model}" where {predicate} """
+        return self.fetch_query(fetch_stmt)
+        
+
 ##############################################################################################################
 ################################################ sql commands ################################################
 ##############################################################################################################
@@ -2034,7 +2124,7 @@ class SQLDataModel:
 
         Note:
             - The provided value must be a valid SQL table name.
-            - This alias will be reset to the default value for any new `SQLDataModel` instances: 'sdmmodel'.
+            - This alias will be reset to the default value for any new `SQLDataModel` instances: 'sdm'.
         """
         full_stmt = f"""begin transaction; alter table "{self.sql_model}" rename to {new_name}; end transaction;"""
         try:
@@ -2106,26 +2196,32 @@ class SQLDataModel:
         Returns a new `SQLDataModel` object after executing the provided SQL query using the current `SQLDataModel`.
 
         Parameters:
-            sql_query (str): The SQL query to execute.
-
-        Keyword Args:
-            **kwargs: Additional keyword arguments to pass to the `SQLDataModel` constructor.
+            - `sql_query` (str): The SQL query to execute.
+            - `**kwargs`: Additional keyword arguments to pass to the `SQLDataModel` constructor such as `max_rows` or `min_column_width` or .
 
         Returns:
-            SQLDataModel: A new `SQLDataModel` instance containing the result of the SQL query.
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the SQL query.
 
         Raises:
-            SQLProgrammingError: If the provided SQL query is invalid or malformed.
+            - `SQLProgrammingError`: If the provided SQL query is invalid or malformed.
+            - `ValueError`: If the provided SQL query was valid but returned 0 rows, which is insufficient to return a new model from
 
         Example:
         ```python
+        import SQLDataModel
+
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
-        query = 'SELECT * FROM sdmmodel WHERE Column1 > 10'
+
+        # Create the fetch query to use
+        query = 'SELECT * FROM sdm WHERE Column1 > 10'
+
+        # Fetch and save the result to a new instance
         result_model = sqldm.fetch_query(query)
         ```
 
         Important:
-            - The default table name is 'sdmmodel', or you can use `SQLDataModel.get_model_name()` to get the current model alias.
+            - The default table name is 'sdm', or you can use `SQLDataModel.get_model_name()` to get the current model alias.
             - This function is the primary method used by `SQLDataModel` methods that are expected to return a new instance.
         """
         try:
@@ -2134,7 +2230,13 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"...')
             ) from None
-        return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, **kwargs)
+        fetch_result = self.sql_c.fetchall()
+        fetch_headers = [x[0] for x in self.sql_c.description]
+        if (rows_returned := len(fetch_result)) < 1:
+            raise ValueError(
+                ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
+            )
+        return type(self)(fetch_result, headers=fetch_headers, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, **kwargs)
 
     def group_by(self, *columns:str, order_by_count:bool=True, **kwargs) -> SQLDataModel:
         """
@@ -2153,6 +2255,7 @@ class SQLDataModel:
         Raises:
             - `TypeError`: If the columns argument is not of type str, list, or tuple.
             - `ValueError`: If any specified column does not exist in the current model.
+            - `SQLProgrammingError`: If any specified columns or aggregate keywords are invalid or incompatible with the current model.
 
         Example:
         ```python
@@ -2373,6 +2476,7 @@ class SQLDataModel:
             - `TypeError`: If the provided column argument is not a valid type (str or int).
             - `IndexError`: If the provided column index is outside the valid range of column indices.
             - `ValueError`: If the provided column name is not valid for the current model.
+            - `SQLProgrammingError`: If the provided function return types or arg count is invalid or incompatible to SQL types.
 
         Example:
         ```python
@@ -2890,8 +2994,9 @@ class SQLDataModel:
             - `tuple` containing validated row indices and column indices.
 
         Raises:
-            - `TypeError`: If the type of indices is invalid.
-            - `ValueError`: If the indices are outside the current model range or if a column is not found in the current model headers.
+            - `TypeError`: If the type of indices is invalid such as a float for row index or a boolean for a column name index.
+            - `ValueError`: If the indices are outside the current model range or if a column is not found in the current model headers when indexed by column name as `str`.
+            - `IndexError`: If the column indices are outside the current column range or if a column is not found in the current model headers when indexed by `int`.
 
         Usage:
         ```python
@@ -3065,3 +3170,4 @@ class SQLDataModel:
                 )
         validated_column_indicies = col_indicies
         return (validated_row_indicies, validated_column_indicies)
+    
