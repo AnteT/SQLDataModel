@@ -3,10 +3,60 @@ from dataclasses import dataclass
 @dataclass
 class ANSIColor:
     """
-    Creates an ANSI style terminal color using provided hex color or rgb values
+    Creates an ANSI style terminal color using provided hex color or rgb values.
+
+    Attributes:
+        - `text_color` (str or tuple): Hex color code or RGB tuple.
+        - `text_bold` (bool): Whether text should be bold.
+
+    Methods:
+        - `__init__`: Initializes the ANSIColor object with the specified text color and bold setting.
+        - `__repr__`: Returns a string representation of the ANSIColor object with ANSI escape codes.
+        - `to_rgb`: Returns the text color attribute as a tuple in the format (r, g, b).
+        - `alert`: Issues an ANSI color alert using a specified preset.
+        - `wrap`: Wraps the provided text in the style of the pen.
+        - `wrap_error`: Wraps the provided text in the style of the pen, prepending a newline character.
+        - `alert_error`: Creates an ANSI color alert for error messages.
+
+    Example:
+    ```python
+    import ANSIColor
+
+    # Create a pen by specifying a color in hex or rgb:
+    green_bold = ANSIColor("#00ff00", text_bold=True)
+
+    # Create a string to use as a sample:
+    regular_str = "Hello, World!"
+
+    # Color the string using the `wrap()` method:
+    green_str = green_bold.wrap(regular_str)
+
+    # Print the string in the terminal to see the color applied:
+    print(f"original string: {regular_str}, green string: {green_str}")
+
+    # Get rgb values from existing color
+    print(green_bold.to_rgb())  # Output: (0, 255, 0)
+    ```
     """
     def __init__(self, text_color:str|tuple=None, text_bold:bool=False):
-        """creates a pen styling tool using ansi terminal colors, text_color and background_color must be in rgb or hex format, text_bold is off by default"""
+        """
+        Initializes the ANSIColor object with the specified text color and bold setting.
+
+        Parameters:
+            - `text_color` (str or tuple): Hex color code or RGB tuple (default: None, teal color used if not specified)
+            - `text_bold` (bool): Whether text should be bold (default: False)
+
+        Example:
+        ```python
+        import ANSIColor
+
+        # Initialize from hex value with normal weight
+        color = ANSIColor("#00ff00")
+
+        # Initialize from rgb value with bold weight
+        color = ANSIColor((0,255,0), text_bold=True)
+        ```
+        """
         text_color = (95, 226, 197) if text_color is None else text_color # default teal color
         self.text_bold = "\033[1m" if text_bold else ""
         if type(text_color) == str: # assume hex
@@ -26,11 +76,48 @@ class ANSIColor:
         return f"""{self._ansi_start}{type(self).__name__}({self.text_color_str}){self._ansi_stop}"""
 
     def to_rgb(self) -> tuple:
-        """returns text color attribute as tuple in format of (r, g, b)"""
+        """
+        Returns the text color attribute as a tuple in the format (r, g, b).
+
+        Returns:
+            - `tuple`: RGB tuple.
+
+        Example:
+        ```python
+        import ANSIColor
+
+        # Create the color
+        color = ANSIColor("#00ff00")
+
+        # Get the rgb values
+        print(color.to_rgb())  # Output: (0, 255, 0)
+        ```
+        """
         return self.text_color_rgb
     
     def alert(self, alerter:str, alert_type:str, bold_alert:bool=False) -> str:
-        """issues ANSI color alert on behalf of alerter using specified preset"""
+        """
+        Issues an ANSI color alert on behalf of alerter using a specified preset.
+
+        Parameters:
+            - `alerter` (str): The entity issuing the alert.
+            - `alert_type` (str): Type of alert ('S' for success, 'W' for warning, 'E' for error).
+            - `bold_alert` (bool): Whether the alert should be bold (default: False).
+
+        Returns:
+            - `str`: ANSI color alert string.
+
+        Example:
+        ```python
+        import ANSIColor
+
+        # Create the color
+        color = ANSIColor("#ff0000")
+
+        # Print an alert message
+        print(color.alert("User", "S", bold_alert=True))
+        ```        
+        """
         match alert_type:
             case 'S': # success
                 return f"""{self.text_bold}\033[38;2;108;211;118m{alerter} Success:\033[0m\033[39m\033[49m""" # changed to 108;211;118
@@ -42,10 +129,57 @@ class ANSIColor:
                 return None
 
     def wrap(self, text:str) -> str:
-        """wraps the provided text in the style of the pen"""
+        """
+        Wraps the provided text in the style of the pen.
+
+        Parameters:
+            - `text` (str): Text to be wrapped.
+
+        Returns:
+            - `str`: Wrapped text with ANSI escape codes.
+
+        Example:
+        ```python
+        import ANSIColor
+
+        # Create the color
+        blue_color = ANSIColor("#0000ff")
+
+        # Create a sample string
+        message = "This string is currently unstyled"
+
+        # Wrap the string to change its styling whenever its printed
+        blue_message = blue_color.wrap(message)
+
+        # Print the styled message
+        print(blue_message)
+
+        # Or style string or string object directly in the print statement
+        print(blue_color.wrap("I'm going to turn blue!"))
+        
+        ```
+        """
         return f"""{self._ansi_start}{text}{self._ansi_stop}"""
     def wrap_error(self, text:str) -> str:
-        """wraps the provided text in the style of the pen, prepending a newline character to print at beginning of stdout"""
+        """
+        Wraps the provided text in the style of the pen, prepending a newline character.
+
+        Parameters:
+            - `text` (str): Text to be wrapped.
+
+        Returns:
+            - `str`: Wrapped text with ANSI escape codes and a prepended newline character.
+        """
         return f"""\r{self._ansi_start}{text}{self._ansi_stop}"""
     def alert_error(self, text:str) -> str:
+        """
+        Creates an ANSI color alert for error messages.
+
+        Parameters:
+            - `text` (str): Error message.
+
+        Returns:
+            - `str`: ANSI color alert string for error messages.
+        """        
         return f"""\r\033[1m\033[38;2;247;141;160m{text}\033[0m\033[39m\033[49m"""
+    

@@ -24,10 +24,10 @@ def ErrorFormat(error:str) -> str:
     Formats an error message with ANSI color coding.
 
     Parameters:
-    - `error`: The error message to be formatted.
+        - `error`: The error message to be formatted.
 
     Returns:
-    - A string with ANSI color coding, highlighting the error type in bold red.
+        - A string with ANSI color coding, highlighting the error type in bold red.
 
     Example:
     ```python
@@ -43,10 +43,10 @@ def WarnFormat(warn:str) -> str:
     Formats a warning message with ANSI color coding.
 
     Parameters:
-    - `warn`: The warning message to be formatted.
+        - `warn`: The warning message to be formatted.
 
     Returns:
-    - A string with ANSI color coding, highlighting the class name in bold yellow.
+        - A string with ANSI color coding, highlighting the class name in bold yellow.
 
     Example:
     ```python
@@ -235,7 +235,7 @@ class SQLDataModel:
             - `IndexError`: If the provided column index is outside the current column range.
 
         Returns:
-            - `str`: The name of the column at the specified index.
+            - str: The name of the column at the specified index.
 
         Note:
             - The method allows retrieving the name of a column identified by its index in the SQLDataModel.
@@ -243,23 +243,8 @@ class SQLDataModel:
 
         Usage:
         ```python
-        import SQLDataModel
-
-        headers = ['idx', 'first', 'last', 'age']
-        data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
-        ]
-
-        # Create the sample model
-        sqldm = SQLDataModel(data,headers)
-
         # Example: Get the name of the column at index 1
         column_name = sqldm.get_header_at_index(1)
-
-        # Outputs column: 'first'
         print(column_name)
         ```
         """
@@ -3080,11 +3065,3 @@ class SQLDataModel:
                 )
         validated_column_indicies = col_indicies
         return (validated_row_indicies, validated_column_indicies)
-
-########################################## run locally ##########################################
-if __name__ == '__main__':
-    cols = ['string', 'integer', 'float', 'bit', 'datetime', 'bool', 'empty', 'null']
-    data = create_placeholder_data(5,8)
-    sdm = SQLDataModel(data,cols)
-    sdm.set_display_color('#A6D7E8')
-    print(sdm)
