@@ -86,7 +86,6 @@ def create_placeholder_data(n_rows:int, n_cols:int) -> list[list]:
     return [[f"value {i}" if i%2==0 else i**2 for i in range(n_cols-6)] + [3.1415, 'bit', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), True, '', None] for _ in range(n_rows)]
 
 class SQLDataModel:
-    debug:bool=False
     """
     ## SQLDataModel 
     Primary class for the package of the same name. Its meant to provide a fast & light-weight alternative to the common pandas, numpy and sqlalchemy setup for moving data in a source/destination agnostic manner. It is not an ORM, any modifications outside of basic joins, group bys and table alteration requires knowledge of SQL. The primary use-case envisaged by the package is one where a table needs to be ETL'd from location A to destination B with arbitrary modifications made if needed:
@@ -133,7 +132,7 @@ class SQLDataModel:
 
     ### Pretty Printing
     SQLDataModel also pretty prints your table in any color you specify, use `SQLDataModel.set_display_color(t_color)` and provide either a hex value or a tuple of rgb and print the table, example output:
-    ```python
+    ```shell
     ┌───┬─────────┬────────┬─────────┬────────┬────────┬─────────────────────┐
     │   │ string  │   ints │ value_2 │ floats │   bits │ datetime            │
     ├───┼─────────┼────────┼─────────┼────────┼────────┼─────────────────────┤
@@ -151,9 +150,11 @@ class SQLDataModel:
     ### Notes
     use `SQLDM.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','max_out_of_bounds','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','headers_to_py_dtypes_dict','headers_to_sql_dtypes_dict','headers_with_sql_dtypes_str','sql_c','sql_db_conn','sql_fetch_all_no_idx','sql_fetch_all_with_idx','header_dtype_dict','header_idx_dtype_dict')
+    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','max_out_of_bounds','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','headers_to_py_dtypes_dict','headers_to_sql_dtypes_dict','headers_with_sql_dtypes_str','sql_c','sql_db_conn','sql_fetch_all_no_idx','sql_fetch_all_with_idx','header_dtype_dict','header_idx_dtype_dict','display_float_precision')
 
-    def __init__(self, data:list[list], headers:list[str]=None, max_rows:int=1_000, min_column_width:int=6, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True):
+    debug:bool=False
+
+    def __init__(self, data:list[list], headers:list[str]=None, max_rows:int=1_000, min_column_width:int=6, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
         if not isinstance(data, list|tuple):
             raise TypeError(
                 ErrorFormat(f"TypeError: type mismatch, \"{type(data).__name__}\" is not a valid type for data, which must be of type list or tuple...")
@@ -210,6 +211,7 @@ class SQLDataModel:
         self.column_alignment = column_alignment
         self.display_color = display_color
         self.display_index = display_index
+        self.display_float_precision = display_float_precision
         self.row_count = len(data)
         had_idx = True if headers[0] == self.sql_idx else False
         self.min_idx = min([row[0] for row in data]) if had_idx else 0
@@ -515,9 +517,16 @@ class SQLDataModel:
               (static_sql_to_py_map_dict).
         """
         meta = self.sql_db_conn.execute(f""" select cid,name,type from pragma_table_info('{self.sql_model}')""").fetchall()
-        self.headers = [h[1] for h in meta if h[0] > 0] # ignore idx column
+        
+        ### retain ordering from prior columns ###
+        revised_headers = [h[1] for h in meta if h[0] > 0]
+        self.headers = list(dict.fromkeys([orig_col for orig_col in self.headers if orig_col in revised_headers] + revised_headers))
         self.column_count = len(self.headers)
-        self.header_dtype_dict = {d[1]: d[2] for d in meta}
+        
+        ### retain ordering for dtype dict using ordered headers ###
+        revised_dtypes = {d[1]: d[2] for d in meta}
+        self.header_dtype_dict = {col:revised_dtypes[col] for col in self.headers}
+        
         self.headers_to_py_dtypes_dict = {k:self.static_sql_to_py_map_dict[v] if v in self.static_sql_to_py_map_dict.keys() else "str" for (k,v) in self.header_dtype_dict.items() if k != self.sql_idx}
         self.headers_to_sql_dtypes_dict = {k:"TEXT" if v=='str' else "INTEGER" if v=='int' else "REAL" if v=='float' else "TIMESTAMP" if v=='datetime' else "NULL" if v=='NoneType' else "BLOB" for (k,v) in self.headers_to_py_dtypes_dict.items()}
         self.header_idx_dtype_dict = {(m[0]-1): (m[1], m[2]) for m in meta if m[1] != self.sql_idx}
@@ -768,6 +777,88 @@ class SQLDataModel:
         """
         return (self.row_count,self.column_count)
     
+    def get_display_float_precision(self) -> int:
+        """
+        Retrieves the current float display precision used exclusively for representing the values of real numbers
+        in the `repr` method for the `SQLDataModel`. Default value is set to 4 decimal places of precision.
+
+        Returns:
+            - `int`: The current float display precision.
+
+        Note:
+            - The float display precision is the number of decimal places to include when displaying real numbers
+            in the string representation of the `SQLDataModel`.
+            - This value is utilized in the `repr` method to control the precision of real number values.
+            - The method does not affect the actual value of float dtypes in the underlying `SQLDataModel`
+        """
+        return self.display_float_precision
+    
+    def set_display_float_precision(self, float_precision:int) -> None:
+        """
+        Sets the current float display precision to the specified value for use in the `repr` method of the `SQLDataModel`
+        when representing float data types. Note that this precision limit is overridden by the `max_column_width` value
+        if the precision limit exceeds the specified maximum width.
+
+        Parameters:
+            - `float_precision` (int): The desired float display precision to be used for real number values.
+
+        Raises:
+            - `TypeError`: If the `float_precision` argument is not of type 'int'.
+            - `ValueError`: If the `float_precision` argument is a negative value, as it must be a valid f-string precision identifier.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age', 'service_time']
+        data = [
+            (0, 'john', 'smith', 27, 1.22)
+            ,(1, 'sarah', 'west', 0.7)
+            ,(2, 'mike', 'harlin', 3)
+            ,(3, 'pat', 'douglas', 11.5)
+        ]
+
+        # Create the model with sample data
+        sdm = SQLDataModel(data,headers)
+
+        # Example: Set the float display precision to 2
+        sdm.set_display_float_precision(2)
+
+        # View model
+        print(sdm)
+
+        # Outputs:
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┬──────────────┐
+        │   │ first  │ last    │    age │ service_time │
+        ├───┼────────┼─────────┼────────┼──────────────┤
+        │ 0 │ john   │ smith   │     27 │         2.10 │
+        │ 1 │ sarah  │ west    │     29 │         0.80 │
+        │ 2 │ mike   │ harlin  │     36 │         1.30 │
+        │ 3 │ pat    │ douglas │     42 │         7.02 │
+        └───┴────────┴─────────┴────────┴──────────────┘
+        ```
+
+        ```python
+        # Get the updated float display precision
+        updated_precision = sdm.get_display_float_precision()
+
+        # Outputs 2
+        print(updated_precision)
+        ```
+
+        """
+        if not isinstance(float_precision, int):
+            raise TypeError(
+                ErrorFormat(f"TypeError: invalid type '{type(float_precision).__name__}' received for `float_precision` argument, expected type 'int'")
+            )
+        if float_precision < 0:
+            raise ValueError(
+                ErrorFormat(f"ValueError: invalid value '{float_precision}' received for `float_precision` argument, value must be valid f-string precision identifier")
+            )
+        self.display_float_precision = float_precision
+        
 #############################################################################################################
 ############################################### class methods ###############################################
 #############################################################################################################
@@ -1912,8 +2003,7 @@ class SQLDataModel:
         display_headers = self.headers
         include_idx = self.display_index
         fetch_stmt = self._generate_sql_stmt(include_index=include_idx)
-        self.sql_c.execute(f"{fetch_stmt} limit {self.max_rows}")
-        table_data = self.sql_c.fetchall()
+        table_data = self.sql_db_conn.execute(f"{fetch_stmt} limit {self.max_rows}").fetchall()
         index_width = len(str(max(row[0] for row in table_data))) + 1 if include_idx else 2
         dyn_idx_include = 1 if include_idx else 0
         table_body = "" # big things can have small beginnings...
@@ -1922,7 +2012,8 @@ class SQLDataModel:
         right_border_width = 3
         max_rows_to_check = display_rows if display_rows < 15 else 15 # updated as exception to 15
         col_length_dict = {col:len(str(x)) for col,x in enumerate(display_headers)} # for first row populate all col lengths
-        col_alignment_dict = {i:'<' if v == 'str' else '>' if v != 'float' else '<' for i,v in enumerate(self.headers_to_py_dtypes_dict.values())}
+        col_alignment_dict = {i:'<' if v == 'str' else '>' for i,v in enumerate(self.headers_to_py_dtypes_dict.values())}
+        col_dtype_dict = {i:v for i,v in enumerate(self.headers_to_py_dtypes_dict.values())}
         for row in range(max_rows_to_check): # each row is indexed in row col length dict and each one will contain its own dict of col lengths
             current_row = {col:len(str(x)) for col,x in enumerate(table_data[row][dyn_idx_include:])} # start at one to enusre index is skipped and column lengths correctly counted
             for col_i in range(self.column_count):
@@ -1973,10 +2064,19 @@ class SQLDataModel:
         table_body += header_sub_bar + table_newline
         for i,row in enumerate(table_data):
             if i < display_rows:
+                index, record = row[0], [x for x in row]
                 if include_idx:
-                    table_body += table_row_fmt.format(row[0],*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else str(cell) for k,cell in enumerate(row[1:max_cols+1])]) # start at 1 to avoid index col
+                    for i_at, dtype_at in col_dtype_dict.items():
+                        if dtype_at == 'float':
+                            record[i_at+1] = f"{record[i_at+1]:.{self.display_float_precision}f}"
+                    row = record
+                    table_body += table_row_fmt.format(index,*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else cell for k,cell in enumerate(record[1:max_cols+1])]) # start at 1 to avoid index col
                 else:
-                    table_body += table_row_fmt.format(*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else str(cell) for k,cell in enumerate(row)]) # start at 1 to avoid index col
+                    for i_at, dtype_at in col_dtype_dict.items():
+                        if dtype_at == 'float':
+                            record[i_at] = f"{record[i_at]:.{self.display_float_precision}f}"
+                    row = record                    
+                    table_body += table_row_fmt.format(*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else cell for k,cell in enumerate(record)]) # start at 1 to avoid index col
                 table_body +=  table_dynamic_newline
         table_bottom_bar = table_row_fmt.replace(" │ ","─┴─").replace("│{","└{").replace(" │","─┘") if include_idx else table_row_fmt.replace(" │ ","─┴─").replace("│ {","└─{",1).replace(" │","─┘")
         table_bottom_bar = table_bottom_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else table_bottom_bar.format(*['─' * length for length in col_length_dict.values()])
@@ -2554,7 +2654,7 @@ class SQLDataModel:
             raise ValueError(
                 ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
             )
-        return type(self)(fetch_result, headers=fetch_headers, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index)
+        return type(self)(fetch_result, headers=fetch_headers, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
     def group_by(self, *columns:str, order_by_count:bool=True) -> SQLDataModel:
         """
@@ -2609,7 +2709,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"...')
             ) from None
-        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index)
+        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
     
     def join_model(self, model:SQLDataModel, left:bool=True, on_column:str=None) -> SQLDataModel:
         """
@@ -2655,7 +2755,7 @@ class SQLDataModel:
         join_cols = [x for x in join_cols if x != on_column] # removing shared join column
         sql_join_stmt = self._generate_sql_fetch_for_joining_tables(self.headers, join_tablename, join_column=on_column, join_headers=join_cols, join_type='left' if left else 'right')
         self.sql_c.execute(sql_join_stmt)
-        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index)
+        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
     def execute_query(self, sql_query:str) -> None:
         """
@@ -3135,7 +3235,7 @@ class SQLDataModel:
                 raise SQLProgrammingError(
                     ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, unable to execute provided SQL query with error "{e}"...')
                 ) from None
-            return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index)
+            return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
     def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
         """
