@@ -1,5 +1,5 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, warnings, re
+import sqlite3, os, csv, sys, datetime, pickle, warnings, re, shutil
 from typing import Generator, Callable, Literal, Iterator
 from collections import namedtuple
 from pathlib import Path
@@ -24,63 +24,6 @@ try:
     _has_pd = True
 except ModuleNotFoundError:
     _has_pd = False
-
-def ErrorFormat(error:str) -> str:
-    """
-    Formats an error message with ANSI color coding.
-
-    Parameters:
-        - `error`: The error message to be formatted.
-
-    Returns:
-        - `str`: The modified string with ANSI color coding, highlighting the error type in bold red.
-
-    Example:
-    ```python
-    formatted_error = ErrorFormat("ValueError: Invalid value provided.")
-    print(formatted_error)
-    ```
-    """
-    error_type, error_description = error.split(':',1)
-    return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""
-
-def WarnFormat(warn:str) -> str:
-    """
-    Formats a warning message with ANSI color coding.
-
-    Parameters:
-        - `warn`: The warning message to be formatted.
-
-    Returns:
-        - `str`: The modified string with ANSI color coding, highlighting the class name in bold yellow.
-
-    Example:
-    ```python
-    formatted_warning = WarnFormat("DeprecationWarning: This method is deprecated.")
-    print(formatted_warning)
-    ```
-    """
-    warned_by, warning_description = warn.split(':',1)
-    return f"""\r\033[1m\033[38;2;246;221;109m{warned_by}:\033[0m\033[39m\033[49m{warning_description}"""
-
-def SuccessFormat(success:str) -> str:
-    """
-    Formats a success message with ANSI color coding.
-
-    Parameters:
-        - `success`: The success message to be formatted.
-
-    Returns:
-        - `str`: The modified string with ANSI color coding, highlighting the success source in bold green.
-
-    Example:
-    ```python
-    formatted_success = SuccessFormat("FileCreated: The operation was successful with new file created.")
-    print(formatted_success)
-    ```
-    """ 
-    success_by, success_description = success.split(':',1)
-    return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
 
 def create_placeholder_data(n_rows:int, n_cols:int) -> list[list]:
     return [[f"value {i}" if i%2==0 else i**2 for i in range(n_cols-6)] + [3.1415, 'bit', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), True, '', None] for _ in range(n_rows)]
@@ -150,56 +93,56 @@ class SQLDataModel:
     ### Notes
     use `SQLDM.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','max_out_of_bounds','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','headers_to_py_dtypes_dict','headers_to_sql_dtypes_dict','headers_with_sql_dtypes_str','sql_c','sql_db_conn','sql_fetch_all_no_idx','sql_fetch_all_with_idx','header_dtype_dict','header_idx_dtype_dict','display_float_precision')
+    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','max_out_of_bounds','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','headers_to_py_dtypes_dict','headers_to_sql_dtypes_dict','headers_with_sql_dtypes_str','sql_c','sql_db_conn','header_dtype_dict','header_idx_dtype_dict','display_float_precision')
 
     debug:bool=False
 
     def __init__(self, data:list[list], headers:list[str]=None, max_rows:int=1_000, min_column_width:int=6, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
         if not isinstance(data, list|tuple):
             raise TypeError(
-                ErrorFormat(f"TypeError: type mismatch, \"{type(data).__name__}\" is not a valid type for data, which must be of type list or tuple...")
+                SQLDataModel.ErrorFormat(f"TypeError: type mismatch, \"{type(data).__name__}\" is not a valid type for data, which must be of type list or tuple...")
                 )
         if len(data) < 1:
             raise ValueError(
-                ErrorFormat(f"ValueError: data not found, data of length \"{len(data)}\" is insufficient to construct a valid model, additional rows of data required...")
+                SQLDataModel.ErrorFormat(f"ValueError: data not found, data of length \"{len(data)}\" is insufficient to construct a valid model, additional rows of data required...")
                 )
         try:
             _ = data[0]
         except Exception as e:
             raise IndexError(
-                ErrorFormat(f"IndexError: data index error, data index provided does not exist for length \"{len(data)}\" due to \"{e}\"...")
+                SQLDataModel.ErrorFormat(f"IndexError: data index error, data index provided does not exist for length \"{len(data)}\" due to \"{e}\"...")
                 ) from None
         if not isinstance(data[0], list|tuple):
             if type(data[0]).__module__ != 'pyodbc': # check for pyodbc.Row which is acceptable
                 raise TypeError(
-                    ErrorFormat(f"TypeError: type mismatch, \"{type(data[0]).__name__}\" is not a valid type for data rows, which must be of type list or tuple...")
+                    SQLDataModel.ErrorFormat(f"TypeError: type mismatch, \"{type(data[0]).__name__}\" is not a valid type for data rows, which must be of type list or tuple...")
                     )
         if len(data[0]) < 1:
             raise ValueError(
-                ErrorFormat(f"ValueError: data rows not found, data rows of length \"{len(data[0])}\" are insufficient to construct a valid model, at least one row is required...")
+                SQLDataModel.ErrorFormat(f"ValueError: data rows not found, data rows of length \"{len(data[0])}\" are insufficient to construct a valid model, at least one row is required...")
                 )
         if headers is not None:
             if not isinstance(headers, list|tuple):
                 raise TypeError(
-                    ErrorFormat(f"TypeError: invalid header types, \"{type(headers).__name__}\" is not a valid type for headers, please provide a tuple or list type...")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid header types, \"{type(headers).__name__}\" is not a valid type for headers, please provide a tuple or list type...")
                     )
             if len(headers) != len(data[0]):
                 raise DimensionError(
-                    ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length \"{len(headers)} != {len(data[0])}\", the implied column count for data provided...")
+                    SQLDataModel.ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length \"{len(headers)} != {len(data[0])}\", the implied column count for data provided...")
                     )                
             if isinstance(headers,tuple):
                 try:
                     headers = list(headers)
                 except:
                     raise TypeError(
-                        ErrorFormat(f"TypeError: failed header conversion, unable to convert provided headers tuple to list type, please provide headers as a list type...")
+                        SQLDataModel.ErrorFormat(f"TypeError: failed header conversion, unable to convert provided headers tuple to list type, please provide headers as a list type...")
                         ) from None
             if not all(isinstance(x, str) for x in headers):
                 try:
                     headers = [str(x) for x in headers]
                 except:
                     raise TypeError(
-                        ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string...")
+                        SQLDataModel.ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string...")
                         ) from None
         else:
             headers = [f"col_{x}" for x in range(len(data[0]))]
@@ -233,8 +176,6 @@ class SQLDataModel:
         self.sql_c.execute(sql_create_stmt)
         self.sql_db_conn.commit()
         self._set_updated_sql_metadata()
-        self.sql_fetch_all_no_idx = self._generate_sql_stmt(include_index=False)
-        self.sql_fetch_all_with_idx = self._generate_sql_stmt(include_index=True)
         if not had_idx:
             first_row_insert_stmt = f"""insert into "{self.sql_model}" ({self.sql_idx},{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' for _ in self.headers])})"""
             self.sql_c.execute(first_row_insert_stmt, (0,*data[0]))
@@ -246,9 +187,119 @@ class SQLDataModel:
             self.sql_db_conn.commit()
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
                 ) from None
 
+################################################################################################################
+################################################ static methods ################################################
+################################################################################################################
+
+    @staticmethod
+    def ErrorFormat(error:str) -> str:
+        """
+        Formats an error message with ANSI color coding.
+
+        Parameters:
+            - `error`: The error message to be formatted.
+
+        Returns:
+            - `str`: The modified string with ANSI color coding, highlighting the error type in bold red.
+
+        Example:
+        ```python
+        formatted_error = SQLDataModel.ErrorFormat("ValueError: Invalid value provided.")
+        print(formatted_error)
+        ```
+        """
+        error_type, error_description = error.split(':',1)
+        return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""
+
+    @staticmethod
+    def WarnFormat(warn:str) -> str:
+        """
+        Formats a warning message with ANSI color coding.
+
+        Parameters:
+            - `warn`: The warning message to be formatted.
+
+        Returns:
+            - `str`: The modified string with ANSI color coding, highlighting the class name in bold yellow.
+
+        Example:
+        ```python
+        formatted_warning = WarnFormat("DeprecationWarning: This method is deprecated.")
+        print(formatted_warning)
+        ```
+        """
+        warned_by, warning_description = warn.split(':',1)
+        return f"""\r\033[1m\033[38;2;246;221;109m{warned_by}:\033[0m\033[39m\033[49m{warning_description}"""
+
+    @staticmethod
+    def SuccessFormat(success:str) -> str:
+        """
+        Formats a success message with ANSI color coding.
+
+        Parameters:
+            - `success`: The success message to be formatted.
+
+        Returns:
+            - `str`: The modified string with ANSI color coding, highlighting the success source in bold green.
+
+        Example:
+        ```python
+        formatted_success = SuccessFormat("FileCreated: The operation was successful with new file created.")
+        print(formatted_success)
+        ```
+        """ 
+        success_by, success_description = success.split(':',1)
+        return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
+
+    @staticmethod
+    def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None) -> str:
+        """
+        Formats SQLite SELECT clauses based on column parameters to provide preformatted fetches, providing most of the formatting for `repr` output.
+
+        Parameters:
+            - `column` (str): The name of the column.
+            - `dtype` (str): The data type of the column ('float', 'int', 'index', or other).
+            - `max_pad_width` (int): The maximum width to pad the output.
+            - `float_precision` (int, optional): The precision for floating-point numbers (default is 4).
+            - `alignment` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
+
+        Returns:
+            `str`: The formatted SELECT clause for SQLite.
+
+        Notes:
+            - This function generates SQLite SELECT clauses for single column only.
+            - The output preformats SELECT result to fit `repr` method for tabular output.
+            - The return `str` is not valid SQL by itself, representing only the single column select portion.
+        """
+        if alignment is None:
+            if dtype == 'float':
+                select_item_fmt = f"""printf('%.{max_pad_width}s', printf('% {max_pad_width}.{float_precision}f',"{column}")) """ # does the most precision then treats as string to trim
+            elif dtype == 'int':
+                select_item_fmt = f"""printf('% {max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
+            elif dtype == 'index':
+                select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
+            else:
+                select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
+            return select_item_fmt
+        else:
+            if alignment in ("<", ">"):
+                numeric_discriminator = """ """ if dtype in ("int","float") else """"""
+                float_int_discriminator = f""".{float_precision}f""" if dtype == 'float' else """d""" if dtype == 'int' else """s"""
+                printf_alignment = "-" if alignment == "<" else ""
+                select_item_fmt = f"""CASE WHEN length(printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',"{column}")) <= {max_pad_width} THEN
+                printf('%.{max_pad_width}s', printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',"{column}")) 
+                ELSE substr(printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',"{column}"),1,({max_pad_width})-2)||'⠤⠄'END """
+            else:
+                float_int_discriminator = f"""printf('% .{float_precision}f',"{column}")""" if dtype == 'float' else f"""printf('% d',"{column}")""" if dtype == 'int' else f"\"{column}\""
+                select_item_fmt = f"""CASE WHEN length({float_int_discriminator}) <= {max_pad_width} THEN
+                printf("%-{max_pad_width}.{max_pad_width}s", /* change minus operator before max_pad_width to favor right alignment when pad width is odd number, right now set to favor left side */
+                printf("%*s%s%*s", (({max_pad_width}-length({float_int_discriminator}))/2), "", {float_int_discriminator}, (({max_pad_width}-length({float_int_discriminator}))/2), ""))
+                ELSE substr({float_int_discriminator},1,({max_pad_width})-2)||'⠤⠄' END """                 
+        return select_item_fmt 
+    
     def get_header_at_index(self, index:int) -> str:
         """
         Retrieves the name of the column in the `SQLDataModel` at the specified index.
@@ -292,10 +343,83 @@ class SQLDataModel:
             index = self.column_count + (index)
         if (index < 0 or index >= self.column_count):
             raise IndexError(
-                ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
+                SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
             )        
         return self.headers[index]
     
+    def rename_column(self, column:int|str, new_column_name:str) -> None:
+        """
+        Renames a column in the `SQLDataModel` at the specified index or using the old column name with the provided value in `new_column_name`.
+
+        Parameters:
+            - `column` (int|str): The index or current str value of the column to be renamed.
+            - `new_column_name` (str): The new name as a str value for the specified column.
+
+        Raises:
+            - `TypeError`: If the `column` or `new_column_name` parameters are invalid types.
+            - `IndexError`: If the provided column index is outside the current column range.
+            - `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
+
+        Note:
+            - The method allows renaming a column identified by its index in the SQLDataModel.
+            - Handles negative indices by adjusting them relative to the end of the column range.
+            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the model with sample data
+        sqldm = SQLDataModel(data,headers)
+
+        # Example: Rename the column at index 1 to 'first_name'
+        sqldm.rename_column(1, 'first_name')
+
+        # Get current values
+        new_headers = sqldm.get_headers()
+
+        # Outputs ['first_name', 'last', 'age']
+        print(new_headers)
+        ```
+        """
+        if not isinstance(column,int|str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column type '{type(column).__name__}', `column` parameter must be of type 'int' or 'str'")
+            )
+        if isinstance(column,int):
+            if column < 0:
+                column = self.column_count + (column)
+            if (column < 0 or column >= self.column_count):
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
+                )
+            column = self.headers[column]
+        else:
+            if column not in self.headers:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', use `.get_headers()` to view current valid column arguments")
+                )
+        rename_stmts = f"""alter table "{self.sql_model}" rename column "{column}" to "{new_column_name}" """
+        full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
+        try:
+            self.sql_c.executescript(full_stmt)
+            self.sql_db_conn.commit()
+        except Exception as e:
+            self.sql_db_conn.rollback()
+            raise SQLProgrammingError(
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
+            ) from None
+        self.headers[self.headers.index(column)] = new_column_name # replace old column with new column in same position as original column
+        self._set_updated_sql_metadata()
+
     def set_header_at_index(self, index:int, new_value:str) -> None:
         """
         Renames a column in the `SQLDataModel` at the specified index with the provided new value.
@@ -342,7 +466,7 @@ class SQLDataModel:
             index = self.column_count + (index)
         if (index < 0 or index >= self.column_count):
             raise IndexError(
-                ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
+                SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
             )
         rename_stmts = f"""alter table "{self.sql_model}" rename column "{self.headers[index]}" to "{new_value}" """
         full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
@@ -352,8 +476,9 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
+        self.headers[index] = new_value # replace old column at specified index with new value to retain original column ordering
         self._set_updated_sql_metadata()
 
     def get_headers(self) -> list[str]:
@@ -408,15 +533,15 @@ class SQLDataModel:
         """
         if not isinstance(new_headers,list|tuple):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid header types, type \"{type(new_headers).__name__}\" is not a valid type for headers, please provide a tuple or list type...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid header types, type \"{type(new_headers).__name__}\" is not a valid type for headers, please provide a tuple or list type...")
                 )
         if len(new_headers) != self.column_count:
             raise DimensionError(
-                ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length \"{len(new_headers)} != {self.column_count}\" column count, please provide correct dimensions...")
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length \"{len(new_headers)} != {self.column_count}\" column count, please provide correct dimensions...")
                 )
         if not isinstance(new_headers[0], str|int|float):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid header values, type \"{type(new_headers[0]).__name__}\" is not a valid type for header values, please provide a string type...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid header values, type \"{type(new_headers[0]).__name__}\" is not a valid type for header values, please provide a string type...")
                 )
         rename_stmts = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
         full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
@@ -426,11 +551,11 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
         self._set_updated_sql_metadata()
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: Successfully renamed all model columns'))
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed all model columns'))
 
     def normalize_headers(self, apply_function:Callable=None) -> None:
         """
@@ -582,11 +707,11 @@ class SQLDataModel:
         # if type(rows) != int:
         if not isinstance(rows, int):
             raise TypeError(
-                ErrorFormat(f'TypeError: invalid argument type "{type(rows).__name__}", please provide an integer value to set the maximum rows attribute...')
+                SQLDataModel.ErrorFormat(f'TypeError: invalid argument type "{type(rows).__name__}", please provide an integer value to set the maximum rows attribute...')
                 )
         if rows <= 0:
             raise IndexError(
-                ErrorFormat(f'IndexError: invalid value "{rows}", please provide an integer value >= 1 to set the maximum rows attribute...')
+                SQLDataModel.ErrorFormat(f'IndexError: invalid value "{rows}", please provide an integer value >= 1 to set the maximum rows attribute...')
                 )
         self.max_rows = rows
 
@@ -709,7 +834,7 @@ class SQLDataModel:
             return
         if (not isinstance(alignment, str)) or (alignment not in ('<', '^', '>')):
             raise TypeError(
-                ErrorFormat(f'TypeError: invalid argument "{alignment}", please provide a valid f-string alignment formatter or set `alignment=None` to use default behaviour...')
+                SQLDataModel.ErrorFormat(f'TypeError: invalid argument "{alignment}", please provide a valid f-string alignment formatter or set `alignment=None` to use default behaviour...')
                 )
         self.column_alignment = alignment
         return
@@ -755,7 +880,7 @@ class SQLDataModel:
         """
         if not isinstance(display_index, bool):
             raise TypeError(
-                ErrorFormat(f'TypeError: invalid argument "{display_index}", please provide a valid boolean (True | False) value to the `display_index` argument...')
+                SQLDataModel.ErrorFormat(f'TypeError: invalid argument "{display_index}", please provide a valid boolean (True | False) value to the `display_index` argument...')
                 )
         self.display_index = display_index
     
@@ -851,11 +976,11 @@ class SQLDataModel:
         """
         if not isinstance(float_precision, int):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid type '{type(float_precision).__name__}' received for `float_precision` argument, expected type 'int'")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(float_precision).__name__}' received for `float_precision` argument, expected type 'int'")
             )
         if float_precision < 0:
             raise ValueError(
-                ErrorFormat(f"ValueError: invalid value '{float_precision}' received for `float_precision` argument, value must be valid f-string precision identifier")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{float_precision}' received for `float_precision` argument, value must be valid f-string precision identifier")
             )
         self.display_float_precision = float_precision
         
@@ -906,16 +1031,16 @@ class SQLDataModel:
         """
         if not isinstance(n_rows, int):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid type '{type(n_rows).__name__}', argument of type 'int' expected for `n_rows` parameter")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_rows).__name__}', argument of type 'int' expected for `n_rows` parameter")
             )
         if not isinstance(n_cols, int):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid type '{type(n_cols).__name__}', argument of type 'int' expected for `n_cols` parameter")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_cols).__name__}', argument of type 'int' expected for `n_cols` parameter")
             )
         if dtype is not None:
             if dtype not in ('bytes','datetime','float','int','str'):
                 raise ValueError(
-                    ErrorFormat(f"ValueError: invalid argument '{dtype}', `dtype` must be one of 'bytes','datetime','float','int','str'")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid argument '{dtype}', `dtype` must be one of 'bytes','datetime','float','int','str'")
                 )
             else:
                 if dtype == 'bytes':
@@ -1023,7 +1148,7 @@ class SQLDataModel:
                 data = [tuple([data[j][row] for j in range(column_count)]) for row in range(row_count)]
             else:
                 raise TypeError(
-                    ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
                 )
             return cls(data, headers, **kwargs)
         
@@ -1051,7 +1176,7 @@ class SQLDataModel:
         """
         if not _has_np:
             raise ModuleNotFoundError(
-                ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use the `from_numpy()` method""")
+                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use the `from_numpy()` method""")
                 )
         return cls(data=array.tolist(),headers=headers, **kwargs)
 
@@ -1080,7 +1205,7 @@ class SQLDataModel:
         """
         if not _has_pd:
             raise ModuleNotFoundError(
-                ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use the `from_pandas()` method""")
+                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use the `from_pandas()` method""")
                 )
         data = [x[1:] for x in df.itertuples()]
         headers = df.columns.tolist() if headers is None else headers
@@ -1109,11 +1234,11 @@ class SQLDataModel:
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
         if (filename is not None) and (len(filename.split(".")) <= 1):
-            print(WarnFormat(f"SQLDataModelWarning: file extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename..."))
+            print(SQLDataModel.WarnFormat(f"SQLDataModelWarning: file extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename..."))
             filename += '.sdm'
         if not Path(filename).is_file():
             raise FileNotFoundError(
-                ErrorFormat(f"FileNotFoundError: file not found, provided filename \"{filename}\" could not be found, please ensure the filename exists in a valid path...")
+                SQLDataModel.ErrorFormat(f"FileNotFoundError: file not found, provided filename \"{filename}\" could not be found, please ensure the filename exists in a valid path...")
                 )
         with open(filename, 'rb') as f:
             tot_raw = pickle.load(f) # Tuple of Tuples raw data
@@ -1218,21 +1343,21 @@ class SQLDataModel:
         ### type checking connection to ensure compatible ###
         db_dialect = type(sql_connection).__module__.split('.')[0].lower()
         if db_dialect not in cls.get_supported_sql_connections():
-            print(WarnFormat(f"""SQLDataModelWarning: provided SQL connection has not been tested, behavior for "{db_dialect}" may be unpredictable or unstable..."""))
+            print(SQLDataModel.WarnFormat(f"""SQLDataModelWarning: provided SQL connection has not been tested, behavior for "{db_dialect}" may be unpredictable or unstable..."""))
         if len(sql_query.split()) == 1:
             sql_query = f""" select * from {sql_query} """
         try:
             sql_c = sql_connection.cursor()
         except Exception as e:
             raise SQLProgrammingError(
-                ErrorFormat(f"SQLProgrammingError: provided SQL connection is not opened or valid, failed with: {e}...")
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL connection is not opened or valid, failed with: {e}...")
             ) from None
         try:
             sql_c.execute(sql_query)
             data = sql_c.fetchall()
         except Exception as e:
             raise SQLProgrammingError(
-                ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: {e}...")
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: {e}...")
             ) from None
         if (len(data) < 1) or (data is None):
             raise DimensionError("DimensionError: provided SQL query returned no data, please provide a valid query with sufficient return data...")
@@ -1304,7 +1429,7 @@ class SQLDataModel:
             csvwriter.writerow(write_headers)
             csvwriter.writerows(self.sql_c.fetchall())
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: csv file "{csv_file}" created'))
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: csv file "{csv_file}" created'))
 
     def to_dict(self, rowwise:bool=True) -> dict:
         """
@@ -1438,7 +1563,7 @@ class SQLDataModel:
         """
         if not _has_np:
             raise ModuleNotFoundError(
-                ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use `.to_numpy()` method""")
+                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use `.to_numpy()` method""")
                 )            
         fetch_stmt = self._generate_sql_stmt(include_index=include_index)
         self.sql_c.execute(fetch_stmt)
@@ -1471,7 +1596,7 @@ class SQLDataModel:
         """
         if not _has_pd:
             raise ModuleNotFoundError(
-                ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use `.to_pandas()` method""")
+                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use `.to_pandas()` method""")
                 )
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_index))
         raw_data = self.sql_c.fetchall()
@@ -1519,7 +1644,7 @@ class SQLDataModel:
         ```
         """
         if (filename is not None) and (len(filename.split(".")) <= 1):
-            print(WarnFormat(f"{type(self).__name__}Warning: extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename..."))
+            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename..."))
             filename += '.sdm'
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
@@ -1527,7 +1652,7 @@ class SQLDataModel:
         with open(filename, 'wb') as handle:
             pickle.dump(serialized_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: pickle file "{filename}" created'))
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: pickle file "{filename}" created'))
 
     def to_sql(self, table:str, extern_conn:sqlite3.Connection, replace_existing:bool=True, include_index:bool=True) -> None:
         """
@@ -1580,20 +1705,23 @@ class SQLDataModel:
         - Unsupported connection objects will output a `SQLDataModelWarning` advising unstable or undefined behavior.
         """
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_index))
+        created_header_dict = self.header_dtype_dict.copy()
+        if include_index:
+            created_header_dict.update({self.sql_idx:"INTEGER PRIMARY KEY"})
         model_data = [x for x in self.sql_c.fetchall()] # using new process
         model_headers = [x[0] for x in self.sql_c.description]
         try:
             extern_c = extern_conn.cursor()
         except Exception as e:
             raise SQLProgrammingError(
-                ErrorFormat(f"""SQLProgrammingError: provided SQL connection is not open, please reopen the database connection or resolve "{e}"...""")
+                SQLDataModel.ErrorFormat(f"""SQLProgrammingError: provided SQL connection is not open, please reopen the database connection or resolve "{e}"...""")
             ) from None
         if replace_existing:
             extern_c.execute(f"""drop table if exists "{table}" """)
             extern_conn.commit()
         db_dialect = type(extern_conn).__module__.split('.')[0].lower()
         dyn_bind = '?' if db_dialect == 'sqlite3' else '%s'
-        sql_dtypes_stmt = ", ".join(f"""\"{header}\" {self.header_dtype_dict[header]}""" for header in model_headers) # generates sql create table statement using type mapping dict
+        sql_dtypes_stmt = ", ".join(f"""\"{header}\" {created_header_dict[header]}""" for header in model_headers) # generates sql create table statement using type mapping dict
         sql_create_stmt = f"""create table if not exists "{table}" ({sql_dtypes_stmt})"""
         sql_insert_stmt = f"""insert into "{table}" ({','.join([f'"{col}"' for col in model_headers])}) values ({','.join([dyn_bind for _ in model_headers])})""" # changed to string formatter
         extern_c.execute(sql_create_stmt)
@@ -1628,7 +1756,7 @@ class SQLDataModel:
         with open(filename, "w", encoding='utf-8') as file:
             file.write(contents)
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: text file "{filename}" created'))
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: text file "{filename}" created'))
 
     def to_local_db(self, db:str=None):
         """
@@ -1659,7 +1787,7 @@ class SQLDataModel:
         with sqlite3.connect(db) as target:
             self.sql_db_conn.backup(target)
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: local db "{db}" created'))
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: local db "{db}" created'))
 
 ####################################################################################################################
 ############################################## dunder special methods ##############################################
@@ -1691,7 +1819,7 @@ class SQLDataModel:
         """
         if not isinstance(value, str|int|float|SQLDataModel):
             raise TypeError(
-                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', addition operations can only be performed on types 'str', 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', addition operations can only be performed on types 'str', 'int' or 'float' ")
             )
         if isinstance(value, SQLDataModel):
             value = value.data()
@@ -1720,7 +1848,7 @@ class SQLDataModel:
         """
         if not isinstance(value, int|float|SQLDataModel):
             raise TypeError(
-                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int' or 'float' ")
             )
         if isinstance(value, SQLDataModel):
             value = value.data()
@@ -1749,7 +1877,7 @@ class SQLDataModel:
         """
         if not isinstance(value, int|float):
             raise TypeError(
-                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', multiplication operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', multiplication operations can only be performed on types 'int' or 'float' ")
             )
         if isinstance(value, int|float):
             return self.apply(lambda x: x * value)
@@ -1777,7 +1905,7 @@ class SQLDataModel:
         """
         if not isinstance(value, int|float):
             raise TypeError(
-                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int' or 'float' ")
             )
         if isinstance(value, int|float):
             return self.apply(lambda x: x / value)
@@ -1804,7 +1932,7 @@ class SQLDataModel:
         """
         if not isinstance(value, int|float):
             raise TypeError(
-                ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int' or 'float' ")
             )
         if isinstance(value, int|float):
             return self.apply(lambda x: x ** value)        
@@ -1893,15 +2021,15 @@ class SQLDataModel:
             validated_indicies = self.validate_indicies(slc)
         except ValueError as e:
             raise ValueError(
-                ErrorFormat(f"{e}") # using existing formatting from validation
+                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None
         except TypeError as e:
             raise TypeError(
-                ErrorFormat(f"{e}") # using existing formatting from validation
+                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None
         except IndexError as e:
             raise IndexError(
-                ErrorFormat(f"{e}") # using existing formatting from validation
+                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None             
         validated_rows, validated_columns = validated_indicies
         # print(f'parsed as:\nrows: {validated_rows}\ncols: {validated_columns}')
@@ -1942,22 +2070,22 @@ class SQLDataModel:
             update_values = update_values.data() # normalize data input
         if not isinstance(update_values, str|int|float|bool|bytes|list|tuple) and (update_values is not None):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid values type '{type(update_values).__name__}', update values must be compatible with SQL datatypes such as <'str', 'int', 'float', 'bool', 'bytes'>")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid values type '{type(update_values).__name__}', update values must be compatible with SQL datatypes such as <'str', 'int', 'float', 'bool', 'bytes'>")
             )
         # normal update values process where target update values is not another SQLDataModel object:
         try:
             validated_indicies = self.validate_indicies(target_indicies,strict_validation=False)
         except ValueError as e:
             raise ValueError(
-                ErrorFormat(f"{e}") # using existing formatting from validation
+                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None
         except TypeError as e:
             raise TypeError(
-                ErrorFormat(f"{e}") # using existing formatting from validation
+                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None
         except IndexError as e:
             raise IndexError(
-                ErrorFormat(f"{e}") # using existing formatting from validation
+                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None             
         validated_rows, validated_columns = validated_indicies
         # convert various row options to be tuple or int
@@ -1984,107 +2112,162 @@ class SQLDataModel:
         ```
         """        
         return self.row_count
-
+        
     def __repr__(self) -> str:
         """
-        Returns a formatted string representation of the SQLDataModel, suitable for display.
+        Returns a formatted string representation of the SQLDataModel instance.
 
-        Parameters:
-            None
+        Notes:
+            - The representation includes a truncated table view of the SQLDataModel.
+            - The output adjusts column widths dynamically and provides ellipses if the table is truncated.
+            - The number of displayed rows is limited to either the row count or the specified maximum rows.
+            - The output includes column headers, row data, and information about the total number of rows and columns.
 
         Returns:
-            `str`: Formatted string representation of the SQLDataModel.
+            - `str`: The string representation of the SQLDataModel instance.
 
         Example:
         ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the model with sample data
+        sqldm = SQLDataModel(data,headers)
+
+        # Display the string representation
         print(sqldm)
+
+        # Outputs with default alignment
         ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │ first  │ last    │    age │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │ john   │ smith   │     27 │
+        │ 1 │ sarah  │ west    │     29 │
+        │ 2 │ mike   │ harlin  │     36 │
+        │ 3 │ pat    │ douglas │     42 │
+        └───┴────────┴─────────┴────────┘  
+        [4 rows x 3 columns]      
+        ```
+        ```python
+        
+        # Using left alignment
+        sqldm.set_column_alignment("<")
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │ first  │ last    │ age    │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │ john   │ smith   │ 27     │
+        │ 1 │ sarah  │ west    │ 29     │
+        │ 2 │ mike   │ harlin  │ 36     │
+        │ 3 │ pat    │ douglas │ 42     │
+        └───┴────────┴─────────┴────────┘
+        [4 rows x 3 columns]
+        ```
+        ```python
+        
+        # Using center alignment
+        sqldm.set_column_alignment("^")
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │ first  │  last   │  age   │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │  john  │  smith  │   27   │
+        │ 1 │ sarah  │  west   │   29   │
+        │ 2 │  mike  │ harlin  │   36   │
+        │ 3 │  pat   │ douglas │   42   │
+        └───┴────────┴─────────┴────────┘
+        [4 rows x 3 columns]
+        ```
+        ```python
+        
+        # Using right alignment
+        sqldm.set_column_alignment(">")
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │  first │    last │    age │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │   john │   smith │     27 │
+        │ 1 │  sarah │    west │     29 │
+        │ 2 │   mike │  harlin │     36 │
+        │ 3 │    pat │ douglas │     42 │
+        └───┴────────┴─────────┴────────┘
+        [4 rows x 3 columns]        
+        ```
+        Formatting:
+            - Default alignment is right-aligned for numeric types and left-aligned for remaining types
+            - Max displayed rows set to 1,000 by default, use `set_max_rows()` to modify
+            - Set table color using `set_display_color()` method
         """        
-        display_headers = self.headers
-        include_idx = self.display_index
-        fetch_stmt = self._generate_sql_stmt(include_index=include_idx)
-        table_data = self.sql_db_conn.execute(f"{fetch_stmt} limit {self.max_rows}").fetchall()
-        index_width = len(str(max(row[0] for row in table_data))) + 1 if include_idx else 2
-        dyn_idx_include = 1 if include_idx else 0
-        table_body = "" # big things can have small beginnings...
-        table_newline = "\n"
-        display_rows = self.row_count if (self.max_rows is None or self.max_rows > self.row_count) else self.max_rows
-        right_border_width = 3
-        max_rows_to_check = display_rows if display_rows < 15 else 15 # updated as exception to 15
-        col_length_dict = {col:len(str(x)) for col,x in enumerate(display_headers)} # for first row populate all col lengths
-        col_alignment_dict = {i:'<' if v == 'str' else '>' for i,v in enumerate(self.headers_to_py_dtypes_dict.values())}
-        col_dtype_dict = {i:v for i,v in enumerate(self.headers_to_py_dtypes_dict.values())}
-        for row in range(max_rows_to_check): # each row is indexed in row col length dict and each one will contain its own dict of col lengths
-            current_row = {col:len(str(x)) for col,x in enumerate(table_data[row][dyn_idx_include:])} # start at one to enusre index is skipped and column lengths correctly counted
-            for col_i in range(self.column_count):
-                if current_row[col_i] > col_length_dict[col_i]:
-                    col_length_dict.update({col_i:current_row[col_i]})
-        for col,width in col_length_dict.items():
-            if width < self.min_column_width:
-                col_length_dict[col] = self.min_column_width
-            elif width > self.max_column_width:
-                col_length_dict[col] = self.max_column_width
-        index_fmt = f'│{{:>{index_width}}} │ ' if include_idx else '│ '
-        right_border_fmt = ' │'
-        col_alignment = self.column_alignment # if None columns will be dynmaic aligned based on dtypes
-        columns_fmt = " │ ".join([f"""{{:{col_alignment_dict[i] if col_alignment is None else col_alignment}{col_length}}}""" for i,col_length in col_length_dict.items()]) # col alignment var determines left or right align
-        table_abstract_template = """{index}{columns}{right_border}""" # assumption is each column will handle its right side border only and the last one will be stripped
-        fmt_dict = {'index':index_fmt,'columns':columns_fmt,'right_border':right_border_fmt}
-        table_row_fmt = table_abstract_template.format(**fmt_dict)
-        total_required_width = index_width + sum(col_length_dict.values()) + (self.column_count*3) + right_border_width # extra 2 for right border width
-        try:
-            total_available_width = os.get_terminal_size()[0]
-        except OSError:
-            total_available_width = 100
-        table_truncation_required = False if total_required_width <= total_available_width else True
-        max_cols = self.column_count + 1 # plus 1 for newly added index col in sqlite table
-        max_width = total_required_width
+        max_display_rows = self.row_count if self.row_count < self.max_rows else self.max_rows
+        max_rows_check = self.row_count if self.row_count < 10 else 10
+        display_index = self.display_index
+        display_headers = [self.sql_idx] + self.headers if display_index else self.headers
+        headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
+        header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'% d\'' if dtype == 'int' else '\'%!s\'') for col,dtype in self.headers_to_py_dtypes_dict.items()}
+        headers_select_length = f"""{headers_select_length} {",".join([f"case when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) end as '{col}'" for col in self.headers])} from("""
+        headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" limit {max_display_rows})) "{self.sql_idx}", """ if display_index else """select """
+        headers_sub_select = f"""{headers_sub_select} {",".join([f"\"{col}\"" for col in display_headers])} from \"{self.sql_model}\" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
+        headers_full_select = f"{headers_select_length}{headers_sub_select}"
+        length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
+        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}  
+        table_repr = """""" # big things...
+        table_left_edge = """│ """
+        table_left_edge_width = 2           # """│ """
+        table_right_edge = """ │"""
+        table_right_edge_width = 2          # """ │"""
+        table_column_interval_width = 3    # """ │ """
+        table_truncated_ellipses = """⠤⠄"""
+        table_truncated_ellipses_width = 3 # added extra space after truncation mark before ellipses, looks better
+        table_bare_newline = """\n"""
+        total_required_width = table_left_edge_width + sum((table_column_interval_width + length) for length in header_length_dict.values()) + table_right_edge_width - table_column_interval_width
+        total_available_width = shutil.get_terminal_size()[0]
+        table_truncation_required = False if total_available_width > total_required_width else True
+        # print(f'truncation info: {total_required_width} of {total_available_width}, truncation: {table_truncation_required}')
         if table_truncation_required:
-            ellipsis_suffix_width = 4
-            max_cols, max_width = 0, (index_width + right_border_width + ellipsis_suffix_width) # max width starts with the tax of index and border already included, around 5-7 depending on index width
-            for v in col_length_dict.values():
+            total_available_width -= table_truncated_ellipses_width
+            max_cols, max_width = 0, (table_left_edge_width + table_right_edge_width + table_truncated_ellipses_width) # max width starts with the tax of index and border already included, around 5-7 depending on index width
+            for v in header_length_dict.values():
                 if max_width < total_available_width:
                     max_width += (v+3)
                     max_cols += 1
+                    continue
+                break
             if max_width > total_available_width:
                 max_cols -= 1
-                max_width -= (col_length_dict[max_cols] +3)
-            table_row_fmt = """ │ """.join(table_row_fmt.split(""" │ """)[:max_cols+dyn_idx_include]) + """ │""" # no longer required, maybe...? +1 required on max columns since index fmt is included after split leaving the format missing two slots right away if you simply decrease it by 1
-        table_dynamic_newline = f' ...\n' if table_truncation_required else '\n'
-        table_top_bar = table_row_fmt.replace(" │ ","─┬─").replace("│{","┌{").replace(" │","─┐") if include_idx else table_row_fmt.replace(" │ ","─┬─").replace("│ {","┌─{",1).replace(" │","─┐")
-        table_top_bar = table_top_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else table_top_bar.format(*['─' * length for length in col_length_dict.values()])
-        if include_idx:
-            header_row = table_row_fmt.format("",*[str(x)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(x)) > col_length_dict[k] else str(x) for k,x in enumerate(display_headers)]) # for header the first arg will be empty as no index will be used, for the rest it will be the data col key
+                max_width -= (header_length_dict[display_headers[max_cols]] +3)
+            display_headers = display_headers[:max_cols] # +1 to include accounted for column
+            table_dynamic_newline = f""" {table_truncated_ellipses}\n"""
         else:
-            header_row = table_row_fmt.format(*[str(x)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(x)) > col_length_dict[k] else str(x) for k,x in enumerate(display_headers)]) # for header the first arg will be empty as no index will be used, for the rest it will be the data col key
-        header_sub_bar = table_row_fmt.replace(" │ ","─┼─").replace("│{","├{").replace(" │","─┤") if include_idx else table_row_fmt.replace(" │ ","─┼─").replace("│ {","├─{",1).replace(" │","─┤")
-        header_sub_bar = header_sub_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else header_sub_bar.format(*['─' * length for length in col_length_dict.values()])
-        table_body += table_top_bar + table_newline
-        table_body += header_row + table_dynamic_newline
-        table_body += header_sub_bar + table_newline
-        for i,row in enumerate(table_data):
-            if i < display_rows:
-                index, record = row[0], [x for x in row]
-                if include_idx:
-                    for i_at, dtype_at in col_dtype_dict.items():
-                        if dtype_at == 'float':
-                            record[i_at+1] = f"{record[i_at+1]:.{self.display_float_precision}f}"
-                    row = record
-                    table_body += table_row_fmt.format(index,*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else cell for k,cell in enumerate(record[1:max_cols+1])]) # start at 1 to avoid index col
-                else:
-                    for i_at, dtype_at in col_dtype_dict.items():
-                        if dtype_at == 'float':
-                            record[i_at] = f"{record[i_at]:.{self.display_float_precision}f}"
-                    row = record                    
-                    table_body += table_row_fmt.format(*[str(cell)[:(col_length_dict[k])-2] + '⠤⠄' if len(str(cell)) > (col_length_dict[k]) else cell for k,cell in enumerate(record)]) # start at 1 to avoid index col
-                table_body +=  table_dynamic_newline
-        table_bottom_bar = table_row_fmt.replace(" │ ","─┴─").replace("│{","└{").replace(" │","─┘") if include_idx else table_row_fmt.replace(" │ ","─┴─").replace("│ {","└─{",1).replace(" │","─┘")
-        table_bottom_bar = table_bottom_bar.format((index_width*'─'),*['─' * length for length in col_length_dict.values()]) if include_idx else table_bottom_bar.format(*['─' * length for length in col_length_dict.values()])
-        table_signature = f"""\n[{display_rows} rows x {self.column_count} columns]"""
-        # width_truncation_debug_details = f"""\t({max_width} of {total_available_width} available width used with {max_cols -1 if not table_truncation_required else max_cols} columns)""" # include additional debug info with: \ncol dytpes dictionary: {self.column_dtypes}\ncol alignment dict: {col_alignment_dict}"""
-        # table_body += table_bottom_bar + table_signature + width_truncation_debug_details
-        table_body += table_bottom_bar + table_signature # exception change to have less details
-        return table_body if self.display_color is None else self.display_color.wrap(table_body)  
+            table_dynamic_newline = """\n"""
+        vconcat_column_separator = """|| ' │ ' ||"""
+        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if display_index else ""
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,self.headers_to_py_dtypes_dict[col],header_length_dict[col],self.display_float_precision,alignment=self.column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "full_row" from "{self.sql_model}" limit {self.max_rows}"""
+        formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
+        if self.column_alignment is None:
+            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if self.headers_to_py_dtypes_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers] # self.headers_to_py_dtypes_dict[col],header_length_dict[col]
+        else:
+            formatted_headers = [(f"""{col:{self.column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers] # self.headers_to_py_dtypes_dict[col],header_length_dict[col]
+        table_cross_bar = """┌─""" + """─┬─""".join(["""─""" * header_length_dict[col] for col in display_headers]) + """─┐""" + table_bare_newline
+        table_repr = "".join([table_repr, table_cross_bar])
+        table_repr = "".join([table_repr, table_left_edge + """ │ """.join(formatted_headers) + table_right_edge + table_dynamic_newline])
+        table_repr = "".join([table_repr, table_cross_bar.replace("┌","├").replace("┬","┼").replace("┐","┤")])
+        table_repr = "".join([table_repr,*[row[0] for row in formatted_response]])
+        table_repr = "".join([table_repr, table_cross_bar.replace("┌","└").replace("┬","┴").replace("┐","┘")])
+        table_repr = "".join([table_repr, f"""[{max_display_rows} rows x {self.column_count} columns]"""])
+        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)    
 
 ##################################################################################################################
 ############################################## sqldatamodel methods ##############################################
@@ -2144,7 +2327,7 @@ class SQLDataModel:
             Row = namedtuple('Row', [self.sql_idx] + self.headers if include_idx_col else self.headers)
         except ValueError as e:
             raise ValueError(
-                ErrorFormat(f'ValueError: {e}, rename header or use `normalize_headers()` method to fix')
+                SQLDataModel.ErrorFormat(f'ValueError: {e}, rename header or use `normalize_headers()` method to fix')
             ) from None
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_idx_col))
         yield from (Row(*x) for x in self.sql_c.fetchall())
@@ -2217,9 +2400,9 @@ class SQLDataModel:
             pen = ANSIColor(color)
             self.display_color = pen
             if SQLDataModel.debug:
-                print(SuccessFormat(f"""SQLDataModel: display color changed, the terminal display color has been changed to {pen.wrap(f"color {pen.text_color_str}")}"""))
+                print(SQLDataModel.SuccessFormat(f"""SQLDataModel: display color changed, the terminal display color has been changed to {pen.wrap(f"color {pen.text_color_str}")}"""))
         except:
-            print(WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code..."))
+            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code..."))
 
     def where(self, predicate:str) -> SQLDataModel:
         """
@@ -2266,7 +2449,7 @@ class SQLDataModel:
         """        
         if not isinstance(predicate, str):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid predicate type '{type(predicate).__name__}' received, argument must be of type 'str'")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid predicate type '{type(predicate).__name__}' received, argument must be of type 'str'")
             )
         fetch_stmt = f""" select * from "{self.sql_model}" where {predicate} """
         return self.fetch_query(fetch_stmt)
@@ -2359,7 +2542,7 @@ class SQLDataModel:
         ### get column name from str or index ###
         if not isinstance(func, Callable):
             raise TypeError(
-                ErrorFormat(f'TypeError: invalid argument for `func`, expected type "Callable" but type "{type(func).__name__}" was provided, please provide a valid python "Callable"...')
+                SQLDataModel.ErrorFormat(f'TypeError: invalid argument for `func`, expected type "Callable" but type "{type(func).__name__}" was provided, please provide a valid python "Callable"...')
             )
         try:
             func_name = func.__name__.replace('<','').replace('>','')
@@ -2367,7 +2550,7 @@ class SQLDataModel:
             self.sql_db_conn.create_function(func_name, func_argcount, func)
         except Exception as e:
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to create function with provided callable "{func}", SQL process failed with: {e}')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to create function with provided callable "{func}", SQL process failed with: {e}')
             ) from None
         input_columns = ",".join([f"\"{col}\"" for col in self.headers])
         derived_query = f"""select {func_name}({input_columns}) as "{func_name}" from "{self.sql_model}" """
@@ -2421,19 +2604,19 @@ class SQLDataModel:
         """
         if not isinstance(column, str|int):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
             )
         if isinstance(column, int):
             try:
                 column = self.headers[column]
             except IndexError:
                 raise IndexError(
-                    ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
                 ) from None
         if isinstance(column, str):
             if column not in self.headers:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         return self.headers_to_py_dtypes_dict[column]
 
@@ -2486,19 +2669,19 @@ class SQLDataModel:
         """
         if not isinstance(column, str|int):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
             )
         if isinstance(column, int):
             try:
                 column = self.headers[column]
             except IndexError:
                 raise IndexError(
-                    ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
                 ) from None
         if isinstance(column, str):
             if column not in self.headers:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
         update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = cast("{column}" as {col_sql_dtype}); alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}"; """
@@ -2551,11 +2734,11 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to rename model table, SQL execution failed with: "{e}"')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename model table, SQL execution failed with: "{e}"')
             ) from None
         self.sql_model = new_name
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: Successfully renamed primary model alias to "{new_name}"'))
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed primary model alias to "{new_name}"'))
 
     def deduplicate(self, subset:list[str]=None, keep_first:bool=True, inplace:bool=True) -> None|SQLDataModel:
         """
@@ -2595,7 +2778,7 @@ class SQLDataModel:
             for col in subset:
                 if col not in self.headers:
                     raise ValueError(
-                        ErrorFormat(f"ValueError: column not found '{col}', provided columns in `subset` must be valid columns, use `get_headers()` to view current valid column names")
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', provided columns in `subset` must be valid columns, use `get_headers()` to view current valid column names")
                     )
         else:
             subset = self.headers
@@ -2646,13 +2829,13 @@ class SQLDataModel:
             self.sql_c.execute(sql_query)
         except Exception as e:
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"...')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"...')
             ) from None
         fetch_result = self.sql_c.fetchall()
         fetch_headers = [x[0] for x in self.sql_c.description]
         if (rows_returned := len(fetch_result)) < 1:
             raise ValueError(
-                ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
+                SQLDataModel.ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
             )
         return type(self)(fetch_result, headers=fetch_headers, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
@@ -2693,12 +2876,12 @@ class SQLDataModel:
             columns = columns[0]
         else:
             raise TypeError(
-                ErrorFormat(f'TypeError: invalid columns argument, provided type {type(columns[0]).__name__} is invalid, please provide str, list or tuple type...')
+                SQLDataModel.ErrorFormat(f'TypeError: invalid columns argument, provided type {type(columns[0]).__name__} is invalid, please provide str, list or tuple type...')
                 )
         for col in columns:
             if col not in self.headers:
                 raise ValueError(
-                    ErrorFormat(f'ValueError: invalid group by targets, provided column \"{col}\" does not exist in current model, valid targets:\n{self.headers}')
+                    SQLDataModel.ErrorFormat(f'ValueError: invalid group by targets, provided column \"{col}\" does not exist in current model, valid targets:\n{self.headers}')
                     )
         columns_group_by = ",".join(f'"{col}"' for col in columns)
         order_by = "count(*)" if order_by_count else columns_group_by
@@ -2707,7 +2890,7 @@ class SQLDataModel:
             self.sql_c.execute(group_by_stmt)
         except Exception as e:
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"...')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"...')
             ) from None
         return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
     
@@ -2749,7 +2932,7 @@ class SQLDataModel:
                 validated_join_col = True
         if not validated_join_col:
             raise DimensionError(
-                ErrorFormat(f"DimensionError: no shared column, no matching join column was found in the provided model, ensure one is available or specify one explicitly with on_column='shared_column'")
+                SQLDataModel.ErrorFormat(f"DimensionError: no shared column, no matching join column was found in the provided model, ensure one is available or specify one explicitly with on_column='shared_column'")
                 )
         model.to_sql(join_tablename, self.sql_db_conn)
         join_cols = [x for x in join_cols if x != on_column] # removing shared join column
@@ -2780,11 +2963,11 @@ class SQLDataModel:
             self.sql_db_conn.commit()
             self._set_updated_sql_metadata()
             if SQLDataModel.debug:
-                print(SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0} rows modified'))
+                print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0} rows modified'))
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, unable to execute provided SQL query with error "{e}"...')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, unable to execute provided SQL query with error "{e}"...')
             ) from None
     
     def execute_transaction(self, sql_script:str) -> None:
@@ -2813,15 +2996,15 @@ class SQLDataModel:
         try:
             self.sql_c.executescript(full_stmt)
             self.sql_db_conn.commit()
-            # rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
+            rows_modified = self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to execute provided transaction, SQL execution failed with: "{e}"')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to execute provided transaction, SQL execution failed with: "{e}"')
             ) from None
         self._set_updated_sql_metadata()        
-        # if SQLDataModel.debug:
-            # print(SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified')  )
+        if SQLDataModel.debug:
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified')  )
 
     def add_column_with_values(self, column_name:str, value=None) -> None:
         """
@@ -2869,13 +3052,13 @@ class SQLDataModel:
         if isinstance(value, list|tuple):
             if (len_values := len(value)) != self.row_count:
                 raise DimensionError(
-                    ErrorFormat(f'DimensionError: invalid dimensions "{len_values} != {self.row_count}", provided values have length {len_values} while current row count is {self.row_count}...')
+                    SQLDataModel.ErrorFormat(f'DimensionError: invalid dimensions "{len_values} != {self.row_count}", provided values have length {len_values} while current row count is {self.row_count}...')
                 )
             try:
                 seq_dtype = self.static_py_to_sql_map_dict[type(value[0]).__name__]
             except:
                 raise TypeError(
-                    ErrorFormat(f'TypeError: invalid datatype "{type(value[0]).__name__}", please provide a valid and SQL translatable datatype...')
+                    SQLDataModel.ErrorFormat(f'TypeError: invalid datatype "{type(value[0]).__name__}", please provide a valid and SQL translatable datatype...')
                 ) from None
             sql_script = f"""{create_col_stmt} {seq_dtype};"""
             all_model_idxs = tuple(range(self.min_idx, self.max_idx+1)) # plus 1 otherwise range excludes last item and out of range error is triggered during for loop below
@@ -2916,19 +3099,19 @@ class SQLDataModel:
         ### get column name from str or index ###
         if (not isinstance(column, int)) and (not isinstance(column, str)):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid column argument, \"{type(column).__name__}\" is not a valid target, provide column index or column name as a string...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column argument, \"{type(column).__name__}\" is not a valid target, provide column index or column name as a string...")
             )
         if isinstance(column, int):
             try:
                 column = self.headers[column]
             except IndexError as e:
                 raise IndexError(
-                    ErrorFormat(f"IndexError: invalid column index provided, {column} is not a valid column index, use `.column_count` property to get valid range...")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index provided, {column} is not a valid column index, use `.column_count` property to get valid range...")
                 ) from None
         if isinstance(column, str):
             if column not in self.headers:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: invalid column provided, {column} is not valid for current model, use `.get_headers()` method to get model headers...")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid column provided, {column} is not valid for current model, use `.get_headers()` method to get model headers...")
                     )
             else:
                 column = column
@@ -2939,7 +3122,7 @@ class SQLDataModel:
             self.sql_db_conn.create_function(func_name, func_argcount, func)
         except Exception as e:
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to create function with provided callable "{func}", SQL process failed with: {e}')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to create function with provided callable "{func}", SQL process failed with: {e}')
             ) from None
         if func_argcount == 1:
             input_columns = target_column
@@ -2947,7 +3130,7 @@ class SQLDataModel:
             input_columns = ",".join([f"\"{col}\"" for col in self.headers])
         else:
             raise ValueError(
-                ErrorFormat(f'ValueError: invalid function arg count: {func_argcount}, input args to "{func_name}" must be 1 or {self.column_count} based on the current models structure, ie...\n{self.generate_apply_function_stub()}')
+                SQLDataModel.ErrorFormat(f'ValueError: invalid function arg count: {func_argcount}, input args to "{func_name}" must be 1 or {self.column_count} based on the current models structure, ie...\n{self.generate_apply_function_stub()}')
                 )
         sql_apply_update_stmt = f"""update {self.sql_model} set {target_column} = {func_name}({input_columns})"""
         full_stmt = f"""begin transaction; {sql_apply_update_stmt}; end transaction;"""
@@ -2957,11 +3140,11 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to apply function, SQL execution failed with: {e}')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to apply function, SQL execution failed with: {e}')
             ) from None
         self._set_updated_sql_metadata()
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: applied function "{func_name}()" to current model')        )
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: applied function "{func_name}()" to current model')        )
 
     def generate_apply_function_stub(self) -> str:
         """
@@ -3023,13 +3206,13 @@ class SQLDataModel:
         if values is not None:
             if not isinstance(values,list|tuple):
                 raise TypeError(
-                    ErrorFormat(f'TypeError: invalid type provided \"{type(values).__name__}\", insert values must be of type list or tuple...')
+                    SQLDataModel.ErrorFormat(f'TypeError: invalid type provided \"{type(values).__name__}\", insert values must be of type list or tuple...')
                     )
             if isinstance(values,list):
                 values = tuple(values)
             if (len_val := len(values)) != self.column_count:
                 raise DimensionError(
-                    ErrorFormat(f'DimensionError: invalid dimensions \"{len_val} != {self.column_count}\", the number of values provided ({len_val}) must match the current column count ({self.column_count})...')
+                    SQLDataModel.ErrorFormat(f'DimensionError: invalid dimensions \"{len_val} != {self.column_count}\", the number of values provided ({len_val}) must match the current column count ({self.column_count})...')
                     )
         else:
             values = tuple(None for _ in range(self.column_count))
@@ -3042,7 +3225,7 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
             ) from None
         self._set_updated_sql_row_metadata()
         self._set_updated_sql_metadata()        
@@ -3092,28 +3275,28 @@ class SQLDataModel:
         """        
         if not isinstance(row_index, int):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid row index type '{type(row_index).__name__}', rows must be indexed by type 'int'")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid row index type '{type(row_index).__name__}', rows must be indexed by type 'int'")
             )
         if not isinstance(column_index, int|str):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
             )
         if row_index < 0:
             row_index = self.max_out_of_bounds + row_index
         if row_index < self.min_idx or row_index > self.max_idx:
             raise ValueError(
-                ErrorFormat(f"ValueError: invalid row index '{row_index}', provided row index is outisde of current model range '{self.min_idx}:{self.max_idx}'")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', provided row index is outisde of current model range '{self.min_idx}:{self.max_idx}'")
             )
         if isinstance(column_index, int):
             try:
                 column_index = self.headers[column_index]
             except IndexError:
                 raise IndexError(
-                    ErrorFormat(f"IndexError: invalid column index '{column_index}', provided column index is outside of current model range '0:{self.column_count-1}'")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column_index}', provided column index is outside of current model range '0:{self.column_count-1}'")
                 ) from None
         if column_index not in self.headers:
             raise ValueError(
-                ErrorFormat(f"ValueError: invalid column name '{column_index}', use `.get_headers()` to view current valid model headers")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid column name '{column_index}', use `.get_headers()` to view current valid model headers")
             )
         update_stmt = f"""update \"{self.sql_model}\" set {column_index} = ? where {self.sql_idx} = {row_index}"""
         if not isinstance(value,tuple):
@@ -3125,11 +3308,11 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
             ) from None
         self._set_updated_sql_metadata()        
         if SQLDataModel.debug:
-            print(SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified'))
+            print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified'))
 
     def _generate_sql_stmt(self, columns:None|slice|tuple|int|str|list[str]=None, rows:None|slice|tuple|int=None, include_index:bool=True, fetch_limit:int=None, execute_fetch:bool=False) -> str|SQLDataModel:
         """
@@ -3233,7 +3416,7 @@ class SQLDataModel:
                 self.sql_c.execute(fetch_stmt)
             except Exception as e:
                 raise SQLProgrammingError(
-                    ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, unable to execute provided SQL query with error "{e}"...')
+                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, unable to execute provided SQL query with error "{e}"...')
                 ) from None
             return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
@@ -3307,11 +3490,11 @@ class SQLDataModel:
             return            
         if num_rows_to_update != num_value_rows_to_update:
             raise DimensionError(
-                ErrorFormat(f"DimensionError: shape mismatch '{num_rows_to_update} != {num_value_rows_to_update}', number of rows to update '{num_rows_to_update}' must match provided number of value rows to update '{num_value_rows_to_update}'")
+                SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{num_rows_to_update} != {num_value_rows_to_update}', number of rows to update '{num_rows_to_update}' must match provided number of value rows to update '{num_value_rows_to_update}'")
             )
         if num_columns_to_update != num_value_columns_to_update:
             raise DimensionError(
-                ErrorFormat(f"DimensionError: shape mismatch '{num_columns_to_update} != {num_value_columns_to_update}', number of columns to update '{num_columns_to_update}' must match provided number of value columns to update '{num_value_columns_to_update}'")
+                SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{num_columns_to_update} != {num_value_columns_to_update}', number of columns to update '{num_columns_to_update}' must match provided number of value columns to update '{num_value_columns_to_update}'")
             )
         if update_sql_script is not None:
             self.execute_transaction(update_sql_script)
@@ -3324,7 +3507,7 @@ class SQLDataModel:
             self.sql_db_conn.commit()
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
-                ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with \"{e}\"")
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with \"{e}\"")
             ) from None
         self._set_updated_sql_metadata()
         return
@@ -3468,11 +3651,11 @@ class SQLDataModel:
                 row_index = self.max_out_of_bounds + row_index
             if row_index < self.min_idx:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: invalid row index '{row_index}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
             if row_index > self.max_idx:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: invalid row index '{row_index}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
             return (row_index, self.headers)
         ### single row slice index ###
@@ -3482,11 +3665,11 @@ class SQLDataModel:
             stop_idx = row_slice.stop if row_slice.stop is not None else self.max_out_of_bounds
             if start_idx < self.min_idx:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
             if stop_idx > self.max_out_of_bounds:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )                
             return (slice(start_idx,stop_idx), self.headers)        
         ### columns by str or list of str ###
@@ -3496,54 +3679,54 @@ class SQLDataModel:
                 col_index = [col_index]
             if not all(isinstance(col, str) for col in col_index):
                 raise TypeError(
-                    ErrorFormat(f"TypeError: invalid column index type '{type(col_index[0].__name__)}' received, use `.get_headers()` to view valid column arguments...")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(col_index[0].__name__)}' received, use `.get_headers()` to view valid column arguments...")
                 )
             for col in col_index:
                 if (col not in self.headers) and (strict_validation):
                     raise ValueError(
-                        ErrorFormat(f"ValueError: '{col}' is not one of the current model headers, use `.get_headers()` method to view current valid headers...")
+                        SQLDataModel.ErrorFormat(f"ValueError: '{col}' is not one of the current model headers, use `.get_headers()` method to view current valid headers...")
                     )
             return (slice(self.min_idx,self.max_out_of_bounds), col_index)
         ### indexing by rows and columns ###        
         if not isinstance(indicies, tuple):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid indexing type '{type(indicies).__name__}', indexing the model must be done using two-dimensional [rows,columns] parameters with 'int' or 'slice' types...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid indexing type '{type(indicies).__name__}', indexing the model must be done using two-dimensional [rows,columns] parameters with 'int' or 'slice' types...")
             )
         if (arg_length := len(indicies)) != 2:
             raise ValueError(
-                ErrorFormat(f"ValueError: invalid indexing args, expected no more than 2 indicies for [row, column] but '{arg_length}' were received")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid indexing args, expected no more than 2 indicies for [row, column] but '{arg_length}' were received")
             )
         row_indicies, col_indicies = indicies
         ### rows first ###
         if not isinstance(row_indicies, int|tuple|slice):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid type for row indexing '{type(row_indicies).__name__}', rows must be indexed by type 'int' or 'slice'...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type for row indexing '{type(row_indicies).__name__}', rows must be indexed by type 'int' or 'slice'...")
             )
         if isinstance(row_indicies, int):
             if row_indicies < 0:
                 row_indicies = self.max_out_of_bounds + row_indicies
             if row_indicies < self.min_idx:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
             if row_indicies > self.max_out_of_bounds:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
             validated_row_indicies = row_indicies
         elif isinstance(row_indicies, tuple): # tuple of disconnected row indicies
             if not all(isinstance(row, int) for row in row_indicies):
                 raise TypeError(
-                    ErrorFormat(f"TypeError: invalid row index type '{type(row_indicies[0]).__name__}', rows must be indexed by type 'int'")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid row index type '{type(row_indicies[0]).__name__}', rows must be indexed by type 'int'")
                 )
             min_row_idx, max_row_idx = min(row_indicies), max(row_indicies)
             if min_row_idx < self.min_idx:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
             if max_row_idx > self.max_idx:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
             validated_row_indicies = row_indicies
         else: # is slice
@@ -3551,31 +3734,31 @@ class SQLDataModel:
             stop_idx = row_indicies.stop if row_indicies.stop is not None else self.max_out_of_bounds
             if start_idx < self.min_idx:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
             if stop_idx > self.max_out_of_bounds:
                 raise ValueError(
-                    ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )    
             validated_row_indicies = slice(start_idx, stop_idx)
         ### then columns ###
         if not isinstance(col_indicies, int|slice|tuple|str|list):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing a slice, list or str type is required...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing a slice, list or str type is required...")
                 )        
         if isinstance(col_indicies, int):
             try:
                 col_indicies = [self.headers[col_indicies]]
             except IndexError as e:
                 raise IndexError(
-                    ErrorFormat(f"IndexError: invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
                 ) from None
         elif isinstance(col_indicies, slice):
             col_start = col_indicies.start if col_indicies.start is not None else 0
             col_stop = col_indicies.stop if col_indicies.stop is not None else self.column_count
             if (col_start < 0) or (col_stop > self.column_count):
                 raise ValueError(
-                    ErrorFormat(f"ValueError: invalid column index '{col_start}', columns index must be inside of current model range: '0:{self.column_count-1}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid column index '{col_start}', columns index must be inside of current model range: '0:{self.column_count-1}'")
                 )                  
             col_indicies = [self.headers[i] for i in tuple(range(col_start,col_stop))]
         elif isinstance(col_indicies, tuple):
@@ -3584,20 +3767,20 @@ class SQLDataModel:
             col_indicies = [col_indicies]
         if not all(isinstance(col, int|str) for col in col_indicies):
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies[0].__name__)}', column indexing must be done by 'int' or 'str' types, use `.get_headers()` to view current valid arguments...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies[0].__name__)}', column indexing must be done by 'int' or 'str' types, use `.get_headers()` to view current valid arguments...")
             )
         if all(isinstance(col, int) for col in col_indicies):
             try:
                 col_indicies = [self.headers[i] for i in col_indicies]
             except IndexError as e:
                 raise IndexError(
-                    ErrorFormat(f"IndexError: invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid columns provided, {e} of current model headers, use `.get_headers()` method to get model headers...")
                 ) from None                
         ### columns validated to be a list of str, not neccessarily currnet columns, but thats ok for setitem method which should be allowed to create columns ###
         for col in col_indicies:
             if (col not in self.headers) and (strict_validation):
                 raise ValueError(
-                    ErrorFormat(f"ValueError: column not found '{col}', use `.get_headers()` to view current valid headers...")
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', use `.get_headers()` to view current valid headers...")
                 )
         validated_column_indicies = col_indicies
         return (validated_row_indicies, validated_column_indicies)
