@@ -1,5 +1,5 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, re, shutil
+import sqlite3, os, csv, sys, datetime, pickle, warnings, re, shutil
 from typing import Generator, Callable, Literal, Iterator
 from collections import namedtuple
 from pathlib import Path
@@ -170,14 +170,14 @@ class SQLDataModel:
         headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
         headers_to_sql_dtypes_dict = {k:self.static_py_to_sql_map_dict[v] for (k,v) in headers_to_py_dtypes_dict.items()}
         headers_with_sql_dtypes_str = ", ".join(f"""\"{col}\" {type}""" for col,type in headers_to_sql_dtypes_dict.items())
-        sql_create_stmt = f"""create table if not exists \"{self.sql_model}\" (\"{self.sql_idx}\" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
+        sql_create_stmt = f"""create table if not exists \"{self.sql_model}\" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' for _ in self.headers])})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True)
         self.sql_db_conn.execute(sql_create_stmt)
         self.sql_c = self.sql_db_conn.cursor()
         self._generate_header_master()
         if not had_idx:
-            first_row_insert_stmt = f"""insert into "{self.sql_model}" ({self.sql_idx},{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' for _ in self.headers])})"""
+            first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' for _ in self.headers])})"""
             try:
                 self.sql_db_conn.execute(first_row_insert_stmt, (0,*data[0]))
             except sqlite3.ProgrammingError as e:
@@ -684,9 +684,9 @@ class SQLDataModel:
                 select '_rowmeta' as "name", min("{self.sql_idx}") as "type", max("{self.sql_idx}") as "is_regular_column", count("{self.sql_idx}") as "alignment" from "{self.sql_model}"
                 union all
                 select "name" as "name","type" as "type","pk" as "is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "alignment" from pragma_table_info('{self.sql_model}') 
-            ) order by "name"='_rowmeta' desc, {",".join([f"name=\"{col}\" desc" for col in self.headers])}"""
+            ) order by "name"='_rowmeta' desc, {",".join([f'name="{col}" desc' for col in self.headers])}"""
         else:
-            fetch_metadata = f"""select "name" as "name","type" as "type","pk" as "is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f"name=\"{col}\" desc" for col in self.headers])}"""
+            fetch_metadata = f"""select "name" as "name","type" as "type","pk" as "is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'name="{col}" desc' for col in self.headers])}"""
         metadata = self.sql_db_conn.execute(fetch_metadata)
         if update_row_meta:
             self.min_idx, self.max_idx, self.row_count = next(metadata)[1:]
@@ -2319,9 +2319,10 @@ class SQLDataModel:
         headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'% d\'' if dtype == 'int' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
-        headers_select_length = f"""{headers_select_length} {",".join([f"case when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) end as '{col}'" for col in self.headers])} from("""
+        # headers_select_length = f"""{headers_select_length} {",".join([f"case when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) end as '{col}'" for col in self.headers])} from("""
+        headers_select_length = f"""{headers_select_length} {",".join([f'''case when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) end as '{col}' ''' for col in self.headers])} from("""
         headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" limit {max_display_rows})) "{self.sql_idx}", """ if display_index else """select """
-        headers_sub_select = f"""{headers_sub_select} {",".join([f"\"{col}\"" for col in display_headers])} from \"{self.sql_model}\" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
+        headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from \"{self.sql_model}\" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
         headers_full_select = f"{headers_select_length}{headers_sub_select}"
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
         header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}  
