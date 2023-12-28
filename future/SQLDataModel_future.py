@@ -1,5 +1,5 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, warnings, re, shutil
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil
 from typing import Generator, Callable, Literal, Iterator
 from collections import namedtuple
 from pathlib import Path
