@@ -1,5 +1,5 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, warnings, re, shutil
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil
 from typing import Generator, Callable, Literal, Iterator
 from collections import namedtuple
 from pathlib import Path
@@ -172,7 +172,7 @@ class SQLDataModel:
         headers_with_sql_dtypes_str = ", ".join(f"""\"{col}\" {type}""" for col,type in headers_to_sql_dtypes_dict.items())
         sql_create_stmt = f"""create table if not exists \"{self.sql_model}\" (\"{self.sql_idx}\" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' for _ in self.headers])})"""
-        self.sql_db_conn = sqlite3.connect(":memory:", uri=True, check_same_thread=False)
+        self.sql_db_conn = sqlite3.connect(":memory:", uri=True)
         self.sql_db_conn.execute(sql_create_stmt)
         self.sql_c = self.sql_db_conn.cursor()
         self._generate_header_master()
@@ -763,9 +763,14 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Get and save the current value
         min_width = sqldm.get_min_column_width()
-        print(min_width)  # Output: 6
+
+        # Output
+        print(min_width)  # 6
         ```
         """
         return self.min_column_width
@@ -781,8 +786,14 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Set a new minimum column width value
         sqldm.set_min_column_width(8)
+
+        # Check updated value
+        print(sqldm.get_min_column_width) # 8
         ```
         """
         self.min_column_width = width
@@ -798,9 +809,14 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Get the current max column width value
         max_width = sqldm.get_max_column_width()
-        print(max_width)  # Output: 32
+
+        # Output
+        print(max_width)  # 32
         ```
         """
         return self.max_column_width
@@ -816,7 +832,10 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Change the max column width for the table representation
         sqldm.set_max_column_width(20)
         ```
         """
@@ -827,15 +846,20 @@ class SQLDataModel:
         Returns the current `column_alignment` property value, `None` by default.
 
         Returns:
-            str: The current value of the `column_alignment` property.
+            - `str`: The current value of the `column_alignment` property.
 
         Example:
         ```python
         import SQLDataModel
 
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Get the current alignment value
         alignment = sqldm.get_column_alignment()
-        print(alignment)  # Output: None
+
+        # Output
+        print(alignment)  # None
         ```
         """
         return self.column_alignment
@@ -862,8 +886,41 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Set to right-align
+        sqldm.set_column_alignment('>')
+
+        # Output
+        print(sqldm)
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┬─────────┐
+        │   │  first │    last │    age │ service │
+        ├───┼────────┼─────────┼────────┼─────────┤
+        │ 0 │   john │   smith │     27 │    1.22 │
+        │ 1 │  sarah │    west │     39 │    0.70 │
+        │ 2 │   mike │  harlin │     36 │    3.00 │
+        │ 3 │    pat │ douglas │     42 │   11.50 │
+        └───┴────────┴─────────┴────────┴─────────┘        
+        ```
+        ```python
+        # Set to left-align
         sqldm.set_column_alignment('<')
+
+        # Output
+        print(sqldm)
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┬─────────┐
+        │   │ first  │ last    │ age    │ service │
+        ├───┼────────┼─────────┼────────┼─────────┤
+        │ 0 │ john   │ smith   │  27    │  1.22   │
+        │ 1 │ sarah  │ west    │  39    │  0.70   │
+        │ 2 │ mike   │ harlin  │  36    │  3.00   │
+        │ 3 │ pat    │ douglas │  42    │  11.50  │
+        └───┴────────┴─────────┴────────┴─────────┘        
         ```
         """
         if alignment is None:
@@ -882,15 +939,20 @@ class SQLDataModel:
         whether or not the `SQLDataModel` index will be shown in print or repr calls.
 
         Returns:
-            `bool`: The current value of the `display_index` property.
+            - `bool`: The current value of the `display_index` property.
 
         Example:
         ```python
         import SQLDataModel
 
+        # Create the model
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Get the current value for displaying the index
         display_index = sqldm.get_display_index()
-        print(display_index)  # Output: True
+
+        # Outputs `True`
+        print(display_index)
         ```
         """
         return self.display_index
@@ -926,7 +988,7 @@ class SQLDataModel:
         Returns the shape of the data as a tuple of `(rows x columns)`.
 
         Returns:
-            tuple[int]: A tuple representing the number of rows and columns in the SQLDataModel.
+            - `tuple[int]`: A tuple representing the number of rows and columns in the SQLDataModel.
 
         Example:
         ```python
@@ -1300,15 +1362,7 @@ class SQLDataModel:
     def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, **kwargs) -> SQLDataModel:
         """
         Create a `SQLDataModel` object by executing the provided SQL query using the specified SQL connection.
-
-        If a single word is provided as the `sql_query`, the method wraps it and executes a select all:
-        ```python
-        sqldm = SQLDataModel.from_sql("table_name", sqlite3.Connection)
-        ```
-        This is equivalent to:
-        ```python
-        sqldm = SQLDataModel.from_sql("select * from table_name", sqlite3.Connection)
-        ```
+        If a single word is provided as the `sql_query`, the method wraps it and executes a select all treating the text as the target table.
 
         Parameters:
             - `sql_query` (str): The SQL query to execute and create the SQLDataModel.
@@ -1322,6 +1376,19 @@ class SQLDataModel:
             - `WarnFormat`: If the provided SQL connection has not been tested, a warning is issued.
             - `SQLProgrammingError`: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
             - `DimensionError`: If the provided SQL query returns no data.
+
+        ---
+        Example:
+
+        ```python
+        import SQLDataModel
+
+        # Single word parameter
+        sqldm = SQLDataModel.from_sql("table_name", sqlite3.Connection)
+        
+        # Equilavent query executed
+        sqldm = SQLDataModel.from_sql("select * from table_name", sqlite3.Connection)
+        ```
 
         ---
         Example with sqlite3:
@@ -1778,7 +1845,7 @@ class SQLDataModel:
             - `include_ts` (bool, optional): If True, includes a timestamp in the file. Default is False.
 
         Returns:
-            None
+            - `None`
 
         Example:
         ```python
