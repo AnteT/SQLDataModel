@@ -25,8 +25,9 @@ try:
 except ModuleNotFoundError:
     _has_pd = False
 
-def create_placeholder_data(n_rows:int, n_cols:int) -> list[list]:
-    return [[f"value {i}" if i%2==0 else i**2 for i in range(n_cols-6)] + [3.1415, 'bit', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), True, '', None] for _ in range(n_rows)]
+###################################################################################################################################
+################### header master and row metadata targets for deletion after adjusting to use master dict only ###################
+###################################################################################################################################
 
 class SQLDataModel:
     """
@@ -93,7 +94,7 @@ class SQLDataModel:
     ### Notes
     use `SQLDM.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','max_out_of_bounds','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','headers_to_py_dtypes_dict','headers_to_sql_dtypes_dict','headers_with_sql_dtypes_str','sql_c','sql_db_conn','header_dtype_dict','header_idx_dtype_dict','display_float_precision')
+    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','max_out_of_bounds','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_c','sql_db_conn','display_float_precision','header_master')
 
     debug:bool=False
 
@@ -164,32 +165,33 @@ class SQLDataModel:
         headers = headers[dyn_idx_offset:]
         self.headers = headers
         self.column_count = len(self.headers)
-        self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'datetime': 'TIMESTAMP', 'NoneType':'NULL', 'bool':'INTEGER'}
-        self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'TIMESTAMP': 'datetime'}
-        self.headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
-        self.headers_to_sql_dtypes_dict = {k:self.static_py_to_sql_map_dict[v] for (k,v) in self.headers_to_py_dtypes_dict.items()}
-        self.headers_with_sql_dtypes_str = ", ".join(f"""\"{col}\" {type}""" for col,type in self.headers_to_sql_dtypes_dict.items())
-        sql_create_stmt = f"""create table if not exists \"{self.sql_model}\" (\"{self.sql_idx}\" INTEGER PRIMARY KEY,{self.headers_with_sql_dtypes_str})"""
+        self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
+        self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'TIMESTAMP': 'datetime','':'str'}
+        headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
+        headers_to_sql_dtypes_dict = {k:self.static_py_to_sql_map_dict[v] for (k,v) in headers_to_py_dtypes_dict.items()}
+        headers_with_sql_dtypes_str = ", ".join(f"""\"{col}\" {type}""" for col,type in headers_to_sql_dtypes_dict.items())
+        sql_create_stmt = f"""create table if not exists \"{self.sql_model}\" (\"{self.sql_idx}\" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' for _ in self.headers])})"""
-        self.sql_db_conn = sqlite3.connect(":memory:",uri=True)
+        self.sql_db_conn = sqlite3.connect(":memory:", uri=True, check_same_thread=False)
+        self.sql_db_conn.execute(sql_create_stmt)
         self.sql_c = self.sql_db_conn.cursor()
-        self.sql_c.execute(sql_create_stmt)
-        self.sql_db_conn.commit()
-        self._set_updated_sql_metadata()
+        self._generate_header_master()
         if not had_idx:
             first_row_insert_stmt = f"""insert into "{self.sql_model}" ({self.sql_idx},{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' for _ in self.headers])})"""
-            self.sql_c.execute(first_row_insert_stmt, (0,*data[0]))
+            try:
+                self.sql_db_conn.execute(first_row_insert_stmt, (0,*data[0]))
+            except sqlite3.ProgrammingError as e:
+                raise SQLProgrammingError(
+                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
+                ) from None                
             data = data[1:] # remove first row from remaining data
         try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                self.sql_c.executemany(sql_insert_stmt,data)
-            self.sql_db_conn.commit()
+            self.sql_db_conn.executemany(sql_insert_stmt,data)
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
-                ) from None
-
+            ) from None   
+                     
 ################################################################################################################
 ################################################ static methods ################################################
 ################################################################################################################
@@ -293,7 +295,7 @@ class SQLDataModel:
                 printf('%.{max_pad_width}s', printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',"{column}")) 
                 ELSE substr(printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',"{column}"),1,({max_pad_width})-2)||'⠤⠄'END """
             else:
-                float_int_discriminator = f"""printf('% .{float_precision}f',"{column}")""" if dtype == 'float' else f"""printf('% d',"{column}")""" if dtype == 'int' else f"\"{column}\""
+                float_int_discriminator = f"""printf('% .{float_precision}f',"{column}")""" if dtype == 'float' else f"""printf('% d',"{column}")""" if dtype == 'int' else f"""printf('%s',"{column}")"""
                 select_item_fmt = f"""CASE WHEN length({float_int_discriminator}) <= {max_pad_width} THEN
                 printf("%-{max_pad_width}.{max_pad_width}s", /* change minus operator before max_pad_width to favor right alignment when pad width is odd number, right now set to favor left side */
                 printf("%*s%s%*s", (({max_pad_width}-length({float_int_discriminator}))/2), "", {float_int_discriminator}, (({max_pad_width}-length({float_int_discriminator}))/2), ""))
@@ -418,7 +420,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
         self.headers[self.headers.index(column)] = new_column_name # replace old column with new column in same position as original column
-        self._set_updated_sql_metadata()
+        self._generate_header_master()
 
     def set_header_at_index(self, index:int, new_value:str) -> None:
         """
@@ -479,7 +481,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
         self.headers[index] = new_value # replace old column at specified index with new value to retain original column ordering
-        self._set_updated_sql_metadata()
+        self._generate_header_master()
 
     def get_headers(self) -> list[str]:
         """
@@ -553,7 +555,8 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
-        self._set_updated_sql_metadata()
+        self.headers = new_headers
+        self._generate_header_master()
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed all model columns'))
 
@@ -595,69 +598,103 @@ class SQLDataModel:
         self.set_headers(new_headers)
         return
 
-    def _set_updated_sql_row_metadata(self):
+    def _generate_header_master(self, update_row_meta:bool=False):
         """
-        Updates metadata related to the SQL data model, including minimum and maximum index values,
-        the total number of rows, and the upper bound index value, to update relevant properties after rows have been added or removed.
-
-        Attributes updated:
-            - `self.min_idx`: Minimum index value in the SQL model.
-            - `self.max_idx`: Maximum index value in the SQL model.
-            - `self.row_count`: Total number of rows in the SQL model.
-            - `self.max_out_of_bounds`: Upper bound index value, calculated as max_idx + 1.
-
-        Note: 
-            - This method assumes that the SQLDataModel instance has already established a connection to the
-              underlying SQL database (sql_db_conn) and has specified the relevant SQL index column (default idx) and
-              model table name (default sdm).
-        """        
-        rowmeta = self.sql_db_conn.execute(f""" select min({self.sql_idx}), max({self.sql_idx}), count({self.sql_idx}) from "{self.sql_model}" """).fetchone()
-        self.min_idx, self.max_idx, self.row_count = rowmeta
-        self.max_out_of_bounds = self.max_idx + 1
-
-    def _set_updated_sql_metadata(self, return_data:bool=False) -> tuple[list, dict, dict]:
-        """
-        Sets and optionally returns the header indices, names, and current SQL data types from the SQLite PRAGMA function to ensure all properties are correctly updated following modifications to the `SQLDataModel`.
+        Generates and updates metadata information about the columns and optionally the rows in the SQLDataModel instance based on the current model. 
 
         Parameters:
-            - `return_data` (bool, optional): If True, returns a tuple containing updated header indices, header names,
-            and header data types. Defaults to False.
-
-        Returns:
-            - `tuple`: If `return_data` is True, returns a tuple in the format (updated_headers, updated_header_dtypes,
-            updated_metadata_dict).
-
+            - `update_row_meta` (bool, optional): If True, updates row metadata information; otherwise, retrieves column metadata only (default).
+        
         Attributes updated:
-            - `self.headers`: List of header names in the SQL model.
-            - `self.column_count`: Total number of columns in the SQL model.
-            - `self.header_dtype_dict`: Dictionary mapping header names to their corresponding SQL data types.
-            - `self.headers_to_py_dtypes_dict`: Dictionary mapping header names to their corresponding Python data types.
-            - `self.headers_to_sql_dtypes_dict`: Dictionary mapping header names to their corresponding SQL data types.
-            - `self.header_idx_dtype_dict`: Dictionary mapping header indices to tuples containing header name and data type.
+            - `self.header_master`: Master dictionary of column metadata.
+            - `self.headers`: List of current model headers, order retained.
+            - `self.column_count`: Number of columns in current model.
+                - `self.min_idx`: Optionally updated, minimum valid model index.
+                - `self.max_idx`: Optionally updated, maximum valid model index.
+                - `self.row_count`: Optionally updated, represents current row count.
+            
+        Returns:
+            - `None`
+        
+        ---
 
-        Note: 
-            - This method assumes that the SQLDataModel instance has already established a connection to the
-              underlying SQL database (sql_db_conn) and has specified the relevant SQL index column (default idx),
-              model table name (default sdm), and a mapping of SQL data types to Python data types
-              (static_sql_to_py_map_dict).
-        """
-        meta = self.sql_db_conn.execute(f""" select cid,name,type from pragma_table_info('{self.sql_model}')""").fetchall()
+        Example Format:
+        ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age', 'service_time']
+        data = [
+            (0, 'john', 'smith', 27, 1.22),
+            (1, 'sarah', 'west', 39, 0.7),
+            (2, 'mike', 'harlin', 36, 3),
+            (3, 'pat', 'douglas', 42, 11.5)
+        ]
+
+        # Create the model with sample data
+        sdm = VF(data, headers)
+
+        # View header master
+        print(sdm.header_master)
+
+        # Output:
+        header_master = {
+            'first': ('TEXT', 'str', True, '<'),
+            'last': ('TEXT', 'str', True, '<'),
+            'age': ('INTEGER', 'int', True, '>'),
+            'service_time': ('REAL', 'float', True, '>'),
+            'idx': ('INTEGER', 'int', False, '>')
+        }
+        ```
         
-        ### retain ordering from prior columns ###
-        revised_headers = [h[1] for h in meta if h[0] > 0]
-        self.headers = list(dict.fromkeys([orig_col for orig_col in self.headers if orig_col in revised_headers] + revised_headers))
+        ---
+        Example Attributes Modified:
+
+        ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age', 'service_time']
+        data = [
+            (0, 'john', 'smith', 27, 1.22),
+            (1, 'sarah', 'west', 0.7),
+            (2, 'mike', 'harlin', 3),
+            (3, 'pat', 'douglas', 11.5)
+        ]
+
+        # Create the model with sample data
+        sdm = SQLDataModel(data, headers)
+
+        # Get current column count
+        num_cols_before = sdm.column_count
+
+        # Add new column
+        sdm['new_column'] = 'empty'
+
+        # Method is called behind the scenes
+        sdm._generate_header_master()
+
+        # Get new column count
+        num_cols_after = sdm.column_count
+
+        # View difference
+        print(f"cols before: {num_cols_before}, cols after: {num_cols_after}")
+        ```
+        """        
+        if update_row_meta:
+            fetch_metadata = f"""select "name","type","is_regular_column","alignment" from (
+                select '_rowmeta' as "name", min("{self.sql_idx}") as "type", max("{self.sql_idx}") as "is_regular_column", count("{self.sql_idx}") as "alignment" from "{self.sql_model}"
+                union all
+                select "name" as "name","type" as "type","pk" as "is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "alignment" from pragma_table_info('{self.sql_model}') 
+            ) order by "name"='_rowmeta' desc, {",".join([f"name=\"{col}\" desc" for col in self.headers])}"""
+        else:
+            fetch_metadata = f"""select "name" as "name","type" as "type","pk" as "is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f"name=\"{col}\" desc" for col in self.headers])}"""
+        metadata = self.sql_db_conn.execute(fetch_metadata)
+        if update_row_meta:
+            self.min_idx, self.max_idx, self.row_count = next(metadata)[1:]
+            self.max_out_of_bounds = self.max_idx + 1
+        header_master = {m[0]:(m[1], self.static_sql_to_py_map_dict[m[1]],True if m[2] == 0 else False,m[3]) for m in metadata}
+        self.headers = list(dict.fromkeys([k for k,v in header_master.items() if v[2]]))
         self.column_count = len(self.headers)
-        
-        ### retain ordering for dtype dict using ordered headers ###
-        revised_dtypes = {d[1]: d[2] for d in meta}
-        self.header_dtype_dict = {col:revised_dtypes[col] for col in self.headers}
-        
-        self.headers_to_py_dtypes_dict = {k:self.static_sql_to_py_map_dict[v] if v in self.static_sql_to_py_map_dict.keys() else "str" for (k,v) in self.header_dtype_dict.items() if k != self.sql_idx}
-        self.headers_to_sql_dtypes_dict = {k:"TEXT" if v=='str' else "INTEGER" if v=='int' else "REAL" if v=='float' else "TIMESTAMP" if v=='datetime' else "NULL" if v=='NoneType' else "BLOB" for (k,v) in self.headers_to_py_dtypes_dict.items()}
-        self.header_idx_dtype_dict = {(m[0]-1): (m[1], m[2]) for m in meta if m[1] != self.sql_idx}
-        
-        if return_data:
-            return (self.headers,self.header_dtype_dict,self.header_idx_dtype_dict) # format of {header_idx: (header_name, header_dtype)}
+        self.header_master = header_master # format: 'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')
 
     def get_max_rows(self) -> int:
         """
@@ -1705,11 +1742,9 @@ class SQLDataModel:
         - Unsupported connection objects will output a `SQLDataModelWarning` advising unstable or undefined behavior.
         """
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_index))
-        created_header_dict = self.header_dtype_dict.copy()
-        if include_index:
-            created_header_dict.update({self.sql_idx:"INTEGER PRIMARY KEY"})
         model_data = [x for x in self.sql_c.fetchall()] # using new process
         model_headers = [x[0] for x in self.sql_c.description]
+        created_header_dict = {col:self.header_master[col][0] for col in model_headers}
         try:
             extern_c = extern_conn.cursor()
         except Exception as e:
@@ -2211,11 +2246,12 @@ class SQLDataModel:
             - Set table color using `set_display_color()` method
         """        
         max_display_rows = self.row_count if self.row_count < self.max_rows else self.max_rows
-        max_rows_check = self.row_count if self.row_count < 10 else 10
+        max_rows_check = self.row_count if self.row_count < 12 else 12 # 12 makes sense to get possible second digit incrementation in values
         display_index = self.display_index
         display_headers = [self.sql_idx] + self.headers if display_index else self.headers
         headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
-        header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'% d\'' if dtype == 'int' else '\'%!s\'') for col,dtype in self.headers_to_py_dtypes_dict.items()}
+        header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
+        header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'% d\'' if dtype == 'int' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
         headers_select_length = f"""{headers_select_length} {",".join([f"case when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) end as '{col}'" for col in self.headers])} from("""
         headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" limit {max_display_rows})) "{self.sql_idx}", """ if display_index else """select """
         headers_sub_select = f"""{headers_sub_select} {",".join([f"\"{col}\"" for col in display_headers])} from \"{self.sql_model}\" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
@@ -2253,13 +2289,13 @@ class SQLDataModel:
             table_dynamic_newline = """\n"""
         vconcat_column_separator = """|| ' │ ' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if display_index else ""
-        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,self.headers_to_py_dtypes_dict[col],header_length_dict[col],self.display_float_precision,alignment=self.column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=self.column_alignment)}""" for col in display_headers if col != self.sql_idx])
         fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "full_row" from "{self.sql_model}" limit {self.max_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if self.column_alignment is None:
-            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if self.headers_to_py_dtypes_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers] # self.headers_to_py_dtypes_dict[col],header_length_dict[col]
+            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
         else:
-            formatted_headers = [(f"""{col:{self.column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers] # self.headers_to_py_dtypes_dict[col],header_length_dict[col]
+            formatted_headers = [(f"""{col:{self.column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
         table_cross_bar = """┌─""" + """─┬─""".join(["""─""" * header_length_dict[col] for col in display_headers]) + """─┐""" + table_bare_newline
         table_repr = "".join([table_repr, table_cross_bar])
         table_repr = "".join([table_repr, table_left_edge + """ │ """.join(formatted_headers) + table_right_edge + table_dynamic_newline])
@@ -2273,14 +2309,14 @@ class SQLDataModel:
 ############################################## sqldatamodel methods ##############################################
 ##################################################################################################################
 
-    def iter_rows(self, min_row:int=None, max_row:int=None, include_index:bool=False, include_headers:bool=False) -> Generator:
+    def iter_rows(self, min_row:int=None, max_row:int=None, include_index:bool=True, include_headers:bool=False) -> Generator:
         """
         Returns a generator object of the rows in the model from `min_row` to `max_row`.
 
         Parameters:
             - `min_row` (int, optional): The minimum row index to start iterating from (inclusive). Defaults to None.
-            - `max_row` (int, optional): The maximum row index to iterate up to (inclusive). Defaults to None.
-            - `include_index` (bool, optional): Whether to include the row index in the output. Defaults to False.
+            - `max_row` (int, optional): The maximum row index to iterate up to (exclusive). Defaults to None.
+            - `include_index` (bool, optional): Whether to include the row index in the output. Defaults to True.
             - `include_headers` (bool, optional): Whether to include headers as the first row. Defaults to False.
 
         Yields:
@@ -2296,10 +2332,10 @@ class SQLDataModel:
         ```
         """
         min_row, max_row = min_row if min_row is not None else self.min_idx, max_row if max_row is not None else self.row_count
-        self.sql_c.execute(self._generate_sql_stmt(include_index=include_index, rows=slice(min_row,max_row)))
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index, rows=slice(min_row,max_row)))
         if include_headers:
-            yield tuple([x[0] for x in self.sql_c.description])
-        yield from (x for x in self.sql_c.fetchall())
+            yield tuple(x[0] for x in res.description)
+        yield from (res)
     
     def iter_tuples(self, include_idx_col:bool=False) -> Generator:
         """
@@ -2618,7 +2654,7 @@ class SQLDataModel:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
-        return self.headers_to_py_dtypes_dict[column]
+        return self.header_master[column][1]
 
     def set_column_dtype(self, column:str|int, dtype:Literal['bytes','datetime','float','int','str']) -> None:
         """
@@ -2786,8 +2822,7 @@ class SQLDataModel:
             sql_stmt = f"""delete from "{self.sql_model}" where rowid not in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
             self.sql_c.execute(sql_stmt)
             self.sql_db_conn.commit()
-            self._set_updated_sql_metadata()
-            self._set_updated_sql_row_metadata()
+            self._generate_header_master(update_row_meta=True)
             return
         else:
             sql_stmt = f"""select * from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
@@ -2961,7 +2996,7 @@ class SQLDataModel:
         try:
             self.sql_c.execute(sql_query)
             self.sql_db_conn.commit()
-            self._set_updated_sql_metadata()
+            self._generate_header_master(update_row_meta=True)
             if SQLDataModel.debug:
                 print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0} rows modified'))
         except Exception as e:
@@ -3002,7 +3037,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to execute provided transaction, SQL execution failed with: "{e}"')
             ) from None
-        self._set_updated_sql_metadata()        
+        self._generate_header_master(update_row_meta=True)        
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified')  )
 
@@ -3034,7 +3069,7 @@ class SQLDataModel:
         """
         create_col_stmt = f"""alter table {self.sql_model} add column \"{column_name}\""""
         if (value is not None) and (value in self.headers):
-            dyn_dtype_default_value = f"""{self.headers_to_sql_dtypes_dict[value]}"""
+            dyn_dtype_default_value = f"""{self.header_master[value][0]}"""
             dyn_copy_existing = f"""update {self.sql_model} set \"{column_name}\" = \"{value}\";"""
             sql_script = f"""{create_col_stmt} {dyn_dtype_default_value};{dyn_copy_existing};"""
             self.execute_transaction(sql_script)
@@ -3142,7 +3177,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to apply function, SQL execution failed with: {e}')
             ) from None
-        self._set_updated_sql_metadata()
+        self._generate_header_master()
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: applied function "{func_name}()" to current model')        )
 
@@ -3171,7 +3206,7 @@ class SQLDataModel:
             return
         ```
         """
-        func_signature = ", ".join([f"""{k.replace(" ","_")}:{v}""" for k,v in self.headers_to_py_dtypes_dict.items() if k != self.sql_idx])
+        func_signature = ", ".join([f"""{k.replace(" ","_")}:{v[1]}""" for k,v in self.header_master.items() if k != self.sql_idx])
         return f"""def func({func_signature}):\n    # apply logic and return value\n    return"""
     
     def insert_row(self, values:list|tuple=None) -> None:
@@ -3227,8 +3262,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
             ) from None
-        self._set_updated_sql_row_metadata()
-        self._set_updated_sql_metadata()        
+        self._generate_header_master(update_row_meta=True)        
 
     def update_index_at(self, row_index:int, column_index:int|str, value=None) -> None:
         """
@@ -3310,7 +3344,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
             ) from None
-        self._set_updated_sql_metadata()        
+        self._generate_header_master()        
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified'))
 
@@ -3486,7 +3520,6 @@ class SQLDataModel:
                 update_sql_script += f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
             # print(f'final update script generated:\n{update_sql_script}')
             self.execute_transaction(update_sql_script)
-            self._set_updated_sql_metadata()
             return            
         if num_rows_to_update != num_value_rows_to_update:
             raise DimensionError(
@@ -3498,7 +3531,6 @@ class SQLDataModel:
             )
         if update_sql_script is not None:
             self.execute_transaction(update_sql_script)
-            self._set_updated_sql_metadata()
         col_val_param = ','.join([f""" "{column}" = ? """ for column in columns_to_update]) 
         update_stmt = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} = ?"""
         update_params = [(*values_to_update[i], row) for i,row in enumerate(rows_to_update)]
@@ -3509,7 +3541,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with \"{e}\"")
             ) from None
-        self._set_updated_sql_metadata()
+        self._generate_header_master()
         return
 
     def _generate_sql_fetch_for_joining_tables(self, base_headers:list[str], join_table:str, join_column:str, join_headers:list[str], join_type:str='left') -> str:
@@ -3546,7 +3578,8 @@ class SQLDataModel:
         print(sql_stmt)
         ```
         """
-        base_headers_str = ",".join([f"""a.\"{v[0]}\" as \"{v[0]}\"""" for v in self.header_idx_dtype_dict.values() if v[0] in base_headers])
+        # base_headers_str = ",".join([f"""a.\"{v[0]}\" as \"{v[0]}\"""" for v in self.header_idx_dtype_dict.values() if v[0] in base_headers])
+        base_headers_str = ",".join([f"""a.\"{col}\" as \"{col}\"""" for col in base_headers])
         join_headers_str = ",".join([f"""b.\"{col}\" as \"{col}\" """ for col in join_headers])
         join_type_str = "left join" if join_type == 'left' else 'left outer join'
         join_predicate_str = f"""from {self.sql_model} a {join_type_str} \"{join_table}\" b on a.\"{join_column}\" = b.\"{join_column}\" """
