@@ -1,5 +1,5 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, re, shutil
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime
 from typing import Generator, Callable, Literal, Iterator
 from collections import namedtuple
 from pathlib import Path
@@ -92,7 +92,7 @@ class SQLDataModel:
     ### Notes
     use `SQLDM.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','max_out_of_bounds','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_c','sql_db_conn','display_float_precision','header_master')
+    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_c','sql_db_conn','display_float_precision','header_master')
     debug:bool=False
     def __init__(self, data:list[list], headers:list[str]=None, max_rows:int=1_000, min_column_width:int=6, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
         if not isinstance(data, list|tuple):
@@ -156,24 +156,23 @@ class SQLDataModel:
         had_idx = True if headers[0] == self.sql_idx else False
         self.min_idx = min([row[0] for row in data]) if had_idx else 0
         self.max_idx = max([row[0] for row in data]) if had_idx else (self.row_count -1) # since indexing starts at zero now, these are the lower and upper bound indicies
-        self.max_out_of_bounds = self.max_idx + 1 # to upper bound for sql statement generation while retaining conventional slicing methods
         dyn_idx_offset,dyn_idx_bind,dyn_add_idx_insert = (1, "?,", f'"{self.sql_idx}",') if had_idx else (0, "", "")
         headers = headers[dyn_idx_offset:]
         self.headers = headers
         self.column_count = len(self.headers)
-        self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
-        self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'TIMESTAMP': 'datetime','':'str'}
+        self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
+        self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
         headers_to_sql_dtypes_dict = {k:self.static_py_to_sql_map_dict[v] for (k,v) in headers_to_py_dtypes_dict.items()}
         headers_with_sql_dtypes_str = ",".join(f'"{col}" {type}' for col,type in headers_to_sql_dtypes_dict.items())
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
-        sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' for _ in self.headers])})"""
-        self.sql_db_conn = sqlite3.connect(":memory:", uri=True)
+        sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
+        self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         self.sql_db_conn.execute(sql_create_stmt)
         self.sql_c = self.sql_db_conn.cursor()
-        self._generate_header_master()
+        self._update_model_metadata()
         if not had_idx:
-            first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' for _ in self.headers])})"""
+            first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
             try:
                 self.sql_db_conn.execute(first_row_insert_stmt, (0,*data[0]))
             except sqlite3.ProgrammingError as e:
@@ -418,7 +417,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
         self.headers[self.headers.index(column)] = new_column_name # replace old column with new column in same position as original column
-        self._generate_header_master()
+        self._update_model_metadata()
 
     def set_header_at_index(self, index:int, new_value:str) -> None:
         """
@@ -479,7 +478,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
         self.headers[index] = new_value # replace old column at specified index with new value to retain original column ordering
-        self._generate_header_master()
+        self._update_model_metadata()
 
     def get_headers(self) -> list[str]:
         """
@@ -554,7 +553,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
             ) from None
         self.headers = new_headers
-        self._generate_header_master()
+        self._update_model_metadata()
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed all model columns'))
 
@@ -1057,12 +1056,13 @@ class SQLDataModel:
         return cls([[fill_value for _ in range(n_cols)] for _ in range(n_rows)])
         
     @classmethod
-    def from_csv(cls, csv_file:str, delimeter:str=',', quotechar:str='"', headers:list[str] = None, **kwargs) -> SQLDataModel:
+    def from_csv(cls, csv_file:str, encoding:str="Latin1", delimeter:str=',', quotechar:str='"', headers:list[str] = None, **kwargs) -> SQLDataModel:
         """
         Returns a new `SQLDataModel` from the provided CSV file.
 
         Parameters:
             - `csv_file` (str): The path to the CSV file.
+            - `encoding` (str, optional): The encoding used to decode the CSV file. Default is 'Latin1'.
             - `delimiter` (str, optional): The delimiter used in the CSV file. Default is ','.
             - `quotechar` (str, optional): The character used for quoting fields. Default is '"'.
             - `headers` (list[str], optional): List of column headers. If None, the first row of the CSV file is assumed to contain headers.
@@ -1075,11 +1075,15 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+        # CSV file to import
+        csvfile = "/user/home/example.csv"
+
+        # Create the model using  the file
+        sdm = SQLDataModel.from_csv(csvfile, headers=['ID', 'Name', 'Value'])
         ```
         """
-        with open(csv_file) as csvfile:
-            tmp_all_rows = tuple(list(row) for row in csv.reader(csvfile, delimiter=delimeter,quotechar=quotechar))
+        with open(csv_file, encoding=encoding) as csvfile:
+            tmp_all_rows = tuple(list(row) for row in csv.reader(csvfile,delimiter=delimeter,quotechar=quotechar))
         return cls(tmp_all_rows[1:],tmp_all_rows[0] if headers is None else headers, **kwargs)   
     
     @classmethod
@@ -2129,7 +2133,7 @@ class SQLDataModel:
             - This iterator fetches rows from the `SQLDataModel` using a SQL statement generated
             by the `_generate_sql_stmt()` method.
             - The iteration starts from the 'min_idx' value and continues until
-            'max_out_of_bounds' is reached.
+            'self.max_idx + 1' is reached.
         
         Raises:
             - `StopIteration` when there are no more rows to return.
@@ -2142,12 +2146,8 @@ class SQLDataModel:
         for row in sqldm:
             print(row)
         ```
-        """        
-        iter_idx = self.min_idx
-        self.sql_c.execute(self._generate_sql_stmt(include_index=True, rows=slice(iter_idx,None)))
-        while iter_idx < self.max_out_of_bounds:
-            yield from (x for x in self.sql_c.fetchall())
-            iter_idx += 1
+        """  
+        yield from (self.sql_db_conn.execute(self._generate_sql_stmt(include_index=True, rows=slice(self.min_idx,None))))
 
     def __getitem__(self, slc) -> SQLDataModel:
         """
@@ -2234,9 +2234,9 @@ class SQLDataModel:
         # first check if target is new column that needs to be created, if so create it and return so long as the target values aren't another sqldatamodel object:
         if isinstance(update_values, SQLDataModel):
             update_values = update_values.data() # normalize data input
-        if not isinstance(update_values, str|int|float|bool|bytes|list|tuple) and (update_values is not None):
+        if not isinstance(update_values, str|int|float|bool|bytes|list|tuple|datetime.date) and (update_values is not None):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid values type '{type(update_values).__name__}', update values must be compatible with SQL datatypes such as <'str', 'int', 'float', 'bool', 'bytes'>")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid values type '{type(update_values).__name__}', update values must be compatible with SQL datatypes such as <'str', 'int', 'float', 'datetime', 'bool', 'bytes'>")
             )
         # normal update values process where target update values is not another SQLDataModel object:
         try:
@@ -2732,7 +2732,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"""SQLProgrammingError: reset index error, execution failed with: "{e}" """)
             ) from None
-        self._generate_header_master(update_row_meta=True)
+        self._update_model_metadata(update_row_meta=True)
 
 ##############################################################################################################
 ################################################ sql commands ################################################
@@ -3066,7 +3066,7 @@ class SQLDataModel:
             sql_stmt = f"""delete from "{self.sql_model}" where rowid not in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
             self.sql_c.execute(sql_stmt)
             self.sql_db_conn.commit()
-            self._generate_header_master(update_row_meta=True)
+            self._update_model_metadata(update_row_meta=True)
             return
         else:
             sql_stmt = f"""select * from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
@@ -3240,7 +3240,7 @@ class SQLDataModel:
         try:
             self.sql_c.execute(sql_query)
             self.sql_db_conn.commit()
-            self._generate_header_master(update_row_meta=True)
+            self._update_model_metadata(update_row_meta=True)
             if SQLDataModel.debug:
                 print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {self.sql_c.rowcount if self.sql_c.rowcount >= 0 else 0} rows modified'))
         except Exception as e:
@@ -3281,7 +3281,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to execute provided transaction, SQL execution failed with: "{e}"')
             ) from None
-        self._generate_header_master(update_row_meta=True)        
+        self._update_model_metadata(update_row_meta=True)        
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified')  )
 
@@ -3311,10 +3311,10 @@ class SQLDataModel:
         sqldm.add_column_with_values('new_column', value='existing_column')
         ```
         """
-        create_col_stmt = f"""alter table {self.sql_model} add column \"{column_name}\""""
+        create_col_stmt = f"""alter table "{self.sql_model}" add column "{column_name}" """
         if (value is not None) and (value in self.headers):
             dyn_dtype_default_value = f"""{self.header_master[value][0]}"""
-            dyn_copy_existing = f"""update {self.sql_model} set \"{column_name}\" = \"{value}\";"""
+            dyn_copy_existing = f"""update "{self.sql_model}" set "{column_name}" = "{value}";"""
             sql_script = f"""{create_col_stmt} {dyn_dtype_default_value};{dyn_copy_existing};"""
             self.execute_transaction(sql_script)
             return
@@ -3328,6 +3328,13 @@ class SQLDataModel:
             sql_script = f"""{create_col_stmt} {dyn_dtype_default_value};"""
             self.execute_transaction(sql_script)
             return
+        if isinstance(value, datetime.date):
+            dyn_dtype_default_value = f"""{self.static_py_to_sql_map_dict[type(value).__name__]}"""
+            create_col_stmt = f"""{create_col_stmt} {dyn_dtype_default_value};"""
+            update_val_stmt = f"""update "{self.sql_model}" set "{column_name}" = {f"datetime('{value}')" if isinstance(value, datetime.datetime) else f"date('{value}')"};"""
+            sql_script = f"""{create_col_stmt} {update_val_stmt}"""
+            self.execute_transaction(sql_script)
+            return                
         if isinstance(value, list|tuple):
             if (len_values := len(value)) != self.row_count:
                 raise DimensionError(
@@ -3342,8 +3349,7 @@ class SQLDataModel:
             sql_script = f"""{create_col_stmt} {seq_dtype};"""
             all_model_idxs = tuple(range(self.min_idx, self.max_idx+1)) # plus 1 otherwise range excludes last item and out of range error is triggered during for loop below
             for i,val in enumerate(value):
-                sql_script += f"""update {self.sql_model} set \"{column_name}\" = \"{val}\" where {self.sql_idx} = {all_model_idxs[i]};"""
-            print(sql_script)
+                sql_script += f"""update {self.sql_model} set "{column_name}" = "{val}" where {self.sql_idx} = {all_model_idxs[i]};"""
             self.execute_transaction(sql_script)
             return
 
@@ -3421,7 +3427,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to apply function, SQL execution failed with: {e}')
             ) from None
-        self._generate_header_master()
+        self._update_model_metadata()
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: applied function "{func_name}()" to current model')        )
 
@@ -3496,7 +3502,7 @@ class SQLDataModel:
         else:
             values = tuple(None for _ in range(self.column_count))
         insert_cols = ",".join([f'"{col}"' for col in self.headers])
-        insert_vals = ",".join(["?" for _ in values])
+        insert_vals = ",".join(["?" if not isinstance(val,datetime.date) else "datetime(?)" if isinstance(val, datetime.datetime) else "date(?)" for val in values])
         insert_stmt = f"""insert into {self.sql_model}({insert_cols}) values ({insert_vals})"""
         try:
             self.sql_c.execute(insert_stmt, values)
@@ -3506,7 +3512,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: "{e}"')
             ) from None
-        self._generate_header_master(update_row_meta=True)        
+        self._update_model_metadata(update_row_meta=True)        
 
     def update_index_at(self, row_index:int, column_index:int|str, value=None) -> None:
         """
@@ -3560,7 +3566,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
             )
         if row_index < 0:
-            row_index = self.max_out_of_bounds + row_index
+            row_index = (self.max_idx + 1) + row_index
         if row_index < self.min_idx or row_index > self.max_idx:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', provided row index is outisde of current model range '{self.min_idx}:{self.max_idx}'")
@@ -3574,11 +3580,17 @@ class SQLDataModel:
                 ) from None
         if column_index not in self.headers:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid column name '{column_index}', use `.get_headers()` to view current valid model headers")
+                SQLDataModel.ErrorFormat(f"ValueError: column not found '{column_index}', use `.get_headers()` to view current valid model headers")
             )
-        update_stmt = f"""update \"{self.sql_model}\" set {column_index} = ? where {self.sql_idx} = {row_index}"""
         if not isinstance(value,tuple):
             value = (value,)
+        if isinstance(value[0], datetime.datetime):
+            val_binding = "datetime(?)"
+        elif isinstance(value[0], datetime.date):
+            val_binding = "date(?)"
+        else:
+            val_binding = "?"
+        update_stmt = f"""update "{self.sql_model}" set "{column_index}" = {val_binding} where "{self.sql_idx}" = {row_index}"""
         try:
             self.sql_c.execute(update_stmt, value)
             self.sql_db_conn.commit()
@@ -3588,11 +3600,11 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
             ) from None
-        self._generate_header_master()        
+        self._update_model_metadata()        
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Executed SQL, provided query executed with {rows_modified} rows modified'))
 
-    def _generate_header_master(self, update_row_meta:bool=False):
+    def _update_model_metadata(self, update_row_meta:bool=False):
         """
         Generates and updates metadata information about the columns and optionally the rows in the SQLDataModel instance based on the current model. 
 
@@ -3664,7 +3676,7 @@ class SQLDataModel:
         sdm['new_column'] = 'empty'
 
         # Method is called behind the scenes
-        sdm._generate_header_master()
+        sdm._update_model_metadata()
 
         # Get new column count
         num_cols_after = sdm.column_count
@@ -3684,7 +3696,6 @@ class SQLDataModel:
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
         if update_row_meta:
             self.min_idx, self.max_idx, self.row_count = metadata[0][1:]
-            self.max_out_of_bounds = self.max_idx + 1
             metadata = metadata[1:]
         header_master = {m[0]:(m[1], self.static_sql_to_py_map_dict[m[1]],True if m[2] == 0 else False,m[3]) for m in metadata}
         self.headers = list(dict.fromkeys([k for k,v in header_master.items() if v[2]]))
@@ -3773,13 +3784,13 @@ class SQLDataModel:
         headers_str = ",".join([f'"{col}"' for col in columns])
         if isinstance(rows, slice):
             min_row = rows.start if rows.start is not None else self.min_idx
-            max_row = rows.stop if rows.stop is not None else self.max_out_of_bounds
+            max_row = rows.stop if rows.stop is not None else (self.max_idx + 1)
             rows_str = f"where {self.sql_idx} >= {min_row} and {self.sql_idx} < {max_row}"
         elif isinstance(rows, tuple):
             rows_str = f"where {self.sql_idx} in {rows}" if len(rows) > 1 else f"where {self.sql_idx} in ({rows[0]})"
         elif isinstance(rows, int):
             if rows < 0:
-                rows = self.max_out_of_bounds + rows
+                rows = (self.max_idx + 1) + rows
             rows_str = f"where {self.sql_idx} = {rows}"
         else:
             rows_str = ""
@@ -3855,7 +3866,7 @@ class SQLDataModel:
             update_sql_script = f"""alter table "{self.sql_model}" add column "{new_column}" {new_column_sql_dtype};"""
         if not rowwise_update:
             values_to_update = values_to_update[0][0]
-            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes) else f"'{values_to_update}'" if not isinstance(values_to_update,bytes) else f"""'{values_to_update.decode('utf-8')}'"""
+            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes|datetime.date) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"'{values_to_update}'" if not isinstance(values_to_update,bytes) else f"""'{values_to_update.decode('utf-8')}'"""
             col_val_param = ','.join([f""" "{column}" = {values_to_update} """ for column in columns_to_update]) 
             if update_sql_script is None:
                 update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
@@ -3884,7 +3895,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with \"{e}\"")
             ) from None
-        self._generate_header_master()
+        self._update_model_metadata()
         return
 
     def _generate_sql_fetch_for_joining_tables(self, base_headers:list[str], join_table:str, join_column:str, join_headers:list[str], join_type:str='left') -> str:
@@ -4024,26 +4035,26 @@ class SQLDataModel:
         if isinstance(indicies, int):
             row_index = indicies
             if row_index < 0:
-                row_index = self.max_out_of_bounds + row_index
+                row_index = (self.max_idx + 1) + row_index
             if row_index < self.min_idx:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '{self.min_idx}:{self.max_idx}'")
                 )
             if row_index > self.max_idx:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '{self.min_idx}:{self.max_idx}'")
                 )
             return (row_index, self.headers)
         ### single row slice index ###
         if isinstance(indicies, slice):
             row_slice = indicies
             start_idx = row_slice.start if row_slice.start is not None else self.min_idx
-            stop_idx = row_slice.stop if row_slice.stop is not None else self.max_out_of_bounds
+            stop_idx = row_slice.stop if row_slice.stop is not None else (self.max_idx + 1)
             if start_idx < self.min_idx:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
-            if stop_idx > self.max_out_of_bounds:
+            if stop_idx > (self.max_idx + 1):
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )                
@@ -4062,7 +4073,7 @@ class SQLDataModel:
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: '{col}' is not one of the current model headers, use `.get_headers()` method to view current valid headers...")
                     )
-            return (slice(self.min_idx,self.max_out_of_bounds), col_index)
+            return (slice(self.min_idx,(self.max_idx + 1)), col_index)
         ### indexing by rows and columns ###        
         if not isinstance(indicies, tuple):
             raise TypeError(
@@ -4080,12 +4091,12 @@ class SQLDataModel:
             )
         if isinstance(row_indicies, int):
             if row_indicies < 0:
-                row_indicies = self.max_out_of_bounds + row_indicies
+                row_indicies = (self.max_idx + 1) + row_indicies
             if row_indicies < self.min_idx:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
-            if row_indicies > self.max_out_of_bounds:
+            if row_indicies > (self.max_idx + 1):
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '{self.min_idx}:{self.max_idx}'...")
                 )
@@ -4107,12 +4118,12 @@ class SQLDataModel:
             validated_row_indicies = row_indicies
         else: # is slice
             start_idx = row_indicies.start if row_indicies.start is not None else self.min_idx
-            stop_idx = row_indicies.stop if row_indicies.stop is not None else self.max_out_of_bounds
+            stop_idx = row_indicies.stop if row_indicies.stop is not None else (self.max_idx + 1)
             if start_idx < self.min_idx:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )
-            if stop_idx > self.max_out_of_bounds:
+            if stop_idx > (self.max_idx + 1):
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: provided row index '{stop_idx}' outside of current model range '{self.min_idx}:{self.max_idx}'")
                 )    
