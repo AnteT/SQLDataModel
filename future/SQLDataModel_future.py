@@ -982,6 +982,134 @@ class SQLDataModel:
             )
         self.display_float_precision = float_precision
         
+    def describe_str(self, ignore_null_like:bool=False, **kwargs) -> SQLDataModel:
+        """
+        Generates descriptive statistics for string columns in the `SQLDataModel` instance. Statistics generated include count, unique count, top value, and frequency
+        for each string column in the SQLDataModel
+
+        Parameters:
+            - `ignore_null_like` (bool) : Determines whether null like values such as empty strings or 'NA' are counted. Default is `False`
+            - `**kwargs`: Additional keyword arguments to be passed to the `fetch_query` method.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing descriptive statistics for string columns.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create the model
+        sdm = SQLDataModel.from_csv('example.csv', headers=['first_name', 'last_name', 'city', 'state'])
+
+        # Call the method to generate statistics
+        str_stats = sdm.describe_str()
+
+        # View descriptive statistics for string columns
+        print(str_stats)
+
+        # Output
+        ```
+        ```shell
+        ┌────────┬────────────┬───────────┬─────────┬────────┐
+        │ metric │ first_name │ last_name │    city │  state │
+        ├────────┼────────────┼───────────┼─────────┼────────┤
+        │ count  │       1000 │      1000 │    1000 │   1000 │
+        │ unique │        521 │       897 │     753 │     47 │
+        │ top    │       John │     Smith │ Calgary │     NY │
+        │ freq   │         31 │         8 │       9 │    107 │
+        └────────┴────────────┴───────────┴─────────┴────────┘
+        [4 rows x 5 columns]
+        ```
+        Notes:
+            - Only non-null values are counted in each column unless `ignore_null_like` set to `True`
+            - Ties in unique, top and freq columns are broken arbitrarily
+        
+        """        
+        str_cols = [col for col in self.headers if self.header_master[col][1] == 'str']
+        headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in str_cols]
+        headers_select = """ "'metric'" as "metric",""" + ",".join(headers_select_literal)
+        headers_sub_literal = [f"'{col}'" for col in str_cols]
+        headers_subselect = " select 'metric'," + ",".join(headers_sub_literal)
+        count_subselect = "select 'count'," + ",".join([f""" count("{col}") """ for col in str_cols]) + f"""from "{self.sql_model}" """
+        unique_subselect = "select 'unique'," + ",".join([f""" count(distinct "{col}") """ for col in str_cols]) + f"""from "{self.sql_model}" """
+        top_subselect = "select 'top'," + ",".join([f"""(select max("{col}") from "{self.sql_model}" group by "{col}" order by count(*) desc limit 1) """ if not ignore_null_like else f"""(select max("{col}") from "{self.sql_model}" where "{col}" not in (' ', '', 'NA') group by "{col}" order by count(*) desc limit 1) """ for col in str_cols])
+        freq_subselect = "select 'freq'," + ",".join([f"""(select count("{col}") from "{self.sql_model}" group by "{col}" order by count(*) desc limit 1) """ if not ignore_null_like else f"""(select count("{col}") from "{self.sql_model}" where "{col}" not in (' ', '', 'NA') group by "{col}" order by count(*) desc limit 1) """ for col in str_cols])
+        full_script = f"""select {headers_select}
+        from ({headers_subselect} UNION ALL {count_subselect} UNION ALL {unique_subselect} UNION ALL {top_subselect} UNION ALL {freq_subselect})
+        limit -1 offset 1"""
+        return self.fetch_query(full_script, **kwargs)
+
+    def describe_numeric(self, **kwargs) -> SQLDataModel:
+        """
+        Generates descriptive statistics for numeric columns in the `SQLDataModel` instance. Statistics generated include count, mean, standard deviation (uncorrected sample standard deviation), minimum,
+        quartiles (25th, 50th, 75th percentiles), and maximum for each numeric column in the SQLDataModel.
+
+        Parameters:
+            - `**kwargs`: Additional keyword arguments to be passed to the `fetch_query` method.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing descriptive statistics for numeric columns.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create the model
+        sdm = SQLDataModel.from_csv('example.csv', headers=['name', 'date', 'email', 'country', 'pin', 'service_years', 'id'])
+
+        # Call the method to generate statistics
+        numeric_stats = sdm.describe_numeric()
+
+        # View descriptive statistics for numeric columns
+        print(numeric_stats)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬────────┬────────┬───────────────┐
+        │   │ metric │    pin │ service_years │
+        ├───┼────────┼────────┼───────────────┤
+        │ 0 │ count  │     13 │            13 │
+        │ 1 │ mean   │   3922 │          4.18 │
+        │ 2 │ std    │   2713 │          0.83 │
+        │ 3 │ min    │   1175 │          2.73 │
+        │ 4 │ p25    │   1593 │          3.81 │
+        │ 5 │ p50    │   3278 │          4.58 │
+        │ 6 │ p75    │   4962 │          4.61 │
+        │ 7 │ max    │   9396 │          5.34 │
+        └───┴────────┴────────┴───────────────┘
+        [8 rows x 3 columns]
+        ```
+        Notes:
+            - Floating point precision determined by `display_float_precision` attribute
+            - Standard deviation is calculated using uncorrected sample standard deviation
+            - Ties encountered when binning for p25, p50, p75 will favor lower bins for data that cannot be quartered cleanly
+            - Counts for count, min, p25, p50, p75 and max include non-null values only
+            - Generally, do not rely on `SQLDataModel` to do statistics, use `NumPy` or a real library instead
+        """        
+        # TODO move finalized sqlite stdev function as toplevel import
+        from SQLDataModel.StandardDeviation import StandardDeviation
+        self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
+        numeric_cols = [col for col in self.headers if self.header_master[col][1] in ('float','int')]
+        pcte_stmt = f"""with pcte as (select {','.join([f'"{col}",ntile(4) over (order by "{col}") as "p{col}"' for col in numeric_cols])} from "{self.sql_model}")"""
+        headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in numeric_cols]
+        headers_select = """ "'metric'" as "metric",""" + ",".join(headers_select_literal)
+        headers_sub_literal = [f"'{col}'" for col in numeric_cols]
+        headers_subselect = " select 'metric'," + ",".join(headers_sub_literal)
+        count_subselect = "select 'count'," + ",".join([f""" count("{col}") """ for col in numeric_cols]) + f"""from "{self.sql_model}" """
+        mean_subselect = "select 'mean'," + ",".join([f"""round(avg("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] == 'float' else f"""printf('%d',avg("{col}"))""" for col in numeric_cols]) + f"""from "{self.sql_model}" """
+        std_subselect = "select 'std'," + ",".join([f"""round(stdev("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] == 'float' else f"""printf('%d',stdev("{col}"))""" for col in numeric_cols]) + f"""from "{self.sql_model}" """
+        min_subselect = "select 'min'," + ",".join([f"""round(min("{col}"),{self.display_float_precision}) """ for col in numeric_cols]) + f"""from "{self.sql_model}" """
+        p25_subselect = "select 'p25'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max25{col}" from pcte where "p{col}" = 1 group by "p{col}") as "p25{col}" """ for col in numeric_cols])
+        p50_subselect = "select 'p50'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max50{col}" from pcte where "p{col}" = 2 group by "p{col}") as "p50{col}" """ for col in numeric_cols])
+        p75_subselect = "select 'p75'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max75{col}" from pcte where "p{col}" = 3 group by "p{col}") as "p75{col}" """ for col in numeric_cols])
+        max_subselect = "select 'max'," + ",".join([f"""round(max("{col}"),{self.display_float_precision}) """ for col in numeric_cols]) + f"""from "{self.sql_model}" """
+        full_script = f"""{pcte_stmt} 
+        select {headers_select}
+        from ({headers_subselect} UNION ALL {count_subselect} UNION ALL {mean_subselect} UNION ALL {std_subselect} UNION ALL {min_subselect} UNION ALL {p25_subselect} UNION ALL {p50_subselect} UNION ALL {p75_subselect} UNION ALL {max_subselect})
+        limit -1 offset 1"""
+        return self.fetch_query(full_script,**kwargs)
+
 #############################################################################################################
 ############################################### class methods ###############################################
 #############################################################################################################
@@ -2383,13 +2511,14 @@ class SQLDataModel:
             - Set table color using `set_display_color()` method
         """        
         max_display_rows = self.row_count if self.row_count < self.max_rows else self.max_rows
-        max_rows_check = self.row_count if self.row_count < 12 else 12 # 12 makes sense to get possible second digit incrementation in values
+        # max_rows_check = self.row_count if self.row_count < 12 else 12 # 12 makes sense to get possible second digit incrementation in values
+        max_rows_check = 100 # 12 makes sense to get possible second digit incrementation in values
         display_index = self.display_index
         display_headers = [self.sql_idx] + self.headers if display_index else self.headers
         headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
-        header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'% d\'' if dtype == 'int' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
-        # headers_select_length = f"""{headers_select_length} {",".join([f"case when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},\"{col}\"))),length('{col}')) end as '{col}'" for col in self.headers])} from("""
+        # header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'% d\'' if dtype == 'int' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
+        header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
         headers_select_length = f"""{headers_select_length} {",".join([f'''case when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) end as '{col}' ''' for col in self.headers])} from("""
         headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" limit {max_display_rows})) "{self.sql_idx}", """ if display_index else """select """
         headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from \"{self.sql_model}\" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
@@ -3072,12 +3201,13 @@ class SQLDataModel:
             sql_stmt = f"""select * from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
             return self.fetch_query(sql_stmt)
 
-    def fetch_query(self, sql_query:str) -> SQLDataModel:
+    def fetch_query(self, sql_query:str, **kwargs) -> SQLDataModel:
         """
         Returns a new `SQLDataModel` object after executing the provided SQL query using the current `SQLDataModel`.
 
         Parameters:
-            - `sql_query` (str): The SQL query to execute.
+            - `sql_query` (str): The SQL query to execute with the expectation of rows returned.
+            - `**kwargs` (optional): Additional keyword args to pass to `SQLDataModel` constructor
 
         Returns:
             - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the SQL query.
@@ -3116,7 +3246,12 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
             )
-        return type(self)(fetch_result, headers=fetch_headers, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+        if not kwargs:
+            return type(self)(fetch_result, headers=fetch_headers, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+        else:
+            params = {"max_rows":self.max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
+            params.update({k:v for k,v in kwargs.items()})
+            return type(self)(fetch_result, headers=fetch_headers, **params)
 
     def group_by(self, *columns:str, order_by_count:bool=True) -> SQLDataModel:
         """
