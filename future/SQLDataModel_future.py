@@ -8,6 +8,7 @@ from pathlib import Path
 try:
     from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
     from SQLDataModel.ANSIColor import ANSIColor
+    from SQLDataModel.StandardDeviation import StandardDeviation
 # in ./future/SQLDataModel_future.py
 except:
     from exceptions import DimensionError, SQLProgrammingError
@@ -168,6 +169,7 @@ class SQLDataModel:
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
         self.sql_db_conn.execute(sql_create_stmt)
         self.sql_c = self.sql_db_conn.cursor()
         self._update_model_metadata()
@@ -590,7 +592,7 @@ class SQLDataModel:
         ```
         """
         if apply_function is None:
-            apply_function = lambda x: "_".join(x.strip() for x in re.sub('[^0-9a-z _]+', '', x.lower()).split('_') if x !='')
+            apply_function = lambda x: "_".join(x.strip() for x in re.sub('[^0-9a-z_]+', '', x.lower().replace(" ","_")).split('_') if x !='')
         new_headers = [apply_function(x) for x in self.get_headers()]
         self.set_headers(new_headers)
         return
@@ -982,133 +984,173 @@ class SQLDataModel:
             )
         self.display_float_precision = float_precision
         
-    def describe_str(self, ignore_null_like:bool=False, **kwargs) -> SQLDataModel:
+    def describe(self, exclude_columns:str|list=None, exclude_dtypes:list[Literal["str","int","float","date","datetime","bool"]]=None, ignore_na:bool=True, **kwargs) -> SQLDataModel:
         """
-        Generates descriptive statistics for string columns in the `SQLDataModel` instance. Statistics generated include count, unique count, top value, and frequency
-        for each string column in the SQLDataModel
+        Generates descriptive statistics for columns in the `SQLDataModel` instance based on column dtype including count, unique values, top value, frequency, mean, standard deviation, minimum, 25th, 50th, 75th percentiles, maximum and dtype for specified column.
 
         Parameters:
-            - `ignore_null_like` (bool) : Determines whether null like values such as empty strings or 'NA' are counted. Default is `False`
+            - `exclude_columns` (str | list, optional): Columns to exclude from the analysis. Default is None.
+            - `exclude_dtypes` (list[Literal["str", "int", "float", "date", "datetime", "bool"]], optional): Data types to exclude from the analysis. Default is None.
+            - `ignore_na` (bool, optional): If True, ignores NA like values ('NA', ' ', 'None') when computing statistics. Default is True.
             - `**kwargs`: Additional keyword arguments to be passed to the `fetch_query` method.
 
-        Returns:
-            - `SQLDataModel`: A new SQLDataModel containing descriptive statistics for string columns.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['first_name', 'last_name', 'city', 'state'])
-
-        # Call the method to generate statistics
-        str_stats = sdm.describe_str()
-
-        # View descriptive statistics for string columns
-        print(str_stats)
-
-        # Output
-        ```
-        ```shell
-        ┌────────┬────────────┬───────────┬─────────┬────────┐
-        │ metric │ first_name │ last_name │    city │  state │
-        ├────────┼────────────┼───────────┼─────────┼────────┤
-        │ count  │       1000 │      1000 │    1000 │   1000 │
-        │ unique │        521 │       897 │     753 │     47 │
-        │ top    │       John │     Smith │ Calgary │     NY │
-        │ freq   │         31 │         8 │       9 │    107 │
-        └────────┴────────────┴───────────┴─────────┴────────┘
-        [4 rows x 5 columns]
-        ```
-        Notes:
-            - Only non-null values are counted in each column unless `ignore_null_like` set to `True`
-            - Ties in unique, top and freq columns are broken arbitrarily
-        
-        """        
-        str_cols = [col for col in self.headers if self.header_master[col][1] == 'str']
-        headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in str_cols]
-        headers_select = """ "'metric'" as "metric",""" + ",".join(headers_select_literal)
-        headers_sub_literal = [f"'{col}'" for col in str_cols]
-        headers_subselect = " select 'metric'," + ",".join(headers_sub_literal)
-        count_subselect = "select 'count'," + ",".join([f""" count("{col}") """ for col in str_cols]) + f"""from "{self.sql_model}" """
-        unique_subselect = "select 'unique'," + ",".join([f""" count(distinct "{col}") """ for col in str_cols]) + f"""from "{self.sql_model}" """
-        top_subselect = "select 'top'," + ",".join([f"""(select max("{col}") from "{self.sql_model}" group by "{col}" order by count(*) desc limit 1) """ if not ignore_null_like else f"""(select max("{col}") from "{self.sql_model}" where "{col}" not in (' ', '', 'NA') group by "{col}" order by count(*) desc limit 1) """ for col in str_cols])
-        freq_subselect = "select 'freq'," + ",".join([f"""(select count("{col}") from "{self.sql_model}" group by "{col}" order by count(*) desc limit 1) """ if not ignore_null_like else f"""(select count("{col}") from "{self.sql_model}" where "{col}" not in (' ', '', 'NA') group by "{col}" order by count(*) desc limit 1) """ for col in str_cols])
-        full_script = f"""select {headers_select}
-        from ({headers_subselect} UNION ALL {count_subselect} UNION ALL {unique_subselect} UNION ALL {top_subselect} UNION ALL {freq_subselect})
-        limit -1 offset 1"""
-        return self.fetch_query(full_script, **kwargs)
-
-    def describe_numeric(self, **kwargs) -> SQLDataModel:
-        """
-        Generates descriptive statistics for numeric columns in the `SQLDataModel` instance. Statistics generated include count, mean, standard deviation (uncorrected sample standard deviation), minimum,
-        quartiles (25th, 50th, 75th percentiles), and maximum for each numeric column in the SQLDataModel.
-
-        Parameters:
-            - `**kwargs`: Additional keyword arguments to be passed to the `fetch_query` method.
+        Statistics:
+            - count: Total number of non-null values for specified column
+            - unique: Total number of unique values for specified column
+            - top: Top value represented for specified column, ties broken arbitrarily
+            - freq: Frequency of corresponding value represented in 'top' metric
+            - mean: Mean as calculated by summing all values and dividing by 'count'
+            - std: Standard Deviation for specified column
+                - Uncorrected sample standard deviation for `int`, `float` dtypes
+                - Mean time difference represented in number of days for `date`, `datetime` dtypes
+                - 'NaN' for all other dtypes
+            - min: Minimum value for specified column
+                - Least value for `int`, `float` dtypes
+                - Least value sorted by alphabetical ascending for `str` dtypes
+                - Earliest date or datetime for `date`, `datetime` dtypes
+            - p25: Percentile, 25th
+                - Max first bin value as determined by quartered binning of values for `int`, `float` dtypes
+                - 'NaN' for all other dtypes
+            - p50: Percentile, 50th
+                - Max second bin value as determined by quartered binning of values for `int`, `float` dtypes
+                - 'NaN' for all other dtypes
+            - p75: Percentile, 75th
+                - Max third bin value as determined by quartered binning of values for `int`, `float` dtypes
+                - 'NaN' for all other dtypes        
+            - max: Maximum value for specified column
+                - Greatest value for `int`, `float` dtypes
+                - Greatest value sorted by alphabetical ascending for `str` dtypes
+                - Latest date or datetime for `date`, `datetime` dtypes        
+            - dtype: Datatype of specified column
+                - Python datatype as determined by relevant class `__name__` attribute, e.g. 'float' or 'int'
+                - dtypes can be excluded by using `exclude_dtypes` parameter
 
         Returns:
-            - `SQLDataModel`: A new SQLDataModel containing descriptive statistics for numeric columns.
+            - `SQLDataModel`: A new SQLDataModel containing a comprehensive set of descriptive statistics for selected columns.
 
-        Example:
-        ```python
-        import SQLDataModel
-
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['name', 'date', 'email', 'country', 'pin', 'service_years', 'id'])
-
-        # Call the method to generate statistics
-        numeric_stats = sdm.describe_numeric()
-
-        # View descriptive statistics for numeric columns
-        print(numeric_stats)
-
-        # Output
-        ```
-        ```shell
-        ┌───┬────────┬────────┬───────────────┐
-        │   │ metric │    pin │ service_years │
-        ├───┼────────┼────────┼───────────────┤
-        │ 0 │ count  │     13 │            13 │
-        │ 1 │ mean   │   3922 │          4.18 │
-        │ 2 │ std    │   2713 │          0.83 │
-        │ 3 │ min    │   1175 │          2.73 │
-        │ 4 │ p25    │   1593 │          3.81 │
-        │ 5 │ p50    │   3278 │          4.58 │
-        │ 6 │ p75    │   4962 │          4.61 │
-        │ 7 │ max    │   9396 │          5.34 │
-        └───┴────────┴────────┴───────────────┘
-        [8 rows x 3 columns]
-        ```
         Notes:
-            - Floating point precision determined by `display_float_precision` attribute
-            - Standard deviation is calculated using uncorrected sample standard deviation
+            - Standard deviation is calculated using uncorrected sample standard deviation for numeric dtypes, and timediff in days for datetime dtypes
+            - Ties in unique, top and freq columns are broken arbitrarily as determined by first ordering of values prior to calling `describe()`
             - Ties encountered when binning for p25, p50, p75 will favor lower bins for data that cannot be quartered cleanly
-            - Counts for count, min, p25, p50, p75 and max include non-null values only
+            - Metrics for count, min, p25, p50, p75 and max include non-null values only
+            - Using `ignore_na=True` only affects inclusion of 'NA like' values such as empty strings
+            - Floating point precision determined by `display_float_precision` attribute
+        
+        Examples:
+        ```python
+        import SQLDataModel
+
+        # Create the model
+        sdm = SQLDataModel.from_csv('employees.csv')
+
+        # View all 10 rows
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬──────────────────┬────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
+        │   │ name             │ hire_date  │ country     │ service_years │    age │ last_update         │
+        ├───┼──────────────────┼────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
+        │ 0 │ Pamela Berg      │ 2007-06-06 │ New Zealand │          3.02 │     56 │ 2023-08-12 17:13:46 │
+        │ 1 │ Mason Hoover     │ 2009-04-19 │ Australia   │          5.01 │     41 │ 2023-05-18 01:29:44 │
+        │ 2 │ Veda Suarez      │ 2007-07-02 │ Ukraine     │          4.65 │     26 │ 2023-12-09 15:38:01 │
+        │ 3 │ John Smith       │ 2017-08-12 │ New Zealand │          3.81 │     35 │ 2023-03-10 18:23:56 │
+        │ 4 │ Xavier McCoy     │ 2021-04-03 │ France      │          2.95 │     42 │ 2023-09-27 11:39:08 │
+        │ 5 │ John Smith       │ 2020-10-11 │ Germany     │          4.61 │     56 │ 2023-12-09 18:41:52 │
+        │ 6 │ Abigail Mays     │ 2021-07-25 │ Costa Rica  │          5.34 │     50 │ 2023-02-11 16:43:07 │
+        │ 7 │ Rama Galloway    │ 2009-02-09 │ Italy       │          3.87 │     24 │ 2023-03-13 16:08:48 │
+        │ 8 │ Lucas Rodriquez  │ 2018-06-19 │ New Zealand │          2.73 │     28 │ 2023-03-17 01:45:22 │
+        │ 9 │ Hunter Donaldson │ 2015-12-18 │ Belgium     │          4.58 │     43 │ 2023-04-06 03:22:54 │
+        └───┴──────────────────┴────────────┴─────────────┴───────────────┴────────┴─────────────────────┘      
+        [10 rows x 6 columns]  
+        ```
+        ```python
+        # Generate statistics
+        sdm_described = sdm.describe()
+
+        # View stats
+        print(sdm_described)
+
+        # Output
+        ```
+        ```shell
+        ┌────────┬──────────────┬─────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
+        │ metric │         name │   hire_date │     country │ service_years │    age │         last_update │
+        ├────────┼──────────────┼─────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
+        │ count  │           10 │          10 │          10 │            10 │     10 │                  10 │
+        │ unique │            9 │          10 │           8 │            10 │      9 │                  10 │
+        │ top    │   John Smith │  2021-07-25 │ New Zealand │          5.34 │     56 │ 2023-12-09 18:41:52 │
+        │ freq   │            2 │           1 │           3 │             1 │      2 │                   1 │
+        │ mean   │          NaN │  2014-11-24 │         NaN │          4.06 │     40 │ 2023-06-16 19:18:39 │
+        │ std    │          NaN │ 2164.4 days │         NaN │          0.92 │     11 │         117.58 days │
+        │ min    │ Abigail Mays │  2007-06-06 │   Australia │          2.73 │     24 │ 2023-02-11 16:43:07 │
+        │ p25    │          NaN │  2009-02-09 │         NaN │          3.02 │     28 │ 2023-03-13 16:08:48 │
+        │ p50    │          NaN │  2017-08-12 │         NaN │          4.58 │     42 │ 2023-05-18 01:29:44 │
+        │ p75    │          NaN │  2020-10-11 │         NaN │          4.65 │     50 │ 2023-09-27 11:39:08 │
+        │ max    │ Xavier McCoy │  2021-07-25 │     Ukraine │          5.34 │     56 │ 2023-12-09 18:41:52 │
+        │ dtype  │          str │        date │         str │         float │    int │            datetime │
+        └────────┴──────────────┴─────────────┴─────────────┴───────────────┴────────┴─────────────────────┘
+        [12 rows x 7 columns]    
+        ```
+        ```python
+        # Set filters to exclude all str dtypes and the 'hire_date' column:
+        sdm_describe = sdm.describe(exclude_dtypes=['str'], exclude_columns=['hire_date'])
+
+        # View statistics
+        print(sdm_described)
+
+        # Output
+        ```
+        ```shell
+        ┌────────┬───────────────┬────────┬─────────────────────┐
+        │ metric │ service_years │    age │         last_update │
+        ├────────┼───────────────┼────────┼─────────────────────┤
+        │ count  │            10 │     10 │                  10 │
+        │ unique │            10 │      9 │                  10 │
+        │ top    │          5.34 │     56 │ 2023-10-28 05:42:43 │
+        │ freq   │             1 │      2 │                   1 │
+        │ mean   │          4.06 │     40 │ 2023-08-11 23:18:12 │
+        │ std    │          0.92 │     11 │          73.15 days │
+        │ min    │          2.73 │     24 │ 2023-04-07 23:56:06 │
+        │ p25    │          3.02 │     28 │ 2023-06-02 14:36:19 │
+        │ p50    │          4.58 │     42 │ 2023-09-09 19:18:38 │
+        │ p75    │          4.65 │     50 │ 2023-10-09 19:34:55 │
+        │ max    │          5.34 │     56 │ 2023-10-28 05:42:43 │
+        │ dtype  │         float │    int │            datetime │
+        └────────┴───────────────┴────────┴─────────────────────┘
+        [12 rows x 4 columns]
+        ```
+        Warnings:
             - Generally, do not rely on `SQLDataModel` to do statistics, use `NumPy` or a real library instead
-        """        
-        # TODO move finalized sqlite stdev function as toplevel import
-        from SQLDataModel.StandardDeviation import StandardDeviation
-        self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
-        numeric_cols = [col for col in self.headers if self.header_master[col][1] in ('float','int')]
-        pcte_stmt = f"""with pcte as (select {','.join([f'"{col}",ntile(4) over (order by "{col}") as "p{col}"' for col in numeric_cols])} from "{self.sql_model}")"""
-        headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in numeric_cols]
+            - Statistics for `date` and `datetime` can be unpredictable if formatting is inconsistent
+        """
+        if isinstance(exclude_columns, str|None):
+            exclude_columns = [exclude_columns]
+        if isinstance(exclude_dtypes, str|None):
+            exclude_dtypes = [exclude_dtypes]
+        desc_cols = [col for col in self.headers if ((col not in exclude_columns) and (self.header_master[col][1] not in exclude_dtypes))]
+        headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in desc_cols]
         headers_select = """ "'metric'" as "metric",""" + ",".join(headers_select_literal)
-        headers_sub_literal = [f"'{col}'" for col in numeric_cols]
+        headers_sub_literal = [f"'{col}'" for col in desc_cols]
         headers_subselect = " select 'metric'," + ",".join(headers_sub_literal)
-        count_subselect = "select 'count'," + ",".join([f""" count("{col}") """ for col in numeric_cols]) + f"""from "{self.sql_model}" """
-        mean_subselect = "select 'mean'," + ",".join([f"""round(avg("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] == 'float' else f"""printf('%d',avg("{col}"))""" for col in numeric_cols]) + f"""from "{self.sql_model}" """
-        std_subselect = "select 'std'," + ",".join([f"""round(stdev("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] == 'float' else f"""printf('%d',stdev("{col}"))""" for col in numeric_cols]) + f"""from "{self.sql_model}" """
-        min_subselect = "select 'min'," + ",".join([f"""round(min("{col}"),{self.display_float_precision}) """ for col in numeric_cols]) + f"""from "{self.sql_model}" """
-        p25_subselect = "select 'p25'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max25{col}" from pcte where "p{col}" = 1 group by "p{col}") as "p25{col}" """ for col in numeric_cols])
-        p50_subselect = "select 'p50'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max50{col}" from pcte where "p{col}" = 2 group by "p{col}") as "p50{col}" """ for col in numeric_cols])
-        p75_subselect = "select 'p75'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max75{col}" from pcte where "p{col}" = 3 group by "p{col}") as "p75{col}" """ for col in numeric_cols])
-        max_subselect = "select 'max'," + ",".join([f"""round(max("{col}"),{self.display_float_precision}) """ for col in numeric_cols]) + f"""from "{self.sql_model}" """
-        full_script = f"""{pcte_stmt} 
-        select {headers_select}
-        from ({headers_subselect} UNION ALL {count_subselect} UNION ALL {mean_subselect} UNION ALL {std_subselect} UNION ALL {min_subselect} UNION ALL {p25_subselect} UNION ALL {p50_subselect} UNION ALL {p75_subselect} UNION ALL {max_subselect})
-        limit -1 offset 1"""
-        return self.fetch_query(full_script,**kwargs)
+        count_subselect = "select 'count'," + ",".join([f""" count("{col}") """ if not ignore_na else f"""(select count("{col}") from "{self.sql_model}" where trim(upper("{col}")) not in (' ', '', 'NA', 'NONE','NULL')) """ for col in desc_cols])
+        count_subselect = f"""{count_subselect} {f'from "{self.sql_model}"' if not ignore_na else ''}"""
+        unique_subselect = "select 'unique'," + ",".join([f""" count(distinct "{col}") """ if not ignore_na else f"""(select count(distinct "{col}") from "{self.sql_model}" where trim(upper("{col}")) not in (' ', '', 'NA', 'NONE','NULL')) """ for col in desc_cols])
+        unique_subselect = f"""{unique_subselect} {f'from "{self.sql_model}"' if not ignore_na else ''}"""
+        top_subselect = "select 'top'," + ",".join([f"""(select max("{col}") from "{self.sql_model}" group by "{col}" order by count(*) desc limit 1) """ if not ignore_na else f"""(select max("{col}") from "{self.sql_model}" where trim(upper("{col}")) not in (' ', '', 'NA', 'NONE','NULL') group by "{col}" order by count(*) desc limit 1) """ for col in desc_cols])
+        freq_subselect = "select 'freq'," + ",".join([f"""(select count("{col}") from "{self.sql_model}" group by "{col}" order by count(*) desc limit 1) """ if not ignore_na else f"""(select count("{col}") from "{self.sql_model}" where trim(upper("{col}")) not in (' ', '', 'NA', 'NONE','NULL') group by "{col}" order by count(*) desc limit 1) """ for col in desc_cols])
+        pcte_stmt = f"""with pcte as (select {','.join([f'"{col}",ntile(4) over (order by "{col}") as "p{col}"' for col in desc_cols if self.header_master[col][1] in ('float','int','date','datetime')])} from "{self.sql_model}")"""
+        mean_subselect = "select 'mean'," + ",".join([f"""round(avg("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] == 'float' else f"""printf('%d',avg("{col}"))""" if self.header_master[col][1] == 'int' else f"""date(avg(julianday("{col}")))""" if self.header_master[col][1] == "date" else f"""datetime(avg(julianday("{col}")))""" if self.header_master[col][1] == "datetime" else "'NaN'" for col in desc_cols]) + f"""from "{self.sql_model}" """
+        std_subselect = "select 'std'," + ",".join([f"""round(stdev("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] == 'float' else f"""printf('%d',stdev("{col}"))""" if self.header_master[col][1] == 'int' else f"""round(stdev(julianday("{col}")),{self.display_float_precision})||' days'""" if self.header_master[col][1] in ("date","datetime") else "'NaN'" for col in desc_cols]) + f"""from "{self.sql_model}" """
+        min_subselect = "select 'min'," + ",".join([f"""round(min("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] in ('float','int') else f"""min("{col}")""" if (not ignore_na or self.header_master[col][1] in ("date","datetime")) else f"""(select min("{col}") from "{self.sql_model}" where trim(upper("{col}")) not in (' ', '', 'NA', 'NONE','NULL')) """ for col in desc_cols]) + f"""from "{self.sql_model}" """
+        p25_subselect = "select 'p25'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max25{col}" from pcte where "p{col}" = 1 group by "p{col}") as "p25{col}" """ if self.header_master[col][1] in ('float','int') else f"""(select max("{col}") as "max25{col}" from pcte where "p{col}" = 1 group by "p{col}") as "p25{col}" """ if self.header_master[col][1] in ('date','datetime') else "'NaN'" for col in desc_cols])
+        p50_subselect = "select 'p50'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max50{col}" from pcte where "p{col}" = 2 group by "p{col}") as "p50{col}" """ if self.header_master[col][1] in ('float','int') else f"""(select max("{col}") as "max50{col}" from pcte where "p{col}" = 2 group by "p{col}") as "p50{col}" """ if self.header_master[col][1] in ('date','datetime') else "'NaN'" for col in desc_cols])
+        p75_subselect = "select 'p75'," + ",".join([f"""(select round(max("{col}"),{self.display_float_precision}) as "max75{col}" from pcte where "p{col}" = 3 group by "p{col}") as "p75{col}" """ if self.header_master[col][1] in ('float','int') else f"""(select max("{col}") as "max75{col}" from pcte where "p{col}" = 3 group by "p{col}") as "p75{col}" """ if self.header_master[col][1] in ('date','datetime') else "'NaN'" for col in desc_cols])
+        max_subselect = "select 'max'," + ",".join([f"""round(max("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] in ('float','int') else f"""max("{col}")""" if (not ignore_na or self.header_master[col][1] in ("date","datetime")) else f"""(select max("{col}") from "{self.sql_model}" where trim(upper("{col}")) not in (' ', '', 'NA', 'NONE','NULL')) """ for col in desc_cols]) + f"""from "{self.sql_model}" """
+        dtype_subselect = "select 'dtype'," + ",".join([f"""'{self.header_master[col][1]}'""" for col in desc_cols])
+        full_script = f"""{pcte_stmt} select {headers_select} from ({headers_subselect} UNION ALL {count_subselect} UNION ALL {unique_subselect} UNION ALL {top_subselect} UNION ALL {freq_subselect} UNION ALL {mean_subselect} UNION ALL {std_subselect} UNION ALL {min_subselect} UNION ALL {p25_subselect} UNION ALL {p50_subselect} UNION ALL {p75_subselect} UNION ALL {max_subselect} UNION ALL {dtype_subselect}) limit -1 offset 1"""
+        return self.fetch_query(full_script, display_index=False, **kwargs)
 
 #############################################################################################################
 ############################################### class methods ###############################################
