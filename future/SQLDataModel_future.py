@@ -2554,18 +2554,20 @@ class SQLDataModel:
             - Max displayed rows set to 1,000 by default, use `set_max_rows()` to modify
             - Set table color using `set_display_color()` method
         """        
-        max_display_rows = self.row_count if self.row_count < self.max_rows else self.max_rows
-        # max_rows_check = self.row_count if self.row_count < 12 else 12 # 12 makes sense to get possible second digit incrementation in values
-        max_rows_check = 100 # 12 makes sense to get possible second digit incrementation in values
+        vertical_truncation_required = self.max_rows < self.row_count
+        max_display_rows = self.max_rows if vertical_truncation_required else self.row_count
+        split_row = max_display_rows // 2
+        split_top = self.min_idx + split_row
+        split_bottom = self.max_idx - split_row
+        max_rows_check = 12 # 12 makes sense to get possible second digit incrementation in values
         display_index = self.display_index
         display_headers = [self.sql_idx] + self.headers if display_index else self.headers
         headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
-        # header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'% d\'' if dtype == 'int' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
         header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
         headers_select_length = f"""{headers_select_length} {",".join([f'''case when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) end as '{col}' ''' for col in self.headers])} from("""
-        headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" limit {max_display_rows})) "{self.sql_idx}", """ if display_index else """select """
-        headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from \"{self.sql_model}\" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
+        headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {split_top} or "{self.sql_idx}" > {split_bottom}) limit {max_display_rows+1})) "{self.sql_idx}", """ if display_index else """select """
+        headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
         headers_full_select = f"{headers_select_length}{headers_sub_select}"
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
         header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}  
@@ -2601,7 +2603,16 @@ class SQLDataModel:
         vconcat_column_separator = """|| ' │ ' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if display_index else ""
         header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=self.column_alignment)}""" for col in display_headers if col != self.sql_idx])
-        fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "full_row" from "{self.sql_model}" limit {self.max_rows}"""
+        vertical_sep_chars = '⠒⠂' # '⠐⠒⠂'
+        # favor left direction when no exact centering possible 
+        # vertical_sep_fmt_str = vconcat_column_separator.join([f"""printf("%!-{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
+        # favor right direction when no exact centering possible 
+        vertical_sep_fmt_str = vconcat_column_separator.join([f"""printf("%!{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
+        fetch_fmt_stmt = f"""
+        select CASE WHEN (("{self.sql_idx}" <> {split_row}) or (not {vertical_truncation_required})) 
+        THEN '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' 
+        ELSE '{table_left_edge}' || {vertical_sep_fmt_str} ||' │{table_dynamic_newline}' 
+        END as "full_row" from "{self.sql_model}" where (CASE WHEN {vertical_truncation_required} THEN "{self.sql_idx}" <= {split_top} or "{self.sql_idx}" > {split_bottom} ELSE (1=1) END) limit {max_display_rows+1}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if self.column_alignment is None:
             formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
@@ -2614,7 +2625,7 @@ class SQLDataModel:
         table_repr = "".join([table_repr,*[row[0] for row in formatted_response]])
         table_repr = "".join([table_repr, table_cross_bar.replace("┌","└").replace("┬","┴").replace("┐","┘")])
         table_repr = "".join([table_repr, f"""[{max_display_rows} rows x {self.column_count} columns]"""])
-        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)    
+        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)   
 
 ##################################################################################################################
 ############################################## sqldatamodel methods ##############################################
