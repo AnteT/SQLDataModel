@@ -3,6 +3,8 @@ import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime
 from typing import Generator, Callable, Literal, Iterator
 from collections import namedtuple
 from pathlib import Path
+from ast import literal_eval
+from dateutil.parser import parse as dateutilparser
 
 # in ./src/SQLDataModel/SQLDataModel.py
 try:
@@ -93,9 +95,9 @@ class SQLDataModel:
     ### Notes
     use `SQLDM.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_c','sql_db_conn','display_float_precision','header_master')
+    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','min_idx','max_idx','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_c','sql_db_conn','display_float_precision','header_master')
     debug:bool=False
-    def __init__(self, data:list[list], headers:list[str]=None, max_rows:int=1_000, min_column_width:int=6, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
+    def __init__(self, data:list[list], headers:list[str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
         if not isinstance(data, list|tuple):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list or tuple...")
@@ -146,11 +148,10 @@ class SQLDataModel:
             headers = [f"col_{x}" for x in range(len(data[0]))]
         self.sql_idx = "idx"
         self.sql_model = "sdm"
-        self.max_rows = max_rows
+        self.display_max_rows = display_max_rows
         self.min_column_width = min_column_width
         self.max_column_width = max_column_width
         self.column_alignment = column_alignment
-        self.display_color = display_color
         self.display_index = display_index
         self.display_float_precision = display_float_precision
         self.row_count = len(data)
@@ -161,6 +162,7 @@ class SQLDataModel:
         headers = headers[dyn_idx_offset:]
         self.headers = headers
         self.column_count = len(self.headers)
+        self.display_color = ANSIColor(display_color) if isinstance(display_color,str|tuple) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
@@ -421,6 +423,75 @@ class SQLDataModel:
         self.headers[self.headers.index(column)] = new_column_name # replace old column with new column in same position as original column
         self._update_model_metadata()
 
+    def replace(self, pattern:str, replacement:str, inplace:bool=False, **kwargs) -> SQLDataModel:
+        """
+        Replaces matching occurrences of a specified pattern with a replacement value in the `SQLDataModel` instance. 
+        If inplace is True, the method updates the existing SQLDataModel; otherwise, it returns a new `SQLDataModel` with the replacements applied.
+
+        Parameters:
+            - `pattern` (str): The substring or regular expression pattern to search for in each column.
+            - `replacement` (str): The string to replace the matched pattern with.
+            - `inplace` (bool, optional): If True, modifies the current SQLDataModel instance in-place. Default is False.
+            - **kwargs: Additional keyword arguments to be passed to the `fetch_query` method when not in-place.
+        
+        Raises:
+            - `TypeError`: If the `pattern` or `replacement` parameters are invalid types.
+
+        Returns:
+            - `SQLDataModel`: If inplace=True, modifies the current instance in-place and returns None. Otherwise, returns a new SQLDataModel
+            with the specified replacements applied.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service']
+        data = [
+            ('John', 'Smith', 27, 1.22),
+            ('Sarah', 'West', 39, 0.7),
+            ('Mike', 'Harlin', 36, 3),
+            ('Pat', 'Douglas', 42, 11.5)
+        ]        
+
+        # Create the model
+        sdm = SQLDataModel(data, headers,display_float_precision=2, display_index=False)
+
+        # Replace 'John' in the 'first' column
+        sdm['first'] = sdm['first'].replace("John","Jane")
+        
+        # View model
+        print(sdm)
+
+        # Output    
+        ```
+        ```shell
+        ┌───────┬─────────┬──────┬─────────┐
+        │ first │ last    │  age │ service │
+        ├───────┼─────────┼──────┼─────────┤
+        │ Jane  │ Smith   │   27 │    1.22 │
+        │ Sarah │ West    │   39 │    0.70 │
+        │ Mike  │ Harlin  │   36 │    3.00 │
+        │ Pat   │ Douglas │   42 │   11.50 │
+        └───────┴─────────┴──────┴─────────┘   
+        [4 rows x 4 columns] 
+        ```
+        """
+        if not isinstance(pattern, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(pattern).__name__}', method argument `pattern` must be of type 'str' for `replace()` method")
+            )
+        if not isinstance(replacement, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(pattern).__name__}', method argument `replacement` must be of type 'str' for `replace()` method")
+            )
+        if inplace:
+            replace_stmt = " ".join((f"""update "{self.sql_model}" set""",",".join([f""" "{col}"=replace("{col}",'{pattern}','{replacement}') """ for col in self.headers])))
+            self.execute_query(replace_stmt)
+            return
+        else:
+            replace_stmt = " ".join(("select",",".join([f""" replace("{col}",'{pattern}','{replacement}') as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
+            return self.fetch_query(replace_stmt, **kwargs)
+
     def set_header_at_index(self, index:int, new_value:str) -> None:
         """
         Renames a column in the `SQLDataModel` at the specified index with the provided new value.
@@ -597,12 +668,12 @@ class SQLDataModel:
         self.set_headers(new_headers)
         return
 
-    def get_max_rows(self) -> int:
+    def get_display_max_rows(self) -> int|None:
         """
-        Retrieves the current value of the `max_rows` property, which determines the maximum rows displayed for `SQLDataModel`.
+        Retrieves the current value of the `display_max_rows` property, which determines the maximum rows displayed for `SQLDataModel`.
 
         Returns:
-            - `int`: The current value of the 'max_rows' property.
+            - `int|None`: The current value of the 'display_max_rows' property.
 
         Example:
         ```python
@@ -612,46 +683,49 @@ class SQLDataModel:
         sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
         # Get current value
-        max_rows = sqldm.get_max_rows()
+        display_max_rows = sqldm.get_display_max_rows()
 
         # By default any display will be limited to 1000 rows max
-        print(max_rows) # 1000
+        print(display_max_rows) # 1000
         ```
         """
-        return self.max_rows
+        return self.display_max_rows
     
-    def set_max_rows(self, rows:int) -> None:
+    def set_display_max_rows(self, rows:int|None) -> None:
         """
-        Set `max_rows` to limit rows displayed when `repr` or `print` is called, does not change the maximum rows stored in `SQLDataModel`.
+        Set `display_max_rows` to limit rows displayed when `repr` or `print` is called, or set to `None` for `display_max_rows` to be derived from current terminal height. Using this option will create a table that fits within the dimensions of the current terminal such that the table headers occupy the top-most row with the table caption occupying the lower-most.
+        Modifying this attribute does not change the actual number of rows stored in `SQLDataModel`, only the number of rows displayed.
 
         Parameters:
             - `rows` (int): The maximum number of rows to display.
 
         Raises:
-            - `TypeError`: If the provided argument is not an integer.
-            - `IndexError`: If the provided value is less than or equal to 0.
+            - `TypeError`: If the provided argument is not `None` or is not an integer.
+            - `IndexError`: If the provided value is an integer less than or equal to 0.
 
         Example:
         ```python
         import SQLDataModel
 
         # Create model
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
         # Any call to `print` or `repr` will be restricted to 500 max rows
-        sqldm.set_max_rows(500)
+        sdm.set_display_max_rows(500)
+
+        # Alternatively, auto-detect dimensions by setting to `None`
+        sdm.set_display_max_rows(None)
         ```
         """
-        # if type(rows) != int:
-        if not isinstance(rows, int):
+        if not isinstance(rows, int|None):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f'TypeError: invalid argument type "{type(rows).__name__}", please provide an integer value to set the maximum rows attribute...')
                 )
-        if rows <= 0:
+        if isinstance(rows, int) and rows <= 0:
             raise IndexError(
                 SQLDataModel.ErrorFormat(f'IndexError: invalid value "{rows}", please provide an integer value >= 1 to set the maximum rows attribute...')
                 )
-        self.max_rows = rows
+        self.display_max_rows = rows
 
     def get_min_column_width(self) -> int:
         """
@@ -1153,6 +1227,153 @@ class SQLDataModel:
         full_script = f"""{pcte_stmt} select {headers_select} from ({headers_subselect} UNION ALL {count_subselect} UNION ALL {unique_subselect} UNION ALL {top_subselect} UNION ALL {freq_subselect} UNION ALL {mean_subselect} UNION ALL {std_subselect} UNION ALL {min_subselect} UNION ALL {p25_subselect} UNION ALL {p50_subselect} UNION ALL {p75_subselect} UNION ALL {max_subselect} UNION ALL {dtype_subselect}) limit -1 offset 1"""
         # print(full_script.replace("\\'","'").replace("UNION ALL","\nUNION ALL"))
         return self.fetch_query(full_script, display_index=False, **kwargs)
+
+    @staticmethod
+    def infer_sample_dtypes(dtype_samples:dict, infer_threshold:float=0.5, use_majority_dtype:bool=False, non_inferrable_dtype:Literal["str","int","float","date","datetime"]="str") -> dict:
+        """
+        Infers the data types of columns based on a sample dictionary containing header-sample pairs.
+
+        Parameters:
+            - `dtype_samples` (dict): A dictionary where keys are column headers and values are lists of samples for each column.
+            - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
+            - `use_majority_dtype` (bool): If True, uses a simple majority voting to determine the data type when counts allow.
+            - `non_inferrable_dtype` (Literal["str", "int", "float","date","datetime"]): The default data type to assign when ties occur, or when no dtype can be inferred.
+
+        Returns:
+            - `dict`: A dictionary mapping column headers to inferred data types, format: `dtype_dict = {"column": "dtype"}`
+
+        This static method takes a sample dictionary and iterates over each column's samples to infer the data type.
+        It counts the occurrences of strings, integers, and floats, and based on the counts, determines the most likely data type
+        for each column. The result is a dictionary mapping each column header to its inferred data type ('str', 'int', or 'float').
+
+        Parameters `use_majority_dtype` and `non_inferrable_dtype` provide options for handling cases where counts are equal or when
+        inference is not possible.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create the model
+        cols = ['Column1','Column2','Column3']
+        sdm = SQLDataModel.from_csv("sample.csv", columns=cols)
+
+        # Fetch 4 rows from the model
+        sample_rows = sdm.sql_db_conn.execute("select * from sdm limit 4").fetchall()
+
+        # Create a dict with format of `{"header": (item_1, item_2, ..., item_4)}`
+        sample_dict = {col: tuple(row[j] for row in sample_rows) for j, col in enumerate(cols)}
+
+        # Required format:
+        sample_dict = {
+            'Column1': ['1', '2', '3.0', '4'],
+            'Column2': ['apple', 'orange', 'banana', 'kiwi'],
+            'Column3': ['5.0', '6.2', '7.5', '8.1']
+        }
+
+        # Get inferred dtypes using strict rules falling back to "str" dtype
+        inferred_types = SQLDataModel.infer_sample_dtypes(sample_dict, use_majority_dtype=False, non_inferrable_dtype='str')
+
+        # View returned dtypes
+        print(inferred_types)
+
+        # Outputs: 
+        inferred_dtypes = {
+            'Column1': 'int', 
+            'Column2': 'str', 
+            'Column3': 'float'
+        }
+        ```
+        """ 
+        inferred_dtypes = {k:non_inferrable_dtype for k in dtype_samples.keys()}
+        dtype_labels = ("str", "int", "float", "date", "datetime")
+        for s_header, s_samples in dtype_samples.items():
+            count_checked, count_str, count_int, count_float, count_date, count_datetime = 0,0,0,0,0,0
+            for s_item in s_samples:
+                if (s_item is None) or (s_item.strip() == ''):
+                    continue
+                count_checked += 1
+                try:
+                    s_type = literal_eval(s_item)
+                except:
+                    try:
+                        dt_type = dateutilparser(s_item, fuzzy=False, fuzzy_with_tokens=False)
+                        if isinstance(dt_type,datetime.date):
+                        # both datetime.date and datetime.datetime are instances of date, only way it works is date is not instance of datetime.datetime
+                            if (dt_type.hour == 0) and (dt_type.minute == 0) and (dt_type.second == 0):
+                                count_date += 1
+                            else:
+                                count_datetime += 1
+                    except:
+                        count_str += 1
+                    continue
+                if isinstance(s_type, int):
+                    count_int += 1
+                    continue
+                elif isinstance(s_type, float):
+                    if s_item.endswith('.0'):
+                        count_int += 1
+                    else:
+                        count_float += 1
+                elif s_type is None:
+                    continue
+                else:
+                    count_str += 1
+            dtype_results = (count_str, count_int, count_float, count_date, count_datetime)
+            max_number_dtypes_found = max(dtype_results)
+            max_idx_of_dtype = dtype_results.index(max_number_dtypes_found)
+            dtype_maximum = dtype_labels[max_idx_of_dtype]
+            dtype_maximum_ratio = max_number_dtypes_found/count_checked
+            # print(f"winning dtype: {dtype_maximum} at {dtype_maximum_ratio} (results: {dtype_results})")
+            if not use_majority_dtype:
+                if count_str != 0:
+                    continue
+                if dtype_maximum_ratio >= infer_threshold:
+                    inferred_dtypes[s_header] = dtype_maximum
+                    continue
+                else:
+                    continue
+            else:
+                inferred_dtypes[s_header] = dtype_maximum
+                continue
+        return inferred_dtypes   
+
+    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, non_inferrable_dtype:Literal["str","int","float","date","datetime"]="str") -> None:
+        """
+        Attempts to convert column data types based on the first `n_samples` of evaluation.
+
+        Parameters:
+            - `n_samples` (int): The number of random samples to use for data type inference.
+            - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
+            - `non_inferrable_dtype` (Literal["str", "int", "float","date","datetime"]): The default data type to assign when ties occur, or when no dtype can be inferred.
+
+        Returns:
+            - `None`
+            
+        This method selects a random subset of samples from columns with 'str' data type according to the `n_samples` parameter.
+        It then uses the `infer_dtype_functional` static method to infer the data types of these columns based on the sample data.
+        The inferred data types are then applied to the corresponding columns using the `set_column_dtype` method.
+
+        Examples:
+        ```python
+        # Example 1: Infer data types based on 10 random samples
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Amount'])
+        sqldm.infer_dtypes(n_samples=10)
+
+        # Example 2: Infer data types based on 5 random samples
+        sqldm2 = SQLDataModel.from_csv('another_example.csv', headers=['Code', 'Description', 'Price'])
+        sqldm2.infer_dtypes(n_samples=5)
+        ```
+
+        In Example 1, the data types for columns with 'str' type are inferred based on 10 random samples.
+        In Example 2, another SQLDataModel instance performs data type inference for a different dataset with 5 random samples.
+        """
+        str_dtype_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
+        str_dtype_fetch_stmt = " ".join(("select",",".join([f'"{col}" as "{col}"' for col in str_dtype_columns]), f'from "{self.sql_model}" order by random() limit {n_samples}'))
+        sample_raw = self.sql_db_conn.execute(str_dtype_fetch_stmt).fetchall()
+        sample_fetch_dict = {col:tuple(row[j] for row in sample_raw) for j,col in enumerate(str_dtype_columns)}
+        dtype_dict = SQLDataModel.infer_sample_dtypes(sample_fetch_dict, infer_threshold=infer_threshold, non_inferrable_dtype=non_inferrable_dtype)
+        for column, dtype in dtype_dict.items():
+            self.set_column_dtype(column,dtype)
 
 #############################################################################################################
 ############################################### class methods ###############################################
@@ -2551,15 +2772,18 @@ class SQLDataModel:
         ```
         Formatting:
             - Default alignment is right-aligned for numeric types and left-aligned for remaining types
-            - Max displayed rows set to 1,000 by default, use `set_max_rows()` to modify
+            - To override default and set custom alignment, use `set_column_alignment()` method
+            - Max displayed rows set to 1,000 by default, use `set_display_max_rows()` to modify
             - Set table color using `set_display_color()` method
         """        
-        vertical_truncation_required = self.max_rows < self.row_count
-        max_display_rows = self.max_rows if vertical_truncation_required else self.row_count
+        total_available_width, total_available_height = shutil.get_terminal_size()
+        display_max_rows = self.display_max_rows if self.display_max_rows is not None else (total_available_height - 6) if (total_available_height - 6 > 0) else 1
+        vertical_truncation_required = display_max_rows < self.row_count
+        max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
+        display_max_rows_check = 12 # 12 makes sense to get possible second digit incrementation in values
         split_row = max_display_rows // 2
         split_top = self.min_idx + split_row
         split_bottom = self.max_idx - split_row
-        max_rows_check = 12 # 12 makes sense to get possible second digit incrementation in values
         display_index = self.display_index
         display_headers = [self.sql_idx] + self.headers if display_index else self.headers
         headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
@@ -2567,21 +2791,20 @@ class SQLDataModel:
         header_printf_modifiers_dict = {col:(f'\'% .{self.display_float_precision}f\'' if dtype == 'float' else '\'%!s\'') for col,dtype in header_py_dtype_dict.items()}
         headers_select_length = f"""{headers_select_length} {",".join([f'''case when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) end as '{col}' ''' for col in self.headers])} from("""
         headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {split_top} or "{self.sql_idx}" > {split_bottom}) limit {max_display_rows+1})) "{self.sql_idx}", """ if display_index else """select """
-        headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_rows_check} )"""
+        headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from "{self.sql_model}" order by "{self.sql_idx}" asc limit {display_max_rows_check} )"""
         headers_full_select = f"{headers_select_length}{headers_sub_select}"
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
         header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}  
         table_repr = """""" # big things...
         table_left_edge = """│ """
-        table_left_edge_width = 2           # """│ """
+        table_left_edge_width = 2
         table_right_edge = """ │"""
-        table_right_edge_width = 2          # """ │"""
-        table_column_interval_width = 3    # """ │ """
+        table_right_edge_width = 2
+        table_column_interval_width = 3
         table_truncated_ellipses = """⠤⠄"""
         table_truncated_ellipses_width = 3 # added extra space after truncation mark before ellipses, looks better
         table_bare_newline = """\n"""
         total_required_width = table_left_edge_width + sum((table_column_interval_width + length) for length in header_length_dict.values()) + table_right_edge_width - table_column_interval_width
-        total_available_width = shutil.get_terminal_size()[0]
         table_truncation_required = False if total_available_width > total_required_width else True
         # print(f'truncation info: {total_required_width} of {total_available_width}, truncation: {table_truncation_required}')
         if table_truncation_required:
@@ -2624,7 +2847,8 @@ class SQLDataModel:
         table_repr = "".join([table_repr, table_cross_bar.replace("┌","├").replace("┬","┼").replace("┐","┤")])
         table_repr = "".join([table_repr,*[row[0] for row in formatted_response]])
         table_repr = "".join([table_repr, table_cross_bar.replace("┌","└").replace("┬","┴").replace("┐","┘")])
-        table_repr = "".join([table_repr, f"""[{max_display_rows} rows x {self.column_count} columns]"""])
+        table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
+        table_repr = "".join([table_repr, table_caption])
         return table_repr if self.display_color is None else self.display_color.wrap(table_repr)   
 
 ##################################################################################################################
@@ -3084,7 +3308,7 @@ class SQLDataModel:
                 )
         return self.header_master[column][1]
 
-    def set_column_dtype(self, column:str|int, dtype:Literal['bytes','datetime','float','int','str']) -> None:
+    def set_column_dtype(self, column:str|int, dtype:Literal['bytes','date','datetime','float','int','str']) -> None:
         """
         Casts the specified `column` into the provided python `dtype`. The datatype must be a valid convertable python datatype to map to an equivalent SQL datatype.
 
@@ -3135,6 +3359,10 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
             )
+        if dtype not in ('bytes','date','datetime','float','int','str'):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bytes','date','datetime','float','int','str' use `get_column_dtype()` to view current column datatypes")
+            )        
         if isinstance(column, int):
             try:
                 column = self.headers[column]
@@ -3148,7 +3376,8 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = cast("{column}" as {col_sql_dtype}); alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}"; """
+        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("date","datetime") else f"""{dtype}("{column}")"""
+        update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
         self.execute_transaction(update_col_sql)
         
     def get_model_name(self) -> str:
@@ -3302,9 +3531,9 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
             )
         if not kwargs:
-            return type(self)(fetch_result, headers=fetch_headers, max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+            return type(self)(fetch_result, headers=fetch_headers, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
         else:
-            params = {"max_rows":self.max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
+            params = {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
             params.update({k:v for k,v in kwargs.items()})
             return type(self)(fetch_result, headers=fetch_headers, **params)
 
@@ -3361,7 +3590,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"...')
             ) from None
-        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
     
     def join_model(self, model:SQLDataModel, left:bool=True, on_column:str=None) -> SQLDataModel:
         """
@@ -3407,7 +3636,7 @@ class SQLDataModel:
         join_cols = [x for x in join_cols if x != on_column] # removing shared join column
         sql_join_stmt = self._generate_sql_fetch_for_joining_tables(self.headers, join_tablename, join_column=on_column, join_headers=join_cols, join_type='left' if left else 'right')
         self.sql_c.execute(sql_join_stmt)
-        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+        return type(self)(data=self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
     def execute_query(self, sql_query:str) -> None:
         """
@@ -3876,13 +4105,14 @@ class SQLDataModel:
         ```
         """        
         if update_row_meta:
-            fetch_metadata = f"""select "name","type","is_regular_column","alignment" from (
-                select '_rowmeta' as "name", min("{self.sql_idx}") as "type", max("{self.sql_idx}") as "is_regular_column", count("{self.sql_idx}") as "alignment" from "{self.sql_model}"
+            fetch_metadata = f"""select "_ordered_name","_ordered_type","_is_regular_column","_def_alignment" from (
+                select '_rowmeta' as "_ordered_name", min("{self.sql_idx}") as "_ordered_type", max("{self.sql_idx}") as "_is_regular_column", count("{self.sql_idx}") as "_def_alignment" from "{self.sql_model}"
                 union all
-                select "name" as "name","type" as "type","pk" as "is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "alignment" from pragma_table_info('{self.sql_model}') 
-            ) order by "name"='_rowmeta' desc, {",".join([f'"name"="{col}" desc' for col in self.headers])}"""
+                select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') 
+            ) order by "_ordered_name"='_rowmeta' desc, {",".join([f'"_ordered_name"="{col}" desc' for col in self.headers])}"""
         else:
-            fetch_metadata = f"""select "name" as "name","type" as "type","pk" as "is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"name"='{col}' desc''' for col in self.headers])}"""
+            fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
+        # print(fetch_metadata.replace("\\'","'"))
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
         if update_row_meta:
             self.min_idx, self.max_idx, self.row_count = metadata[0][1:]
@@ -3996,7 +4226,7 @@ class SQLDataModel:
                 raise SQLProgrammingError(
                     SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, unable to execute provided SQL query with error "{e}"...')
                 ) from None
-            return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], max_rows=self.max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+            return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
     def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
         """
