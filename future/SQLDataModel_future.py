@@ -4,7 +4,7 @@ from typing import Generator, Callable, Literal, Iterator
 from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
-from dateutil.parser import parse as dateutilparser
+from dateutil.parser import parse as dateparser
 
 # in ./src/SQLDataModel/SQLDataModel.py
 try:
@@ -1228,78 +1228,169 @@ class SQLDataModel:
         # print(full_script.replace("\\'","'").replace("UNION ALL","\nUNION ALL"))
         return self.fetch_query(full_script, display_index=False, **kwargs)
 
-    @staticmethod
-    def infer_sample_dtypes(dtype_samples:dict, infer_threshold:float=0.5, use_majority_dtype:bool=False, non_inferrable_dtype:Literal["str","int","float","date","datetime"]="str") -> dict:
+    def sample(self, n_samples:float|int=0.05, **kwargs) -> SQLDataModel:
         """
-        Infers the data types of columns based on a sample dictionary containing header-sample pairs.
+        Return a random sample of size `n_samples` as a new `SQLDataModel`.
 
         Parameters:
-            - `dtype_samples` (dict): A dictionary where keys are column headers and values are lists of samples for each column.
-            - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
-            - `use_majority_dtype` (bool): If True, uses a simple majority voting to determine the data type when counts allow.
-            - `non_inferrable_dtype` (Literal["str", "int", "float","date","datetime"]): The default data type to assign when ties occur, or when no dtype can be inferred.
+            - `n_samples` (float | int): Number of rows or proportion of rows to sample. Default set to `0.05`, proportional to 5% of the current `row_count`
+                - If `n_samples` is an integer, it represents the exact number of rows to sample where `0 < n_samples <= row_count`.
+                - If `n_samples` is a float, it represents the proportion of rows to sample where `0.0 < n_samples <= 1.0`.
 
         Returns:
-            - `dict`: A dictionary mapping column headers to inferred data types, format: `dtype_dict = {"column": "dtype"}`
+            - `SQLDataModel`: A new SQLDataModel instance containing the sampled rows.
 
-        This static method takes a sample dictionary and iterates over each column's samples to infer the data type.
-        It counts the occurrences of strings, integers, and floats, and based on the counts, determines the most likely data type
-        for each column. The result is a dictionary mapping each column header to its inferred data type ('str', 'int', or 'float').
+        Raises:
+            - `TypeError`: If the `n_samples` parameter is not of type 'int' or 'float'.
+            - `ValueError`: If the `n_samples` value is invalid or out of range.
 
-        Parameters `use_majority_dtype` and `non_inferrable_dtype` provide options for handling cases where counts are equal or when
-        inference is not possible.
+        This method generates a random sample of rows from the current SQLDataModel. The number of rows to sample
+        can be specified either as an integer representing the exact number of rows or as a float representing
+        the proportion of rows to sample. The sampled rows are returned as a new SQLDataModel instance.
 
-        Example:
+        Examples:
         ```python
         import SQLDataModel
 
         # Create the model
-        cols = ['Column1','Column2','Column3']
-        sdm = SQLDataModel.from_csv("sample.csv", columns=cols)
+        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Amount'])
+        
+        # Example 1: Sample 10 random rows
+        sample_result = sdm.sample(n_samples=10)
 
-        # Fetch 4 rows from the model
-        sample_rows = sdm.sql_db_conn.execute("select * from sdm limit 4").fetchall()
-
-        # Create a dict with format of `{"header": (item_1, item_2, ..., item_4)}`
-        sample_dict = {col: tuple(row[j] for row in sample_rows) for j, col in enumerate(cols)}
-
-        # Required format:
-        sample_dict = {
-            'Column1': ['1', '2', '3.0', '4'],
-            'Column2': ['apple', 'orange', 'banana', 'kiwi'],
-            'Column3': ['5.0', '6.2', '7.5', '8.1']
-        }
-
-        # Get inferred dtypes using strict rules falling back to "str" dtype
-        inferred_types = SQLDataModel.infer_sample_dtypes(sample_dict, use_majority_dtype=False, non_inferrable_dtype='str')
-
-        # View returned dtypes
-        print(inferred_types)
-
-        # Outputs: 
-        inferred_dtypes = {
-            'Column1': 'int', 
-            'Column2': 'str', 
-            'Column3': 'float'
-        }
+        # Create the model
+        sdm2 = SQLDataModel.from_csv('another_example.csv', headers=['Code', 'Description', 'Price'])
+        
+        # Example 2: Sample 20% of rows
+        sample_result2 = sdm2.sample(n_samples=0.2)
         ```
-        """ 
-        inferred_dtypes = {k:non_inferrable_dtype for k in dtype_samples.keys()}
-        dtype_labels = ("str", "int", "float", "date", "datetime")
-        for s_header, s_samples in dtype_samples.items():
-            count_checked, count_str, count_int, count_float, count_date, count_datetime = 0,0,0,0,0,0
+        """
+        if not isinstance(n_samples, float|int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid `n_samples` type '{type(n_samples).__name__}', `n_samples` parameter type must be one of 'int', 'float' as number of rows or proportion of rows, respectively")
+            )            
+        if isinstance(n_samples, float):
+            if (n_samples <= 0.0) or (n_samples > 1.0):
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: invalid `n_samples` value '{n_samples}', expected value in range '0.0 < n_samples <= 1.0' when using proportional value for `n_samples`")
+                )
+            n_samples = round(self.row_count * n_samples)
+        if n_samples <= 0:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid `n_samples` value '{n_samples}', expected value within current row range '0 < n_samples <= {self.row_count}' when using integer value for `n_samples`")
+            ) 
+        sample_fetch_stmt = " ".join((f"""select""", ",".join([f'"{col}"' for col in [self.sql_idx,*self.headers]]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
+        return self.fetch_query(sample_fetch_stmt, **kwargs)
+
+    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, non_inferrable_dtype:Literal["str","int","float","datetime","date"]="str") -> None:
+        """
+        Infer and set data types for columns based on random sampling of `n_samples` from the dataset if proportion of data types in returned sample equals or exceeds `infer_threshold` otherwise fallback to data type specified in `non_inferrable_dtype` argument.
+
+        Parameters:
+            - `n_samples` (int): The number of random samples to use for data type inference.
+            - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
+            - `non_inferrable_dtype` (Literal["str", "int", "float", "datetime", "date"]): The default data type to assign when ties occur, or when no dtype can be inferred.
+        
+        Raises:
+            - `TypeError`: If argument for `n_samples` is not of type `int` or `infer_threshold` is not of type `float`
+            - `ValueError`: If value for `infer_threshold` is not a valid range satisfying `0.0 < infer_threshold <= 1.0`
+
+        Returns:
+            - `None`
+
+        Notes:
+            - If a single `str` instance is found in the samples, the corresponding column dtype will remain as `str` to avoid data loss.
+            - Co-occurences of `int` & `float`, or `date` & `datetime` will favor the superset dtype after `infer_threshold` is met, so `float` and `datetime` respectively.
+            - If a single `datetime` instance is found amongst a higher proportion of `date` dtypes, `datetime` will be used according to second rule.
+            - If a single `float` instance is found amongst a higher proportion of `int` dtypes, `float` will be used according to second rule.
+            - Ties between dtypes are broken according to `non_inferrable_dtype` < `str` < `float` < `int` < `datetime` < `date`
+            - This method calls the `set_column_dtype()` method once the column dtypes have been inferred if they differ from the current dtype.
+
+        ---   
+
+        Examples:
+        ```python
+        import SQLDataModel
+
+        # Sample data of `str` containing probable datatypes
+        headers = ['first', 'last', 'age', 'service', 'hire_date']
+        data = [
+            ('John', 'Smith', '27', '1.22', '2023-02-01'),
+            ('Sarah', 'West', '39', '0.7', '2023-10-01'),
+            ('Mike', 'Harlin', '36', '3.9', '2020-08-27'),
+            ('Pat', 'Douglas', '42', '11.5', '2015-11-06'),
+            ('Kelly', 'Lee', '32', '8.0', '2016-09-18')
+        ]     
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+        
+        # Infer and set data types based on 10 random samples
+        sdm.infer_dtypes(n_samples=10)
+
+        # View updated model
+        print(sdm)
+
+        # Numeric dtypes correctly aligned
+        ```
+        ```shell
+        ┌───────┬─────────┬──────┬─────────┬────────────┐
+        │ first │ last    │  age │ service │ hire_date  │
+        ├───────┼─────────┼──────┼─────────┼────────────┤
+        │ John  │ Smith   │   27 │    1.22 │ 2023-02-01 │
+        │ Sarah │ West    │   39 │    0.70 │ 2023-10-01 │
+        │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │
+        │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │
+        │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │
+        └───────┴─────────┴──────┴─────────┴────────────┘
+        [5 rows x 5 columns]
+        ```
+        ```python
+
+        # View updated dtypes
+        for col in sdm.headers:
+            print(f"{col}: {sdm.get_column_dtype(col)}")
+        
+        # Outputs
+        first: str
+        last: str
+        age: int
+        service: float
+        hire_date: datetime.date        
+        ```
+        """
+        if not isinstance(n_samples, int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid `n_samples` type '{type(n_samples).__name__}', `n_samples` argument must be of type 'int' for `infer_dtypes()` method")
+            )
+        if not isinstance(infer_threshold, float):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid `infer_threshold` type '{type(infer_threshold).__name__}', `infer_threshold` argument must be of type 'int' for `infer_dtypes()` method")
+            )        
+        if (infer_threshold <= 0.0) or (infer_threshold > 1.0):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid `infer_threshold` value '{infer_threshold}', expected value in range '0.0 < infer_threshold <= 1.0' for `infer_dtypes()` method")
+            )        
+        str_dtype_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
+        fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_dtype_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
+        samples_dict = {col:tuple(row[j] for row in self.sql_db_conn.execute(fetch_str_dtype_stmt)) for j,col in enumerate(str_dtype_columns)}
+        inferred_dtypes = {k:non_inferrable_dtype for k in samples_dict.keys()}
+        dtype_labels = ("str", "int", "float", "datetime", "date")
+        for s_header, s_samples in samples_dict.items():
+            count_checked, count_str, count_int, count_float, count_datetime, count_date = 0,0,0,0,0,0
             for s_item in s_samples:
-                if (s_item is None) or (s_item.strip() == ''):
+                if (s_item is None) or (s_item == ''):
                     continue
                 count_checked += 1
                 try:
                     s_type = literal_eval(s_item)
                 except:
                     try:
-                        dt_type = dateutilparser(s_item, fuzzy=False, fuzzy_with_tokens=False)
-                        if isinstance(dt_type,datetime.date):
+                        dt_type = dateparser(s_item, fuzzy=False, fuzzy_with_tokens=False)
                         # both datetime.date and datetime.datetime are instances of date, only way it works is date is not instance of datetime.datetime
-                            if (dt_type.hour == 0) and (dt_type.minute == 0) and (dt_type.second == 0):
+                        if isinstance(dt_type,datetime.date):
+                            total_time_after_date = sum((dt_type.hour,dt_type.minute,dt_type.second))
+                            if total_time_after_date == 0:
                                 count_date += 1
                             else:
                                 count_datetime += 1
@@ -1308,9 +1399,8 @@ class SQLDataModel:
                     continue
                 if isinstance(s_type, int):
                     count_int += 1
-                    continue
                 elif isinstance(s_type, float):
-                    if s_item.endswith('.0'):
+                    if s_type.is_integer():
                         count_int += 1
                     else:
                         count_float += 1
@@ -1318,62 +1408,24 @@ class SQLDataModel:
                     continue
                 else:
                     count_str += 1
-            dtype_results = (count_str, count_int, count_float, count_date, count_datetime)
+            dtype_results = (count_str, count_int, count_float, count_datetime, count_date)
             max_number_dtypes_found = max(dtype_results)
-            max_idx_of_dtype = dtype_results.index(max_number_dtypes_found)
-            dtype_maximum = dtype_labels[max_idx_of_dtype]
-            dtype_maximum_ratio = max_number_dtypes_found/count_checked
-            # print(f"winning dtype: {dtype_maximum} at {dtype_maximum_ratio} (results: {dtype_results})")
-            if not use_majority_dtype:
-                if count_str != 0:
-                    continue
-                if dtype_maximum_ratio >= infer_threshold:
-                    inferred_dtypes[s_header] = dtype_maximum
-                    continue
-                else:
-                    continue
-            else:
-                inferred_dtypes[s_header] = dtype_maximum
+            if count_str != 0:
+                inferred_dtypes[s_header] = "str"
                 continue
-        return inferred_dtypes   
-
-    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, non_inferrable_dtype:Literal["str","int","float","date","datetime"]="str") -> None:
-        """
-        Attempts to convert column data types based on the first `n_samples` of evaluation.
-
-        Parameters:
-            - `n_samples` (int): The number of random samples to use for data type inference.
-            - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
-            - `non_inferrable_dtype` (Literal["str", "int", "float","date","datetime"]): The default data type to assign when ties occur, or when no dtype can be inferred.
-
-        Returns:
-            - `None`
-            
-        This method selects a random subset of samples from columns with 'str' data type according to the `n_samples` parameter.
-        It then uses the `infer_dtype_functional` static method to infer the data types of these columns based on the sample data.
-        The inferred data types are then applied to the corresponding columns using the `set_column_dtype` method.
-
-        Examples:
-        ```python
-        # Example 1: Infer data types based on 10 random samples
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Amount'])
-        sqldm.infer_dtypes(n_samples=10)
-
-        # Example 2: Infer data types based on 5 random samples
-        sqldm2 = SQLDataModel.from_csv('another_example.csv', headers=['Code', 'Description', 'Price'])
-        sqldm2.infer_dtypes(n_samples=5)
-        ```
-
-        In Example 1, the data types for columns with 'str' type are inferred based on 10 random samples.
-        In Example 2, another SQLDataModel instance performs data type inference for a different dataset with 5 random samples.
-        """
-        str_dtype_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
-        str_dtype_fetch_stmt = " ".join(("select",",".join([f'"{col}" as "{col}"' for col in str_dtype_columns]), f'from "{self.sql_model}" order by random() limit {n_samples}'))
-        sample_raw = self.sql_db_conn.execute(str_dtype_fetch_stmt).fetchall()
-        sample_fetch_dict = {col:tuple(row[j] for row in sample_raw) for j,col in enumerate(str_dtype_columns)}
-        dtype_dict = SQLDataModel.infer_sample_dtypes(sample_fetch_dict, infer_threshold=infer_threshold, non_inferrable_dtype=non_inferrable_dtype)
-        for column, dtype in dtype_dict.items():
-            self.set_column_dtype(column,dtype)
+            if max_number_dtypes_found > 0:
+                dtype_maximum = dtype_labels[dtype_results.index(max_number_dtypes_found)]
+                dtype_maximum_ratio = round(max_number_dtypes_found/count_checked,2) if count_checked > 0 else 0.0
+                if dtype_maximum_ratio >= infer_threshold:
+                    if (dtype_maximum == "date") and (count_datetime != 0):
+                        inferred_dtypes[s_header] = "datetime"
+                    elif (dtype_maximum == "int") and (count_float != 0):
+                        inferred_dtypes[s_header] = "float"                        
+                    else:
+                        inferred_dtypes[s_header] = dtype_maximum
+        for column, dtype in inferred_dtypes.items():
+            if dtype != "str":
+                self.set_column_dtype(column,dtype)
 
 #############################################################################################################
 ############################################### class methods ###############################################
@@ -2677,105 +2729,8 @@ class SQLDataModel:
         ```
         """        
         return self.row_count
-        
-    def __repr__(self) -> str:
-        """
-        Returns a formatted string representation of the SQLDataModel instance.
 
-        Notes:
-            - The representation includes a truncated table view of the SQLDataModel.
-            - The output adjusts column widths dynamically and provides ellipses if the table is truncated.
-            - The number of displayed rows is limited to either the row count or the specified maximum rows.
-            - The output includes column headers, row data, and information about the total number of rows and columns.
-
-        Returns:
-            - `str`: The string representation of the SQLDataModel instance.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        headers = ['idx', 'first', 'last', 'age']
-        data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
-        ]
-
-        # Create the model with sample data
-        sqldm = SQLDataModel(data,headers)
-
-        # Display the string representation
-        print(sqldm)
-
-        # Outputs with default alignment
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┐
-        │   │ first  │ last    │    age │
-        ├───┼────────┼─────────┼────────┤
-        │ 0 │ john   │ smith   │     27 │
-        │ 1 │ sarah  │ west    │     29 │
-        │ 2 │ mike   │ harlin  │     36 │
-        │ 3 │ pat    │ douglas │     42 │
-        └───┴────────┴─────────┴────────┘  
-        [4 rows x 3 columns]      
-        ```
-        ```python
-        
-        # Using left alignment
-        sqldm.set_column_alignment("<")
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┐
-        │   │ first  │ last    │ age    │
-        ├───┼────────┼─────────┼────────┤
-        │ 0 │ john   │ smith   │ 27     │
-        │ 1 │ sarah  │ west    │ 29     │
-        │ 2 │ mike   │ harlin  │ 36     │
-        │ 3 │ pat    │ douglas │ 42     │
-        └───┴────────┴─────────┴────────┘
-        [4 rows x 3 columns]
-        ```
-        ```python
-        
-        # Using center alignment
-        sqldm.set_column_alignment("^")
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┐
-        │   │ first  │  last   │  age   │
-        ├───┼────────┼─────────┼────────┤
-        │ 0 │  john  │  smith  │   27   │
-        │ 1 │ sarah  │  west   │   29   │
-        │ 2 │  mike  │ harlin  │   36   │
-        │ 3 │  pat   │ douglas │   42   │
-        └───┴────────┴─────────┴────────┘
-        [4 rows x 3 columns]
-        ```
-        ```python
-        
-        # Using right alignment
-        sqldm.set_column_alignment(">")
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┐
-        │   │  first │    last │    age │
-        ├───┼────────┼─────────┼────────┤
-        │ 0 │   john │   smith │     27 │
-        │ 1 │  sarah │    west │     29 │
-        │ 2 │   mike │  harlin │     36 │
-        │ 3 │    pat │ douglas │     42 │
-        └───┴────────┴─────────┴────────┘
-        [4 rows x 3 columns]        
-        ```
-        Formatting:
-            - Default alignment is right-aligned for numeric types and left-aligned for remaining types
-            - To override default and set custom alignment, use `set_column_alignment()` method
-            - Max displayed rows set to 1,000 by default, use `set_display_max_rows()` to modify
-            - Set table color using `set_display_color()` method
-        """        
+    def __repr__(self):
         total_available_width, total_available_height = shutil.get_terminal_size()
         display_max_rows = self.display_max_rows if self.display_max_rows is not None else (total_available_height - 6) if (total_available_height - 6 > 0) else 1
         vertical_truncation_required = display_max_rows < self.row_count
@@ -2832,10 +2787,17 @@ class SQLDataModel:
         # favor right direction when no exact centering possible 
         vertical_sep_fmt_str = vconcat_column_separator.join([f"""printf("%!{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
         fetch_fmt_stmt = f"""
-        select CASE WHEN (("{self.sql_idx}" <> {split_row}) or (not {vertical_truncation_required})) 
-        THEN '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' 
-        ELSE '{table_left_edge}' || {vertical_sep_fmt_str} ||' │{table_dynamic_newline}' 
-        END as "full_row" from "{self.sql_model}" where (CASE WHEN {vertical_truncation_required} THEN "{self.sql_idx}" <= {split_top} or "{self.sql_idx}" > {split_bottom} ELSE (1=1) END) limit {max_display_rows+1}"""
+        select CASE WHEN ("not_idx" <> {split_row} or not {vertical_truncation_required}) THEN "full_row" ELSE "row_seperator" END as "full_table"
+        from (
+            select 
+            row_number() over() -1 as "not_idx"
+            ,'{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "full_row"
+            ,'{table_left_edge}' || {vertical_sep_fmt_str} ||' │{table_dynamic_newline}' as "row_seperator"
+            from "{self.sql_model}" where CASE WHEN {vertical_truncation_required} THEN 
+            "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {split_row})
+			or "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" desc limit {split_row} +1) ELSE (1=1) END
+            limit {max_display_rows} +1
+        )"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if self.column_alignment is None:
             formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
@@ -2849,7 +2811,7 @@ class SQLDataModel:
         table_repr = "".join([table_repr, table_cross_bar.replace("┌","└").replace("┬","┴").replace("┐","┘")])
         table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
         table_repr = "".join([table_repr, table_caption])
-        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)   
+        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)  
 
 ##################################################################################################################
 ############################################## sqldatamodel methods ##############################################
@@ -3376,7 +3338,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("date","datetime") else f"""{dtype}("{column}")"""
+        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("date","datetime") else f"""{dtype}(trim("{column}"))"""
         update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
         self.execute_transaction(update_col_sql)
         
