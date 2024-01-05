@@ -1279,8 +1279,7 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid `n_samples` value '{n_samples}', expected value within current row range '0 < n_samples <= {self.row_count}' when using integer value for `n_samples`")
             ) 
-        sample_fetch_stmt = " ".join((f"""select""", ",".join([f'"{col}"' for col in [self.sql_idx,*self.headers]]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
-        return self.fetch_query(sample_fetch_stmt, **kwargs)
+        return self.fetch_query(self._generate_unordered_sql_stmt(n_rows=n_samples,ordering="random"), **kwargs)
 
     def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, non_inferrable_dtype:Literal["str","int","float","datetime","date","bytes"]="str") -> None:
         """
@@ -2167,7 +2166,7 @@ class SQLDataModel:
         self.sql_c.execute(self._generate_sql_stmt(include_index=include_index))
         model_data = [x for x in self.sql_c.fetchall()] # using new process
         model_headers = [x[0] for x in self.sql_c.description]
-        created_header_dict = {col:self.header_master[col][0] for col in model_headers}
+        created_header_dict = {col:f"{self.header_master[col][0]}" if self.header_master[col][2] else f"{self.header_master[col][0]} PRIMARY KEY" for col in model_headers}
         try:
             extern_c = extern_conn.cursor()
         except Exception as e:
@@ -2179,7 +2178,7 @@ class SQLDataModel:
             extern_conn.commit()
         db_dialect = type(extern_conn).__module__.split('.')[0].lower()
         dyn_bind = '?' if db_dialect == 'sqlite3' else '%s'
-        sql_dtypes_stmt = ", ".join(f"""\"{header}\" {created_header_dict[header]}""" for header in model_headers) # generates sql create table statement using type mapping dict
+        sql_dtypes_stmt = ", ".join(f""" "{header}" {created_header_dict[header]}""" for header in model_headers) # generates sql create table statement using type mapping dict
         sql_create_stmt = f"""create table if not exists "{table}" ({sql_dtypes_stmt})"""
         sql_insert_stmt = f"""insert into "{table}" ({','.join([f'"{col}"' for col in model_headers])}) values ({','.join([dyn_bind for _ in model_headers])})""" # changed to string formatter
         extern_c.execute(sql_create_stmt)
@@ -2993,12 +2992,14 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
-        head_result = sqldm.head(3)
-        print(head_result)
+        # Create the  model
+        sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+
+        # Generate a new model with top 3 rows
+        head_result = sdm.head(3)
         ```
         """
-        return self._generate_sql_stmt(fetch_limit=n_rows, execute_fetch=True)
+        return self.fetch_query(self._generate_unordered_sql_stmt(n_rows, ordering="asc"))
     
     def tail(self, n_rows:int=5) -> SQLDataModel:
         """
@@ -3014,13 +3015,14 @@ class SQLDataModel:
         ```python
         import SQLDataModel
 
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
-        tail_result = sqldm.tail(3)
-        print(tail_result)
+        # Create the  model
+        sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+
+        # Generate a new model with bottom 3 rows
+        head_result = sdm.tail(3)
         ```
         """
-        rows = slice((self.max_idx-n_rows), self.max_idx + 1)
-        return self._generate_sql_stmt(rows=rows, execute_fetch=True)
+        return self.fetch_query(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
     
     def set_display_color(self, color:str|tuple):
         """
@@ -4293,6 +4295,34 @@ class SQLDataModel:
                 ) from None
             return type(self)(self.sql_c.fetchall(), headers=[x[0] for x in self.sql_c.description], display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
+    def _generate_unordered_sql_stmt(self, n_rows:int=None, columns:list[str]=None, include_index:bool=True, ordering:Literal["asc","desc","random"]="asc") -> str:
+        """
+        Generates an SQL statement for fetching unordered rows from the SQLDataModel, used by `head()`, `tail()` and `sample()` methods to fetch specified number of rows.
+
+        Parameters:
+            - `n_rows` (int): The number of rows to fetch. If `None`, fetches all rows.
+            - `columns` (list[str]): The list of columns to include in the SELECT statement. If `None`, includes all columns.
+            - `include_index` (bool): If True, includes the index column in the SELECT statement.
+            - `ordering` (Literal["asc", "desc", "random"]): The ordering of the rows. Can be 'asc' (ascending), 'desc' (descending), or 'random'.
+
+        Returns:
+            - `str`: The SQL statement for fetching unordered rows with specified ordering and limit.
+
+        Notes:
+            - No argument type validation or out of scope indexing checking occurs.
+            - Inputs are assumed validated, no exceptions are raised by this method.
+        """
+        if n_rows is None:
+            n_rows = self.row_count
+        if columns is None:
+            columns = self.headers
+        if isinstance(columns,str):
+            columns = [columns]
+        columns_str = ",".join([f'"{col}"' for col in columns])
+        ordering_str = f"""order by "{self.sql_idx}" {ordering}""" if ordering in ("asc","desc") else "order by random()"
+        fetch_stmt = " ".join(("select",f'"{self.sql_idx}",' if include_index else '',columns_str,f'from "{self.sql_model}"', ordering_str, f"limit {n_rows}"))
+        return fetch_stmt
+
     def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
         """
         Generates and executes a SQL update statement to modify specific rows and columns with provided values in the SQLDataModel.
@@ -4332,13 +4362,16 @@ class SQLDataModel:
         update_sql_script = None
         rows_to_update = rows_to_update if rows_to_update is not None else tuple(range(self.min_idx, self.max_idx+1))
         columns_to_update = columns_to_update if columns_to_update is not None else self.headers
-        if not isinstance(values_to_update, list|tuple):
+        if not isinstance(values_to_update, tuple|list):
             values_to_update = (values_to_update,)
             rowwise_update = False
         else:
             rowwise_update = True
+        if isinstance(values_to_update, list):
+            if not isinstance(values_to_update[0], tuple|list):
+                values_to_update = tuple(values_to_update)
         if isinstance(values_to_update, tuple):
-            values_to_update = [values_to_update]        
+            values_to_update = [values_to_update]
         num_rows_to_update = len(rows_to_update)
         num_columns_to_update = len(columns_to_update)
         num_value_rows_to_update = len(values_to_update)
