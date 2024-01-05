@@ -1282,18 +1282,19 @@ class SQLDataModel:
         sample_fetch_stmt = " ".join((f"""select""", ",".join([f'"{col}"' for col in [self.sql_idx,*self.headers]]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
         return self.fetch_query(sample_fetch_stmt, **kwargs)
 
-    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, non_inferrable_dtype:Literal["str","int","float","datetime","date"]="str") -> None:
+    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, non_inferrable_dtype:Literal["str","int","float","datetime","date","bytes"]="str") -> None:
         """
         Infer and set data types for columns based on random sampling of `n_samples` from the dataset if proportion of data types in returned sample equals or exceeds `infer_threshold` otherwise fallback to data type specified in `non_inferrable_dtype` argument.
 
         Parameters:
             - `n_samples` (int): The number of random samples to use for data type inference.
             - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
-            - `non_inferrable_dtype` (Literal["str", "int", "float", "datetime", "date"]): The default data type to assign when ties occur, or when no dtype can be inferred.
+            - `non_inferrable_dtype` (Literal["str","int","float","datetime","date","bytes"]): The default data type to assign when ties occur, or when no dtype can be inferred.
         
         Raises:
             - `TypeError`: If argument for `n_samples` is not of type `int` or `infer_threshold` is not of type `float`
             - `ValueError`: If value for `infer_threshold` is not a valid range satisfying `0.0 < infer_threshold <= 1.0`
+            - `TypeError`: If `non_inferrable_dtype` is not one of "str", "int", "float", "datetime", "date", "bytes"
 
         Returns:
             - `None`
@@ -1303,7 +1304,7 @@ class SQLDataModel:
             - Co-occurences of `int` & `float`, or `date` & `datetime` will favor the superset dtype after `infer_threshold` is met, so `float` and `datetime` respectively.
             - If a single `datetime` instance is found amongst a higher proportion of `date` dtypes, `datetime` will be used according to second rule.
             - If a single `float` instance is found amongst a higher proportion of `int` dtypes, `float` will be used according to second rule.
-            - Ties between dtypes are broken according to `non_inferrable_dtype` < `str` < `float` < `int` < `datetime` < `date`
+            - Ties between dtypes are broken according to `non_inferrable_dtype`<`str`<`float`<`int`<`datetime`<`date`<`bytes`
             - This method calls the `set_column_dtype()` method once the column dtypes have been inferred if they differ from the current dtype.
 
         ---   
@@ -1370,14 +1371,18 @@ class SQLDataModel:
         if (infer_threshold <= 0.0) or (infer_threshold > 1.0):
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid `infer_threshold` value '{infer_threshold}', expected value in range '0.0 < infer_threshold <= 1.0' for `infer_dtypes()` method")
-            )        
+            )   
+        if non_inferrable_dtype not in ("str","int","float","datetime","date","bytes"):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid `non_inferrable_dtype` type '{type(non_inferrable_dtype).__name__}', expected one of 'str','int','float','datetime','date','bytes' for `infer_dtypes()` method")
+            )
         str_dtype_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
         fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_dtype_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
         samples_dict = {col:tuple(row[j] for row in self.sql_db_conn.execute(fetch_str_dtype_stmt)) for j,col in enumerate(str_dtype_columns)}
         inferred_dtypes = {k:non_inferrable_dtype for k in samples_dict.keys()}
-        dtype_labels = ("str", "int", "float", "datetime", "date")
+        dtype_labels = ("str", "int", "float", "datetime", "date", "bytes")
         for s_header, s_samples in samples_dict.items():
-            count_checked, count_str, count_int, count_float, count_datetime, count_date = 0,0,0,0,0,0
+            count_checked, count_str, count_int, count_float, count_datetime, count_date, count_bytes = 0,0,0,0,0,0,0
             for s_item in s_samples:
                 if (s_item is None) or (s_item == ''):
                     continue
@@ -1404,11 +1409,13 @@ class SQLDataModel:
                         count_int += 1
                     else:
                         count_float += 1
+                elif isinstance(s_type, bytes):
+                    count_bytes += 1
                 elif s_type is None:
                     continue
                 else:
                     count_str += 1
-            dtype_results = (count_str, count_int, count_float, count_datetime, count_date)
+            dtype_results = (count_str, count_int, count_float, count_datetime, count_date, count_bytes)
             max_number_dtypes_found = max(dtype_results)
             if count_str != 0:
                 inferred_dtypes[s_header] = "str"
@@ -2731,6 +2738,103 @@ class SQLDataModel:
         return self.row_count
 
     def __repr__(self):
+        """
+        Returns a formatted string representation of the SQLDataModel instance.
+
+        Notes:
+            - The representation includes a truncated table view of the SQLDataModel.
+            - The output adjusts column widths dynamically and provides ellipses if the table is truncated.
+            - The number of displayed rows is limited to either the row count or the specified maximum rows.
+            - The output includes column headers, row data, and information about the total number of rows and columns.
+
+        Returns:
+            - `str`: The string representation of the SQLDataModel instance.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        headers = ['idx', 'first', 'last', 'age']
+        data = [
+            (0, 'john', 'smith', 27)
+            ,(1, 'sarah', 'west', 29)
+            ,(2, 'mike', 'harlin', 36)
+            ,(3, 'pat', 'douglas', 42)
+        ]
+
+        # Create the model with sample data
+        sqldm = SQLDataModel(data,headers)
+
+        # Display the string representation
+        print(sqldm)
+
+        # Outputs with default alignment
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │ first  │ last    │    age │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │ john   │ smith   │     27 │
+        │ 1 │ sarah  │ west    │     29 │
+        │ 2 │ mike   │ harlin  │     36 │
+        │ 3 │ pat    │ douglas │     42 │
+        └───┴────────┴─────────┴────────┘  
+        [4 rows x 3 columns]      
+        ```
+        ```python
+        
+        # Using left alignment
+        sqldm.set_column_alignment("<")
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │ first  │ last    │ age    │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │ john   │ smith   │ 27     │
+        │ 1 │ sarah  │ west    │ 29     │
+        │ 2 │ mike   │ harlin  │ 36     │
+        │ 3 │ pat    │ douglas │ 42     │
+        └───┴────────┴─────────┴────────┘
+        [4 rows x 3 columns]
+        ```
+        ```python
+        
+        # Using center alignment
+        sqldm.set_column_alignment("^")
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │ first  │  last   │  age   │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │  john  │  smith  │   27   │
+        │ 1 │ sarah  │  west   │   29   │
+        │ 2 │  mike  │ harlin  │   36   │
+        │ 3 │  pat   │ douglas │   42   │
+        └───┴────────┴─────────┴────────┘
+        [4 rows x 3 columns]
+        ```
+        ```python
+        
+        # Using right alignment
+        sqldm.set_column_alignment(">")
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┐
+        │   │  first │    last │    age │
+        ├───┼────────┼─────────┼────────┤
+        │ 0 │   john │   smith │     27 │
+        │ 1 │  sarah │    west │     29 │
+        │ 2 │   mike │  harlin │     36 │
+        │ 3 │    pat │ douglas │     42 │
+        └───┴────────┴─────────┴────────┘
+        [4 rows x 3 columns]        
+        ```
+        Formatting:
+            - Default alignment is right-aligned for numeric types and left-aligned for remaining types
+            - To override default and set custom alignment, use `set_column_alignment()` method
+            - Max displayed rows set to 1,000 by default, use `set_display_max_rows()` to modify
+            - Set table color using `set_display_color()` method
+        """         
         total_available_width, total_available_height = shutil.get_terminal_size()
         display_max_rows = self.display_max_rows if self.display_max_rows is not None else (total_available_height - 6) if (total_available_height - 6 > 0) else 1
         vertical_truncation_required = display_max_rows < self.row_count
@@ -2782,22 +2886,21 @@ class SQLDataModel:
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if display_index else ""
         header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=self.column_alignment)}""" for col in display_headers if col != self.sql_idx])
         vertical_sep_chars = '⠒⠂' # '⠐⠒⠂'
-        # favor left direction when no exact centering possible 
-        # vertical_sep_fmt_str = vconcat_column_separator.join([f"""printf("%!-{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
-        # favor right direction when no exact centering possible 
         vertical_sep_fmt_str = vconcat_column_separator.join([f"""printf("%!{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
-        fetch_fmt_stmt = f"""
-        select CASE WHEN ("not_idx" <> {split_row} or not {vertical_truncation_required}) THEN "full_row" ELSE "row_seperator" END as "full_table"
-        from (
-            select 
-            row_number() over() -1 as "not_idx"
-            ,'{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "full_row"
-            ,'{table_left_edge}' || {vertical_sep_fmt_str} ||' │{table_dynamic_newline}' as "row_seperator"
-            from "{self.sql_model}" where CASE WHEN {vertical_truncation_required} THEN 
-            "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {split_row})
-			or "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" desc limit {split_row} +1) ELSE (1=1) END
-            limit {max_display_rows} +1
-        )"""
+        if vertical_truncation_required:
+            fetch_fmt_stmt = f"""
+            with "_repr" as (
+                select "{self.sql_idx}" as "_row" from "{self.sql_model}" where "{self.sql_idx}" in 
+                    (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {split_row}+1)
+                        or "{self.sql_idx}" in
+                    (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" desc limit {split_row})
+                order by "{self.sql_idx}" asc limit {max_display_rows}+1)
+                ,"_trigger" as (select "{self.sql_idx}" as "_sep" from "{self.sql_model}" order by "{self.sql_idx}" asc limit 1 offset {split_row})
+            select CASE WHEN "{self.sql_idx}" <> (select "_sep" from "_trigger") THEN "_full_row" 
+            ELSE '{table_left_edge}' || {vertical_sep_fmt_str} ||' │{table_dynamic_newline}' 
+            END from (select "{self.sql_idx}",'{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
+        else:
+            fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if self.column_alignment is None:
             formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
@@ -2811,7 +2914,7 @@ class SQLDataModel:
         table_repr = "".join([table_repr, table_cross_bar.replace("┌","└").replace("┬","┴").replace("┐","┘")])
         table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
         table_repr = "".join([table_repr, table_caption])
-        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)  
+        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)
 
 ##################################################################################################################
 ############################################## sqldatamodel methods ##############################################
@@ -4248,7 +4351,7 @@ class SQLDataModel:
             update_sql_script = f"""alter table "{self.sql_model}" add column "{new_column}" {new_column_sql_dtype};"""
         if not rowwise_update:
             values_to_update = values_to_update[0][0]
-            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes|datetime.date) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"'{values_to_update}'" if not isinstance(values_to_update,bytes) else f"""'{values_to_update.decode('utf-8')}'"""
+            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes|datetime.date) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"'{values_to_update.replace("'","''")}'" if not isinstance(values_to_update,bytes) else f"""X'{values_to_update.hex()}'"""
             col_val_param = ','.join([f""" "{column}" = {values_to_update} """ for column in columns_to_update]) 
             if update_sql_script is None:
                 update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
