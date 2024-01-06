@@ -3053,6 +3053,100 @@ class SQLDataModel:
         except:
             print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code..."))
 
+    def sort(self, by:str|list[str]=None, asc:bool=True) -> SQLDataModel:
+        """
+        Sort columns in the dataset by the specified ordering. If no value is specified, the current `sql_idx` column is used with the default ordering `asc = True`.
+
+        Parameters:
+            - `by` (str | list[str]): The column or list of columns by which to sort the dataset. Defaults to sorting by the dataset's index.
+            - `asc` (bool): If True, sort in ascending order; if False, sort in descending order. Defaults to ascending order.
+
+        Raises:
+            - `TypeError`: If value for `by` argument is not one of type 'str' or 'list'
+            - `ValueError`: If a specified column in `by` is not found in the current dataset or is an invalid column.
+
+        Returns:
+            - `SQLDataModel`: A new instance of SQLDataModel with columns sorted according to the specified ordering.
+        
+        Example:
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01'),
+            ('Sarah', 'West', 39, 0.7, '2023-10-01'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18')
+        ]     
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # Sort by last name column
+        sorted_sdm = sdm.sort('last')
+
+        # View sorted model
+        print(sorted_sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬─────────┬──────┬─────────┬────────────┐
+        │   │ first │ last    │  age │ service │ hire_date  │
+        ├───┼───────┼─────────┼──────┼─────────┼────────────┤
+        │ 0 │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │
+        │ 1 │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │
+        │ 2 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │
+        │ 3 │ John  │ Smith   │   27 │    1.22 │ 2023-02-01 │
+        │ 4 │ Sarah │ West    │   39 │    0.70 │ 2023-10-01 │
+        └───┴───────┴─────────┴──────┴─────────┴────────────┘
+        [5 rows x 5 columns]
+        ```
+        ```python
+
+        # Sort by multiple columns in descending order
+        sorted_sdm = sdm.sort(['age','hire_date'], asc=False)
+
+        # View sorted
+        print(sorted_sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬─────────┬──────┬─────────┬────────────┐
+        │   │ first │ last    │  age │ service │ hire_date  │
+        ├───┼───────┼─────────┼──────┼─────────┼────────────┤
+        │ 0 │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │
+        │ 1 │ Sarah │ West    │   39 │    0.70 │ 2023-10-01 │
+        │ 2 │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │
+        │ 3 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │
+        │ 4 │ John  │ Smith   │   27 │    1.22 │ 2023-02-01 │
+        └───┴───────┴─────────┴──────┴─────────┴────────────┘
+        [5 rows x 5 columns]
+        ```
+        """
+        if by is not None:
+            if not isinstance(by, str|list):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(by).__name__}', `by` argument for `sort()` must be one of 'str', 'list'")
+                )
+            if isinstance(by,str):
+                by = [by]
+            for col in by:
+                if col not in self.headers:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns required for `sort()`, use `get_headers()` to view current valid headers")
+                    )
+        else:
+            by = [self.sql_idx]
+        sort_ord = "asc" if asc else "desc"
+        sort_by_str = ",".join([f'"{x}" {sort_ord}' for x in by])
+        headers_str = ",".join([f'"{col}"' for col in self.headers])
+        sort_stmt = " ".join(("select",headers_str,f'from "{self.sql_model}" order by {sort_by_str}'))
+        return self.fetch_query(sort_stmt)
+
     def where(self, predicate:str) -> SQLDataModel:
         """
         Filters the rows of the current `SQLDataModel` object based on the specified SQL predicate and returns a
