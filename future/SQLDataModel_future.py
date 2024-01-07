@@ -2649,7 +2649,6 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None             
         validated_rows, validated_columns = validated_indicies
-        # print(f'parsed as:\nrows: {validated_rows}\ncols: {validated_columns}')
         return self._generate_sql_stmt(columns=validated_columns,rows=validated_rows, execute_fetch=True)
 
     def __setitem__(self, target_indicies, update_values) -> None:
@@ -3293,15 +3292,18 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"""ValueError: invalid start index '{start_index}', constraints require start index <= minimum index, which is '{self.min_idx}' in the current model""")
             )
         start_index = start_index - 1
-        reset_idx_cte = f"""with idx_cte as (select "{self.sql_idx}", row_number() over (order by "{self.sql_idx}" asc) + {start_index} as new_idx from "{self.sql_model}")
-        update "{self.sql_model}" set "{self.sql_idx}" = (select new_idx from idx_cte where idx_cte."{self.sql_idx}" = "{self.sql_model}"."{self.sql_idx}")"""
-        try:
-            self.sql_db_conn.execute(reset_idx_cte)
-        except (sqlite3.IntegrityError, sqlite3.ProgrammingError) as e:
-            raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f"""SQLProgrammingError: reset index error, execution failed with: "{e}" """)
-            ) from None
-        self._update_model_metadata(update_row_meta=True)
+        tmp_table_name = f"_temp_{self.sql_model}"
+        created_headers = [self.sql_idx] + self.headers
+        created_header_dict = {col:f"{self.header_master[col][0]}" if self.header_master[col][2] else f"{self.header_master[col][0]} PRIMARY KEY" for col in created_headers}
+        headers_str = ",".join([f'"{col}"' for col in self.headers])
+        headers_dtypes_str = ",".join([f'"{col}" {col_type}' for col,col_type in created_header_dict.items()])
+        reset_idx_stmt = f"""drop table if exists "{tmp_table_name}";create table "{tmp_table_name}"({headers_dtypes_str}); 
+        insert into "{tmp_table_name}"("{self.sql_idx}",{headers_str})
+        select row_number() over (order by "{self.sql_idx}" asc) + {start_index} as "{self.sql_idx}",{headers_str} from "{self.sql_model}" order by "{self.sql_idx}" asc;
+        drop table if exists "{self.sql_model}"; alter table "{tmp_table_name}" rename to "{self.sql_model}";"""
+        self.execute_transaction(reset_idx_stmt)
+        self._update_model_metadata(update_row_meta=True)        
+        return
 
 ##############################################################################################################
 ################################################ sql commands ################################################
