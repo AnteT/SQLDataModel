@@ -19,7 +19,7 @@ print(sdm) # prints standard color
 sdm.set_display_color("#b39cf1") # outputs as purple
 print(sdm) # prints as purple
 
-sdm_grouped = sdm.group_by('region','check') # group by one or more columns
+sdm_grouped = sdm.group_by(['region','check']) # group by one or more columns
 sdm_grouped.set_display_color("#dba4a4")
 
 sdm_grouped.to_csv('model-output.csv',include_index=True) # save as csv, sqlite, pickle, text
