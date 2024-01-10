@@ -101,7 +101,7 @@ class SQLDataModel:
     ### Notes
     use `SQLDM.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_c','sql_db_conn','display_float_precision','header_master')
+    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
     debug:bool=False
     def __init__(self, data:list[list], headers:list[str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
         if not isinstance(data, list|tuple):
@@ -352,53 +352,6 @@ class SQLDataModel:
             else:
                 dupes[col] = 1
                 yield col
-
-    def get_header_at_index(self, index:int) -> str:
-        """
-        Retrieves the name of the column in the `SQLDataModel` at the specified index.
-
-        Parameters:
-            - `index` (int): The index of the column for which to retrieve the name.
-
-        Raises:
-            - `IndexError`: If the provided column index is outside the current column range.
-
-        Returns:
-            - `str`: The name of the column at the specified index.
-
-        Note:
-            - The method allows retrieving the name of a column identified by its index in the SQLDataModel.
-            - Handles negative indices by adjusting them relative to the end of the column range.
-
-        Usage:
-        ```python
-        import SQLDataModel
-
-        headers = ['idx', 'first', 'last', 'age']
-        data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
-        ]
-
-        # Create model with sample data
-        sqldm = SQLDataModel(data,headers)
-
-        # Example: Get the name of the column at index 1
-        column_name = sqldm.get_header_at_index(1)
-
-        # Outputs 'first'
-        print(column_name)
-        ```
-        """
-        if index < 0:
-            index = self.column_count + (index)
-        if (index < 0 or index >= self.column_count):
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
-            )        
-        return self.headers[index]
     
     def rename_column(self, column:int|str, new_column_name:str) -> None:
         """
@@ -541,67 +494,6 @@ class SQLDataModel:
         else:
             replace_stmt = " ".join(("select",",".join([f""" replace("{col}",'{pattern}','{replacement}') as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
             return self.execute_fetch(replace_stmt, **kwargs)
-
-    def set_header_at_index(self, index:int, new_value:str) -> None:
-        """
-        Renames a column in the `SQLDataModel` at the specified index with the provided new value.
-
-        Parameters:
-            - `index` (int): The index of the column to be renamed.
-            - `new_value` (str): The new name for the specified column.
-
-        Raises:
-            - `IndexError`: If the provided column index is outside the current column range.
-            - `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
-
-        Note:
-            - The method allows renaming a column identified by its index in the SQLDataModel.
-            - Handles negative indices by adjusting them relative to the end of the column range.
-            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        headers = ['idx', 'first', 'last', 'age']
-        data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
-        ]
-
-        # Create the model with sample data
-        sqldm = SQLDataModel(data,headers)
-
-        # Example: Rename the column at index 1 to 'first_name'
-        sqldm.set_header_at_index(1, 'first_name')
-
-        # Get current values
-        new_headers = sqldm.get_headers()
-
-        # Outputs ['first_name', 'last', 'age']
-        print(new_headers)
-        ```
-        """
-        if index < 0:
-            index = self.column_count + (index)
-        if (index < 0 or index >= self.column_count):
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
-            )
-        rename_stmts = f"""alter table "{self.sql_model}" rename column "{self.headers[index]}" to "{new_value}" """
-        full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
-        try:
-            self.sql_db_conn.executescript(full_stmt)
-            self.sql_db_conn.commit()
-        except Exception as e:
-            self.sql_db_conn.rollback()
-            raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
-            ) from None
-        self.headers[index] = new_value # replace old column at specified index with new value to retain original column ordering
-        self._update_model_metadata()
 
     def get_headers(self) -> list[str]:
         """
@@ -2312,6 +2204,395 @@ class SQLDataModel:
 ####################################################################################################################
 ############################################## dunder special methods ##############################################
 ####################################################################################################################
+
+    def __lt__(self, other) -> SQLDataModel:
+        """
+        Implements the less than operator '<' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'age' column
+        sdm = sdm[sdm['age'] < 40]
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last   │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
+        │ 1 │ Kelly │ Lee    │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 2 │ Mike  │ Harlin │   36 │    3.90 │ 2020-08-27 │ Male   │
+        └───┴───────┴────────┴──────┴─────────┴────────────┴────────┘
+        [3 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """        
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] < other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] < other)
+        return (row_idxs)
+    
+    def __le__(self, other) -> SQLDataModel:
+        """
+        Implements the less than or equal to operator '<=' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'age' column
+        sdm = sdm[sdm['age'] <= 40]
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last   │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
+        │ 1 │ Kelly │ Lee    │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 2 │ Mike  │ Harlin │   36 │    3.90 │ 2020-08-27 │ Male   │
+        └───┴───────┴────────┴──────┴─────────┴────────────┴────────┘
+        [3 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] <= other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] <= other)
+        return (row_idxs)
+    
+    def __eq__(self, other) -> SQLDataModel:
+        """
+        Implements the is equal to operator '==' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'gender' column
+        sdm = sdm[sdm['gender'] == 'Female']
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬──────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼──────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ Kelly │ Lee  │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 1 │ Sarah │ West │   51 │    0.70 │ 2023-10-01 │ Female │
+        └───┴───────┴──────┴──────┴─────────┴────────────┴────────┘
+        [2 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """        
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] == other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] == other)
+        return (row_idxs)
+
+    def __ne__(self, other) -> SQLDataModel:
+        """
+        Implements the not equal to operator '!=' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'first' column
+        sdm = sdm[sdm['first'] != 'John']
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last    │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 1 │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │ Male   │
+        │ 2 │ Sarah │ West    │   51 │    0.70 │ 2023-10-01 │ Female │
+        │ 3 │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │ Male   │
+        └───┴───────┴─────────┴──────┴─────────┴────────────┴────────┘
+        [4 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] != other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] != other)
+        return (row_idxs)
+
+    def __gt__(self, other) -> SQLDataModel:
+        """
+        Implements the greater than operator '>' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'service' column
+        sdm = sdm[sdm['service'] > 5.0]
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last    │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 1 │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │ Male   │
+        └───┴───────┴─────────┴──────┴─────────┴────────────┴────────┘
+        [2 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] > other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] > other)
+        return (row_idxs)
+
+    def __ge__(self, other) -> SQLDataModel:
+        """
+        Implements the greater than or equal to operator '>=' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'hire_date' column
+        sdm = sdm[sdm['hire_date'] >= datetime.date(2020,1,1)]
+
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last   │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
+        │ 1 │ Mike  │ Harlin │   36 │    3.90 │ 2020-08-27 │ Male   │
+        │ 2 │ Sarah │ West   │   51 │    0.70 │ 2023-10-01 │ Female │
+        └───┴───────┴────────┴──────┴─────────┴────────────┴────────┘
+        [3 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which result from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] >= other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float|datetime.date):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] >= other)
+        return (row_idxs)
 
     def __add__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
         """
@@ -4717,17 +4998,17 @@ class SQLDataModel:
 
     def validate_indicies(self, indicies) -> tuple[int|slice, list[str]]:
         """
-        Validates and returns indices for accessing rows and columns in the `SQLDataModel`.
+        Validates and returns a predictable notation form of indices for accessing rows and columns in the `SQLDataModel` from varying indexing input types.
 
         Parameters:
             - `indicies`: Specifies the indices for rows and columns. It can be of various types:
             - int: Single row index.
             - slice: Range of row indices.
-            - tuple: Tuple of disconnected row indices.
+            - set: Discontiguous row indicies.
+            - tuple: Like set, discontiguous row indices.
             - str: Single column name.
             - list: List of column names.
             - tuple[int|slice, str|list]: Two-dimensional indexing with rows and columns.
-            - `strict_validation` (bool, optional): If True, performs strict validation for column names against the current model headers. Default is True.
 
         Returns:
             - `tuple` containing validated row indices and column indices.
@@ -4792,11 +5073,11 @@ class SQLDataModel:
             stop_idx = stop_idx if stop_idx > 0 else self.row_count + stop_idx
             if start_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             if stop_idx <= start_idx:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{start_idx-stop_idx}', provided row index returns no valid rows within current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{start_idx-stop_idx}', provided row index returns no valid rows within current model range of '0:{self.row_count}'")
                 )
             if row_slice.step is None:
                 return (slice(start_idx,stop_idx), self.headers)
@@ -4804,9 +5085,16 @@ class SQLDataModel:
                 rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_slice.step)]
                 if (num_rows_in_scope := len(rows_in_scope)) < 1:
                     raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range '0:{self.row_count}'")
+                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                     )
                 return (rows_in_scope, self.headers)
+        ### single set of row indicies ###
+        if isinstance(indicies, set):
+            if (len_set := len(indicies)) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '0:{self.row_count}'")
+                )
+            return (tuple(indicies), self.headers)
         ### columns by str or list of str ###
         if isinstance(indicies, str|list):
             col_index = indicies
@@ -4857,11 +5145,11 @@ class SQLDataModel:
             min_row_idx, max_row_idx = min(row_indicies), max(row_indicies)
             if min_row_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             if max_row_idx > self.row_count:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             validated_row_indicies = row_indicies
         else: # is slice
@@ -4869,11 +5157,11 @@ class SQLDataModel:
             stop_idx = self.row_count if row_indicies.stop is None else row_indicies.stop if row_indicies.stop >= 0 else (self.row_count + row_indicies.stop)
             if start_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             if stop_idx <= start_idx:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{stop_idx - start_idx}', provided row slice returned no valid row indicies within current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{stop_idx - start_idx}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                 )    
             if row_indicies.step is None:
                 validated_row_indicies = slice(start_idx, stop_idx)
@@ -4881,13 +5169,13 @@ class SQLDataModel:
                 rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_indicies.step)]
                 if (num_rows_in_scope := len(rows_in_scope)) < 1:
                     raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range '0:{self.row_count}'")
+                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                     )
                 validated_row_indicies = rows_in_scope
         ### then columns ###
         if not isinstance(col_indicies, int|slice|tuple|str|list):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing a slice, list or str type is required")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing one of 'slice', 'list' or 'str' type is required")
                 )        
         if isinstance(col_indicies, int):
             try:
@@ -4900,7 +5188,7 @@ class SQLDataModel:
             col_indicies = self.headers[col_indicies]
             if (len_col_args := len(col_indicies)) < 1:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient columns '{len_col_args}', provided column slice returned no valid column indicies within current model range '0:{self.column_count}'")
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient columns '{len_col_args}', provided column slice returned no valid column indicies within current model range of '0:{self.column_count}'")
                 )
         elif isinstance(col_indicies, tuple):
             col_indicies = list(col_indicies)
