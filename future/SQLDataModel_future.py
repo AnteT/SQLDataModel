@@ -3653,6 +3653,68 @@ class SQLDataModel:
         self._update_model_metadata(update_row_meta=True)        
         return
 
+    def concat(self, other:SQLDataModel) -> SQLDataModel:
+        """
+        Concatenates two SQLDataModels along the row axis, returning the result as a new instance.
+
+        Parameters:
+            - `other` (SQLDataModel): The SQLDataModel to concatenate with the current model.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the concatenated rows.
+
+        Raises:
+            - `TypeError`: If the `other` argument is not of type 'SQLDataModel'.
+            - `DimensionError`: If the column count of the current model does not match the column count of the `other` model.
+
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Datasets a and b
+        data_a = (['A', 1], ['B', 2])
+        data_b = (['C', 3], ['D', 4])
+
+        # Create the models
+        sdm_a = SQLDataModel(data_a, headers=['letter', 'number'])
+        sdm_b = SQLDataModel(data_b, headers=['letter', 'number'])
+
+        # Concatenate the two models
+        result_model = sdm_a.concat(sdm_b)
+
+        # View result
+        print(result_model)
+
+        # Outputs
+        ```
+        ```shell
+        ┌────────┬────────┐
+        │ letter │ number │
+        ├────────┼────────┤
+        │ A      │ 1      │
+        │ B      │ 2      │
+        │ C      │ 3      │
+        │ D      │ 4      │
+        └────────┴────────┘
+        [4 rows x 2 columns]
+        ```
+        ---
+        Notes:
+            - Models must be of compatible dimensions with equal `column_count`
+            - Headers are inherited from the model calling the `concat()` method
+        """
+        if not isinstance(other, SQLDataModel):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(other).__name__}', argument for `other` must be of type 'SQLDataModel' to concatenate compatible models")
+            )
+        if self.column_count != other.column_count:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: incompatible column count '{other.column_count}', cannot concatenate model shape '{self.get_shape()}' to model shape '{other.get_shape()}' as same number of columns are required")
+            )
+        return SQLDataModel((*self.data(),*other.data()), self.headers, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+
 ##############################################################################################################
 ################################################ sql commands ################################################
 ##############################################################################################################
@@ -3975,13 +4037,14 @@ class SQLDataModel:
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed primary model alias to "{new_name}"'))
 
-    def deduplicate(self, subset:list[str]=None, keep_first:bool=True, inplace:bool=True) -> None|SQLDataModel:
+    def deduplicate(self, subset:list[str]=None, reset_index:bool=True, keep_first:bool=True, inplace:bool=True) -> None|SQLDataModel:
         """
         Removes duplicate rows from the SQLDataModel based on the specified subset of columns. Deduplication occurs inplace by default, otherwise use `inplace=False` to return a new `SQLDataModel`.
 
         Parameters:
             - `subset` (list[str], optional): List of columns to consider when identifying duplicates.
             If None, all columns are considered. Defaults to None.
+            - `reset_index` (bool, optional): If True, resets the index after deduplication starting at 0; otherwise retains current indicies.
             - `keep_first` (bool, optional): If True, keeps the first occurrence of each duplicated row; otherwise,
             keeps the last occurrence. Defaults to True.
             - `inplace` (bool, optional): If True, modifies the current SQLDataModel in-place; otherwise, returns
@@ -4021,10 +4084,15 @@ class SQLDataModel:
             sql_stmt = f"""delete from "{self.sql_model}" where rowid not in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
             self.sql_db_conn.execute(sql_stmt)
             self.sql_db_conn.commit()
+            if reset_index:
+                self.reset_index()
+                return
             self._update_model_metadata(update_row_meta=True)
             return
         else:
-            sql_stmt = f"""select * from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
+            index_str = f'"{self.sql_idx}",' if not reset_index else ''
+            headers_str = ",".join([f'"{col}"' for col in self.headers])
+            sql_stmt = f"""select {index_str}{headers_str} from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
             return self.execute_fetch(sql_stmt)
 
     def group_by(self, columns:str|list[str], order_by_count:bool=True) -> SQLDataModel:
