@@ -215,7 +215,6 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"')
             ) from None 
    
-                     
 ################################################################################################################
 ################################################ static methods ################################################
 ################################################################################################################
@@ -3207,21 +3206,18 @@ class SQLDataModel:
         display_max_rows = self.display_max_rows if self.display_max_rows is not None else (total_available_height - 6) if (total_available_height - 6 > 0) else 1
         vertical_truncation_required = display_max_rows < self.row_count
         max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
-        display_max_rows_check = 12 # 12 makes sense to get possible second digit incrementation in values
         split_row = max_display_rows // 2
-        split_top = split_row
-        split_bottom = (self.row_count - 1) - split_row
+        check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
+        check_width_bottom = (self.row_count-1) - check_width_top
         display_index = self.display_index
-        display_headers = [self.sql_idx] + self.headers if display_index else self.headers
-        headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
+        display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_select_length = f"""{headers_select_length} {",".join([f'''case when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) end as '{col}' ''' for col in self.headers])} from("""
-        headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {split_top} or "{self.sql_idx}" > {split_bottom}) order by "{self.sql_idx}" desc limit {max_display_rows+1})) "{self.sql_idx}", """ if display_index else """select """
-        headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from "{self.sql_model}" order by "{self.sql_idx}" asc limit {display_max_rows_check} )"""
-        headers_full_select = f"{headers_select_length}{headers_sub_select}"
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
+        headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{self.min_column_width}),{self.max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
+        headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
-        header_length_dict = {display_headers[i]:width if width is not None else min(max(len(display_headers[i]),self.min_column_width),self.max_column_width) if display_headers[i] != self.sql_idx else 1 for i, width in enumerate(length_meta)}  
+        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}
         table_repr = """""" # big things...
         table_left_edge = """│ """
         table_left_edge_width = 2
@@ -3269,7 +3265,6 @@ class SQLDataModel:
             END from (select "{self.sql_idx}",'{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
         else:
             fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
-        # print(f"fetch_fmt_stmt:\n{'-'*total_available_width}\n{fetch_fmt_stmt}\n{'-'*total_available_width}")
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if self.column_alignment is None:
             formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
@@ -3284,10 +3279,63 @@ class SQLDataModel:
         table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
         table_repr = "".join([table_repr, table_caption])
         return table_repr if self.display_color is None else self.display_color.wrap(table_repr)
-
+    
 ##################################################################################################################
 ############################################## sqldatamodel methods ##############################################
 ##################################################################################################################
+    
+    def count(self) -> SQLDataModel:
+        """
+        Returns a new `SQLDataModel` containing the total counts and unique values for each column in the model for both null and non-null values.
+
+        Returns:
+            - SQLDataModel: A new SQLDataModel containing columns 'column', 'unique', and 'count' representing the column name, total unique values, and total values count, respectively.
+        
+        Notes:
+            - 'column' contains the names of the columns counted.
+            - 'na' contains the total number of null values in the column.
+            - 'unique' contains the total number of unique values in the column.
+            - 'count' contains the total number of non-null values in the column.
+            - 'total' contains the total number of all null and non-null values in the column.
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Gender']
+        data = [
+            ('Alice', 25, 'Female'), 
+            ('Bob', 30, None), 
+            ('Alice', 25, 'Female')
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # Get the value count information
+        count_model = sdm.count()
+
+        # View the count information
+        print(count_model)
+
+        # Output
+        ```
+        ```shell
+        ┌────────┬──────┬────────┬───────┬───────┐
+        │ column │   na │ unique │ count │ total │
+        ├────────┼──────┼────────┼───────┼───────┤
+        │ Name   │    0 │      2 │     3 │     3 │
+        │ Age    │    0 │      2 │     3 │     3 │
+        │ Gender │    1 │      1 │     2 │     3 │
+        └────────┴──────┴────────┴───────┴───────┘
+        [3 rows x 5 columns]
+        ```
+
+        """
+        fetch_stmt = " UNION ALL ".join([f"""select '{col}' as 'column', sum(case when "{col}" is null then 1 else 0 end) as 'na', count(distinct "{col}") as 'unique', count("{col}") as 'count',sum(case when "{col}" is null then 1 else 1 end) as 'total' from "{self.sql_model}" """ for col in self.headers])
+        return self.execute_fetch(fetch_stmt)
 
     def iter_rows(self, min_row:int=None, max_row:int=None, include_index:bool=True, include_headers:bool=False) -> Generator:
         """
@@ -4247,52 +4295,89 @@ class SQLDataModel:
         group_by_stmt = f"""select {columns_group_by}, count(*) as count from "{self.sql_model}" group by {columns_group_by} order by {order_by} desc"""
         return self.execute_fetch(group_by_stmt)
     
-    def join_model(self, model:SQLDataModel, left:bool=True, on_column:str=None) -> SQLDataModel:
+    def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None) -> SQLDataModel:
         """
-        Performs a left or right join using the caller `SQLDataModel` as the base table and another `model` of type `SQLDataModel` instance as the joined table.
+        Merges two `SQLDataModel` instances based on specified columns and merge type, returning the result as a new instance. 
+        If the join column shares the same name in both models, `left_on` and `right_on` column arguments are not required and will be inferred. Otherwise, explicit arguments for both are required.
 
         Parameters:
-            - `model` (SQLDataModel): The `SQLDataModel` instance to join with.
-            - `left` (bool, optional): If True (default), performs a left join. If False, performs a right join.
-            - `on_column` (str, optional): The shared column used for joining. If None, attempts to automatically find a matching column.
+            - `merge_with` (SQLDataModel): The SQLDataModel to merge with the current model.
+            - `how` (Literal["left", "right", "inner", "full outer", "cross"]): The type of merge to perform.
+            - `left_on` (str): The column name from the current model to use as the left join key.
+            - `right_on` (str): The column name from the `merge_with` model to use as the right join key.
 
         Returns:
-            - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the join operation.
+            - `SQLDataModel`: A new SQLDataModel containing the product of the merged result.
 
         Raises:
-            - `DimensionError`: If no shared column is found, or if the provided column is not present in both models.
+            - `TypeError`: If `merge_with` is not of type 'SQLDataModel'.
+            - `DimensionError`: If no shared column exists, and explicit `left_on` and `right_on` arguments are not provided.
+            - `ValueError`: If the specified `left_on` or `right_on` column is not found in the respective models.
+            
+        Notes:
+            - The resulting SQLDataModel is created based on the `sqlite3` join definition and specified columns and merge type.
+            - The columns from both models are included in the result, with aliasing to avoid naming conflicts.
+        ---
 
         Example:
         ```python
         import SQLDataModel
 
-        sqldm_1 = SQLDataModel.from_csv('base-data.csv')  # create first model from data
-        sqldm_2 = SQLDataModel.from_csv('join-data.csv')  # create second model from data
-        result = sqldm_1.join_model(sqldm_2, left=True, on_column='shared_column')  # perform left join on a shared column
-        ```
-        """
-        validated_join_col = False
-        join_tablename = 'f_table'
-        join_cols = model.headers
-        if on_column is None:
-            for col in join_cols:
-                if col in self.headers:
-                    on_column = col
-                    validated_join_col = True
-                    break
-        else:
-            if (on_column in self.headers) and (on_column in join_cols):
-                validated_join_col = True
-        if not validated_join_col:
-            raise DimensionError(
-                SQLDataModel.ErrorFormat(f"DimensionError: no shared column, no matching join column was found in the provided model, ensure one is available or specify one explicitly with on_column='shared_column'")
-                )
-        model.to_sql(join_tablename, self.sql_db_conn)
-        join_cols = [x for x in join_cols if x != on_column] # removing shared join column
-        sql_join_stmt = self._generate_sql_fetch_for_joining_tables(self.headers, join_tablename, join_column=on_column, join_headers=join_cols, join_type='left' if left else 'right')
-        res = self.sql_db_conn.execute(sql_join_stmt)
-        return type(self)(data=res.fetchall(), headers=[x[0] for x in res.description], display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+        # Create sample data
+        data_a = [('Alice', 25, 'Female'), ('Bob', 30, 'Male')]
+        data_b = [('Alice', 'Marketing'), ('Charlie', 'Engineering')]
 
+        # Create the models
+        sdm_a = SQLDataModel(data_a, headers=['Name', 'Age', 'Gender'])
+        sdm_b = SQLDataModel(data_b, headers=['Name', 'Department'])
+
+        # Merge the models based on the 'Name' column
+        merged_model = sdm_a.merge(merge_with=sdm_b, how="inner", left_on="Name", right_on="Name")
+
+        # View the merged result
+        print(merged_model)
+
+        # Output
+        ```
+        ```shell
+        ┌────────┬──────┬───────┬────────────┐
+        │ Name   │ Age  │ Gender│ Department │
+        ├────────┼──────┼───────┼────────────┤
+        │ Alice  │ 25   │ Female│ Marketing  │
+        └────────┴──────┴───────┴────────────┘
+        [1 row x 4 columns]
+        ```
+        ---
+
+        """        
+        if not isinstance(merge_with, SQLDataModel):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid merge type '{type(merge_with).__name__}', argument `merge_with` must be another instance of type `SQLDataModel`")
+            )
+        if left_on is None and right_on is None:
+            shared_column = set(self.headers) & set(merge_with.headers)
+            if len(shared_column) != 1:
+                raise DimensionError(
+                    SQLDataModel.ErrorFormat(f"DimensionError: no shared column exists, a shared column name is required to merge without explicit `left_on` and `right_on` arguments")
+                )
+            shared_column = next(iter(shared_column))
+            left_on, right_on = shared_column, shared_column
+        else:
+            if left_on not in self.headers:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{left_on}', a valid `left_on` column is required, use `get_headers()` to view current valid arguments")
+                )
+            if right_on not in merge_with.headers:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{right_on}', a valid `right_on` column is required, use `get_headers()` to view current valid arguments")
+                )            
+        tmp_table_name = "_merge_with"
+        merge_with.to_sql(tmp_table_name, self.sql_db_conn)
+        all_cols = [*self.headers, *merge_with.headers]
+        headers_str = ",".join([f'a."{col}" as "{alias}"' if i < self.column_count else f'b."{col}" as "{alias}"' for i, (col, alias) in enumerate(zip(all_cols,SQLDataModel.alias_duplicates(all_cols)))])
+        fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b on a."{left_on}" = b."{right_on}" """))
+        return self.execute_fetch(fetch_stmt)
+        
     def execute_fetch(self, sql_query:str, **kwargs) -> SQLDataModel:
         """
         Returns a new `SQLDataModel` object after executing the provided SQL query using the current `SQLDataModel`. 
@@ -5053,48 +5138,6 @@ class SQLDataModel:
             ) from None
         self._update_model_metadata()
         return
-
-    def _generate_sql_fetch_for_joining_tables(self, base_headers:list[str], join_table:str, join_column:str, join_headers:list[str], join_type:str='left') -> str:
-        """
-        Generates a SQL SELECT statement for joining tables, called by the `join_model()` method for performning left or right joins.
-
-        Usage:
-            Constructs a SQL SELECT statement to join the base table (specified by 'base_headers') with another table
-            (specified by 'join_table') based on a common column ('join_column'). The columns to be selected from
-            the base and joined tables are specified by 'base_headers' and 'join_headers', respectively.
-
-        Parameters:
-            - `base_headers` (list[str]): List of column names to be selected from the base table.
-            - `join_table` (str): Name of the table to be joined with the base table.
-            - `join_column` (str): Common column used as the join predicate between the base and joined tables.
-            - `join_headers` (list[str]): List of column names to be selected from the joined table.
-            - `join_type` (str, optional): Type of join ('left' by default). Can be 'left' or 'left outer'.
-
-        Returns:
-            str: A SQL SELECT statement for joining tables.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        # Example usage:
-        sql_stmt = sqldm._generate_sql_fetch_for_joining_tables(
-            base_headers=['ID', 'Name', 'Value'],
-            join_table='other_table',
-            join_column='ID',
-            join_headers=['Description', 'Category'],
-            join_type='left'
-        )
-        print(sql_stmt)
-        ```
-        """
-        # base_headers_str = ",".join([f"""a.\"{v[0]}\" as \"{v[0]}\"""" for v in self.header_idx_dtype_dict.values() if v[0] in base_headers])
-        base_headers_str = ",".join([f"""a.\"{col}\" as \"{col}\"""" for col in base_headers])
-        join_headers_str = ",".join([f"""b.\"{col}\" as \"{col}\" """ for col in join_headers])
-        join_type_str = "left join" if join_type == 'left' else 'left outer join'
-        join_predicate_str = f"""from {self.sql_model} a {join_type_str} \"{join_table}\" b on a.\"{join_column}\" = b.\"{join_column}\" """
-        sql_join_stmt = f"""select {base_headers_str}, {join_headers_str} {join_predicate_str}"""
-        return sql_join_stmt
 
     def _get_sql_create_stmt(self) -> str:
         """
