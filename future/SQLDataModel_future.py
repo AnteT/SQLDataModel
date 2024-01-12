@@ -103,52 +103,62 @@ class SQLDataModel:
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
     debug:bool=False
-    def __init__(self, data:list[list], headers:list[str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
-        if not isinstance(data, list|tuple):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=2):
+        if data is None:
+            if headers is None:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: data not found, an empty model cannot be created, to create a model with zero rows a `headers` argument is required")
+                )
+            had_data = False
+            data = [tuple(None for _ in range(len(headers)))]
+        else:
+            had_data = True
+        if not isinstance(data, list|tuple) and had_data:
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list or tuple...")
+                SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list or tuple")
                 )
-        if len(data) < 1:
+        if len(data) < 1 and had_data:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: data not found, data of length '{len(data)}' is insufficient to construct a valid model, additional rows of data required...")
+                SQLDataModel.ErrorFormat(f"ValueError: data not found, data of length '{len(data)}' is insufficient to construct a valid model, additional rows of data required")
                 )
-        try:
-            _ = data[0]
-        except Exception as e:
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: data index error, data index provided does not exist for length '{len(data)}' due to '{e}'...")
-                ) from None
-        if not isinstance(data[0], list|tuple):
-            if type(data[0]).__module__ != 'pyodbc': # check for pyodbc.Row which is acceptable
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data[0]).__name__}' is not a valid type for data rows, which must be of type list or tuple...")
+        if had_data:
+            try:
+                _ = data[0]
+            except Exception as e:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: data index error, data index provided does not exist for length '{len(data)}' due to '{e}'")
+                    ) from None
+            if not isinstance(data[0], list|tuple):
+                if type(data[0]).__module__ != 'pyodbc': # check for pyodbc.Row which is acceptable
+                    raise TypeError(
+                        SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data[0]).__name__}' is not a valid type for data rows, which must be of type list or tuple")
+                        )
+            if len(data[0]) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: data rows not found, data rows of length '{len(data[0])}' are insufficient to construct a valid model, at least one row is required")
                     )
-        if len(data[0]) < 1:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: data rows not found, data rows of length '{len(data[0])}' are insufficient to construct a valid model, at least one row is required...")
-                )
         if headers is not None:
             if not isinstance(headers, list|tuple):
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid header types, '{type(headers).__name__}' is not a valid type for headers, please provide a tuple or list type...")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid header types, '{type(headers).__name__}' is not a valid type for headers, please provide a tuple or list type")
                     )
-            if len(headers) != len(data[0]):
+            if (len(headers) != len(data[0])) and had_data:
                 raise DimensionError(
-                    SQLDataModel.ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length '{len(headers)} != {len(data[0])}', the implied column count for data provided...")
+                    SQLDataModel.ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length '{len(headers)} != {len(data[0])}', the implied column count for data provided")
                     )                
             if isinstance(headers,tuple):
                 try:
                     headers = list(headers)
                 except:
                     raise TypeError(
-                        SQLDataModel.ErrorFormat(f"TypeError: failed header conversion, unable to convert provided headers tuple to list type, please provide headers as a list type...")
+                        SQLDataModel.ErrorFormat(f"TypeError: failed header conversion, unable to convert provided headers tuple to list type, please provide headers as a list type")
                         ) from None
             if not all(isinstance(x, str) for x in headers):
                 try:
                     headers = [str(x) for x in headers]
                 except:
                     raise TypeError(
-                        SQLDataModel.ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string...")
+                        SQLDataModel.ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string")
                         ) from None
         else:
             headers = [f"col_{x}" for x in range(len(data[0]))]
@@ -160,7 +170,7 @@ class SQLDataModel:
         self.column_alignment = column_alignment
         self.display_index = display_index
         self.display_float_precision = display_float_precision
-        self.row_count = len(data)
+        self.row_count = len(data) if had_data else 0
         had_idx = True if headers[0] == self.sql_idx else False
         dyn_idx_offset,dyn_idx_bind,dyn_add_idx_insert = (1, "?,", f'"{self.sql_idx}",') if had_idx else (0, "", "")
         headers = headers[dyn_idx_offset:]
@@ -169,30 +179,42 @@ class SQLDataModel:
         self.display_color = ANSIColor(display_color) if isinstance(display_color,str|tuple) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
-        headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
-        headers_to_sql_dtypes_dict = {k:self.static_py_to_sql_map_dict[v] for (k,v) in headers_to_py_dtypes_dict.items()}
-        headers_with_sql_dtypes_str = ",".join(f'"{col}" {type}' for col,type in headers_to_sql_dtypes_dict.items())
+        headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}
+        if dtypes is not None:
+            if not isinstance(dtypes,dict):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(dtypes).__name__}', `dtypes` must be of type 'dict' with format of `{{'column':'dtype'}}` where 'dtype' must be a valid python datatype")
+                )
+            [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
+        headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[dtype]}' for col,dtype in headers_to_py_dtypes_dict.items())
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
         self.sql_db_conn.execute(sql_create_stmt)
         self._update_model_metadata()
+        if not had_data:
+            test_trigger = f"""CREATE TRIGGER 'zero_init' AFTER INSERT 
+            ON "{self.sql_model}" WHEN (select count("{self.sql_idx}") from "{self.sql_model}") = 1 
+            BEGIN update "{self.sql_model}" set "{self.sql_idx}" = 0 where "{self.sql_idx}" = 1; END;"""
+            self.sql_db_conn.execute(test_trigger)
+            return
         if not had_idx:
             first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
             try:
                 self.sql_db_conn.execute(first_row_insert_stmt, (0,*data[0]))
             except sqlite3.ProgrammingError as e:
                 raise SQLProgrammingError(
-                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
+                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"')
                 ) from None                
             data = data[1:] # remove first row from remaining data
         try:
             self.sql_db_conn.executemany(sql_insert_stmt,data)
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
-            ) from None   
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"')
+            ) from None 
+   
                      
 ################################################################################################################
 ################################################ static methods ################################################
@@ -1805,7 +1827,7 @@ class SQLDataModel:
             data = data[0]
         if len(data) == 1: # if only single cell
             data = data[0]
-        return [tuple([x[0] for x in res.description]),data] if include_headers else data
+        return [tuple(x[0] for x in res.description),*data] if include_headers else data
 
     def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', include_index:bool=False, **kwargs) -> None:
         """
@@ -3199,7 +3221,7 @@ class SQLDataModel:
         headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from "{self.sql_model}" order by "{self.sql_idx}" asc limit {display_max_rows_check} )"""
         headers_full_select = f"{headers_select_length}{headers_sub_select}"
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
-        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}  
+        header_length_dict = {display_headers[i]:width if width is not None else min(max(len(display_headers[i]),self.min_column_width),self.max_column_width) if display_headers[i] != self.sql_idx else 1 for i, width in enumerate(length_meta)}  
         table_repr = """""" # big things...
         table_left_edge = """│ """
         table_left_edge_width = 2
@@ -3653,20 +3675,23 @@ class SQLDataModel:
         self._update_model_metadata(update_row_meta=True)        
         return
 
-    def concat(self, other:SQLDataModel) -> SQLDataModel:
+    def concat(self, other:SQLDataModel|list|tuple, inplace:bool=True) -> None|SQLDataModel:
         """
-        Concatenates two SQLDataModels along the row axis, returning the result as a new instance.
+        Concatenates the provided data to `SQLDataModel` along the row axis, returning a new model or modifying the existing instance inplace.
 
         Parameters:
-            - `other` (SQLDataModel): The SQLDataModel to concatenate with the current model.
+            - `other` (SQLDataModel | list | tuple): The SQLDataModel, list, or tuple to concatenate or append.
+            - `inplace` (bool, optional): If True (default), performs the concatenation in-place, modifying the current model. If False,
+            returns a new `SQLDataModel` instance with the concatenated result.
 
         Returns:
-            - `SQLDataModel`: A new SQLDataModel containing the concatenated rows.
+            - `None`: when `inplace = True`
+            - `SQLDataModel`: when `inplace = False`
 
         Raises:
-            - `TypeError`: If the `other` argument is not of type 'SQLDataModel'.
-            - `DimensionError`: If the column count of the current model does not match the column count of the `other` model.
-
+            - `TypeError`: If the `other` argument is not one of type `SQLDataModel`, `list`, or `tuple`.
+            - `ValueError`: If `other` is a list or tuple with insufficient data where the column dimension is < 1.
+            - `DimensionError`: If the column count of the current model does not match the column count of the `other` model or tuple.
         ---
 
         Example:
@@ -3682,10 +3707,10 @@ class SQLDataModel:
         sdm_b = SQLDataModel(data_b, headers=['letter', 'number'])
 
         # Concatenate the two models
-        result_model = sdm_a.concat(sdm_b)
+        sdm_ab = sdm_a.concat(sdm_b, inplace=False)
 
         # View result
-        print(result_model)
+        print(sdm_ab)
 
         # Outputs
         ```
@@ -3700,20 +3725,64 @@ class SQLDataModel:
         └────────┴────────┘
         [4 rows x 2 columns]
         ```
+        ```python
+
+        # List or tuples can also be used directly
+        data_e = ['E', 5]
+
+        # Append in place
+        sdm_ab.concat(data_e)
+
+        # View result
+        print(sdm_ab)
+
+        ```
+        ```shell
+        ┌───┬────────┬────────┐
+        │   │ letter │ number │
+        ├───┼────────┼────────┤
+        │ 0 │ A      │      1 │
+        │ 1 │ B      │      2 │
+        │ 2 │ C      │      3 │
+        │ 3 │ D      │      4 │
+        │ 4 │ E      │      5 │
+        └───┴────────┴────────┘
+        [5 rows x 2 columns]        
+        ```
+
         ---
         Notes:
-            - Models must be of compatible dimensions with equal `column_count`
-            - Headers are inherited from the model calling the `concat()` method
-        """
-        if not isinstance(other, SQLDataModel):
+            - Models must be of compatible dimensions with equal `column_count` or equivalent dimension if `list` or `tuple`
+            - Headers are inherited from the model calling the `concat()` method whether done inplace or being returned as new instance.
+        """        
+        if not isinstance(other, SQLDataModel|list|tuple):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(other).__name__}', argument for `other` must be of type 'SQLDataModel' to concatenate compatible models")
             )
-        if self.column_count != other.column_count:
+        if isinstance(other, SQLDataModel):
+            num_cols_other = other.column_count
+            num_rows_other = other.row_count
+            other = other.data()
+        elif isinstance(other, list|tuple):
+            if len(other) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient data length '{len(other)}', argument `other` must have length >= 1 or contain at least 1 row to concatenate")
+                )
+            if not isinstance(other[0], list|tuple):
+                other = [other]
+            num_cols_other = len(other[0])
+            num_rows_other = len(other)
+        if self.column_count != num_cols_other:
             raise DimensionError(
-                SQLDataModel.ErrorFormat(f"DimensionError: incompatible column count '{other.column_count}', cannot concatenate model shape '{self.get_shape()}' to model shape '{other.get_shape()}' as same number of columns are required")
+                SQLDataModel.ErrorFormat(f"DimensionError: incompatible column count '{num_cols_other}', cannot concatenate model shape '{self.get_shape()}' to model shape '({num_rows_other}, {num_cols_other})' as same number of columns are required")
             )
-        return SQLDataModel((*self.data(),*other.data()), self.headers, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+        if inplace:
+            sql_insert_stmt = f"""insert into "{self.sql_model}" ({','.join([f'"{col}"' for col in self.headers])}) values ({','.join(['?' if self.header_master[col][1] not in ('datetime','date') else "datetime(?)" if self.header_master[col][1] == 'datetime' else "date(?)" for col in self.headers])})"""
+            self.sql_db_conn.executemany(sql_insert_stmt, other)
+            self._update_model_metadata(update_row_meta=True)
+            return
+        else:
+            return type(self)((*self.data(),*other), self.headers, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
 ##############################################################################################################
 ################################################ sql commands ################################################
@@ -5063,6 +5132,24 @@ class SQLDataModel:
         """
         self.sql_db_conn.execute("select sql from sqlite_master")
         return self.sql_db_conn.fetchone()[0]
+
+    def _get_display_args(self) -> dict:
+        """
+        Retrieves the current display configuration settings of the `SQLDataModel` with the correct `kwargs` for the class `__init__()` method.
+
+        Returns:
+            - `dict`: A dictionary containing the display configuration settings in the format `{'setting': 'value'}`.
+
+        Notes:
+            - `display_max_rows`: The maximum number of rows to display.
+            - `min_column_width`: The minimum width of columns when displaying the model.
+            - `max_column_width`: The maximum width of columns when displaying the model.
+            - `column_alignment`: The alignment of columns ('left', 'center', or 'right').
+            - `display_color`: True if color formatting is enabled, False otherwise.
+            - `display_index`: True if displaying index column, False otherwise.
+            - `display_float_precision`: The precision for displaying floating-point numbers.
+        """        
+        return {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
 
     def validate_indicies(self, indicies) -> tuple[int|slice, list[str]]:
         """
