@@ -104,6 +104,57 @@ class SQLDataModel:
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
     debug:bool=False
     def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=2):
+        """
+        Initializes a new instance of `SQLDataModel`.
+
+        Parameters:
+            - `data` (list[list]): The data to populate the model. Should be a list of lists or a list of tuples.
+            - `headers` (list[str]): The column headers for the model. If not provided, default headers will be used.
+            - `dtypes` (dict): A dictionary specifying the data types for each column. Format: {'column': 'dtype'}.
+            - `display_max_rows` (int): The maximum number of rows to display. If not provided, all rows will be displayed.
+            - `min_column_width` (int): The minimum width for each column. Default is 4.
+            - `max_column_width` (int): The maximum width for each column. Default is 32.
+            - `column_alignment` (str): The alignment for columns ('left', 'center', 'right'). Default is None.
+            - `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
+            - `display_index` (bool): Whether to display row indices. Default is True.
+            - `display_float_precision` (int): The number of decimal places to display for float values. Default is 2.
+
+        Raises:
+            - `ValueError`: If `data` and `headers` are not provided, or if `data` is of insufficient length.
+            - `TypeError`: If `data` or `headers` is not a valid type (list or tuple), or if `dtypes` is not a dictionary.
+            - `DimensionError`: If the length of `headers` does not match the implied column count from the data.
+            - `SQLProgrammingError`: If there's an issue with executing SQL statements during initialization.
+
+        Notes:
+            - If `data` is not provided, an empty model is created with headers.
+            - If `headers` is not provided, default headers will be generated.
+            - If `dtypes` is provided, it should be a dictionary with column names as keys and Python data types as values.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create sample data
+        data=[('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
+
+        # Create the model with custom headers
+        sdm = SQLDataModel(data,headers=['Name','Age','Sex'])
+        
+
+        # Display the model
+        print(model)
+        ```
+        ```shell
+        ┌────────┬──────┬──────┐
+        │ Name   │  Age │ Sex  │
+        ├────────┼──────┼──────┤
+        │ Alice  │   20 │ F    │
+        │ Bob    │   25 │ M    │
+        │ Gerald │   30 │ M    │
+        └────────┴──────┴──────┘
+        [3 rows x 3 columns]
+        ```
+        """
         if data is None:
             if headers is None:
                 raise ValueError(
