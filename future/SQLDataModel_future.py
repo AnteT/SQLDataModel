@@ -1,6 +1,8 @@
 from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime
 from typing import Generator, Callable, Literal, Iterator
+import urllib.request
+from urllib.error import HTTPError, URLError
 from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
@@ -10,11 +12,13 @@ try:
     from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
     from SQLDataModel.ANSIColor import ANSIColor
     from SQLDataModel.StandardDeviation import StandardDeviation
+    from SQLDataModel.HTMLParser import HTMLParser
 # in ./future/SQLDataModel_future.py
 except:
     from exceptions import DimensionError, SQLProgrammingError
     from ANSIColor import ANSIColor
     from StandardDeviation import StandardDeviation
+    from HTMLParser import HTMLParser
 
 try:
     from dateutil.parser import parse as dateparser
@@ -1623,7 +1627,178 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
                 )
             return cls(data, headers, **kwargs)
+
+    @classmethod
+    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, **kwargs) -> SQLDataModel:
+        """
+        Parses HTML table element from one of three possible sources: web page at url, local file at path, raw HTML string literal.
+        If `table_identifier` is not specified, the first <table> element successfully parsed is returned, otherwise if `table_identifier` is a `str`, the parser will return the corresponding 'id' or 'name' HTML attribute that matches the identifier specified. 
+        If `table_identifier` is an `int`, the parser will return the table matched as a sequential index after parsing all <table> elements from the top of the page down, starting at '0'. 
+        By default, the first <table> element found is returned if `table_identifier` is not specified.
+
+        Parameters:
+            - `html_source` (str): The HTML source, which can be a URL, a valid path to an HTML file, or a raw HTML string.
+                - If starts with 'http', the argument is considered a url and the table will be parsed from returned the web request
+                - If is a valid file path, the argument is considered a local file and the table will be parsed from its html
+                - If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input
+            - `encoding` (str): The encoding to use for reading HTML when `html_source` is considered a valid url or file path (default is 'utf-8').
+            - `table_identifier` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
+                - If is `int`, identifier is treated as the indexed location of the <table> element on the page from top to bottom starting from zero and will return the corresponding position when encountered.
+                - If is `str`, identifier is treated as a target HTML 'id' or 'name' attribute to search for and will return the first case-insensitive match when encountered.
+            - `**kwargs`: Additional keyword arguments to pass when using `urllib.request.urlopen` to fetch HTML from a URL.
+
+        Returns:
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the data from the parsed HTML table.
+
+        Raises:
+            - `TypeError`: If `html_source` is not of type `str` representing a possible url, filepath or raw HTML stream.
+            - `HTTPError`: Raised from `urllib` when `html_source` is considered a url and an HTTP exception occurs.
+            - `URLError`: Raised from `urllib` when `html_source` is considered a url and a URL exception occurs.
+            - `ValueError`: If no <table> elements are found or if the targeted `table_identifier` is not found.
+            - `OSError`: Related exceptions that may be raised when `html_source` is considered a file path.
+
+        ---
+
+        From URL Example:
+
+        ```python
+        import SQLDataModel
+
+        # From URL
+        url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
         
+        # Lets get the 94th table from the 1998 World Cup
+        sdm = SQLDataModel.from_html(url, table_identifier=94)
+
+        # View result:
+        print(sdm)
+        ```
+        ```shell
+        ┌────┬─────────────┬────┬────┬────┬────┬────┬────┬────┬─────┬──────┐
+        │  R │ Team        │ G  │  P │  W │  D │  L │ GF │ GA │ GD  │ Pts. │
+        ├────┼─────────────┼────┼────┼────┼────┼────┼────┼────┼─────┼──────┤
+        │  1 │ France      │ C  │  7 │  6 │  1 │  0 │ 15 │  2 │ +13 │   19 │
+        │  2 │ Brazil      │ A  │  7 │  4 │  1 │  2 │ 14 │ 10 │ +4  │   13 │
+        │  3 │ Croatia     │ H  │  7 │  5 │  0 │  2 │ 11 │  5 │ +6  │   15 │
+        │  4 │ Netherlands │ E  │  7 │  3 │  3 │  1 │ 13 │  7 │ +6  │   12 │
+        │  5 │ Italy       │ B  │  5 │  3 │  2 │  0 │  8 │  3 │ +5  │   11 │
+        │  6 │ Argentina   │ H  │  5 │  3 │  1 │  1 │ 10 │  4 │ +6  │   10 │
+        │  7 │ Germany     │ F  │  5 │  3 │  1 │  1 │  8 │  6 │ +2  │   10 │
+        │  8 │ Denmark     │ C  │  5 │  2 │  1 │  2 │  9 │  7 │ +2  │    7 │
+        └────┴─────────────┴────┴────┴────┴────┴────┴────┴────┴─────┴──────┘
+        [8 rows x 11 columns]
+        ```  
+
+        ---
+
+        From Local File Example: 
+
+        ```python
+        import SQLDataModel
+
+        # From HTML file
+        sdm = SQLDataModel.from_html('path/to/file.html')
+
+        # View output
+        print(sdm)
+        ```
+        ```shell
+        ┌─────────────┬────────┬──────┐
+        │ Team        │ Points │ Rank │
+        ├─────────────┼────────┼──────┤
+        │ Brazil      │ 63.7   │ 1    │
+        │ England     │ 50.7   │ 2    │
+        │ Spain       │ 50.0   │ 3    │
+        │ Germany [a] │ 49.3   │ 4    │
+        │ Mexico      │ 47.3   │ 5    │
+        │ France      │ 46.0   │ 6    │
+        │ Italy       │ 44.3   │ 7    │
+        │ Argentina   │ 44.0   │ 8    │
+        └─────────────┴────────┴──────┘
+        [8 rows x 3 columns]
+        ```
+        
+        ---
+
+        From Raw HTML Example:
+
+        ```python
+        import SQLDataModel
+
+        # Raw HTML
+        raw_html = 
+        '''<table id="find-me">
+            <tr>
+                <th>Col 1</th>
+                <th>Col 2</th>
+            </tr>    
+            <tr>
+                <td>A</td>
+                <td>1</td>
+            </tr>
+            <tr>
+                <td>B</td>
+                <td>2</td>
+            </tr>
+            <tr>
+                <td>C</td>
+                <td>3</td>
+            </tr>                
+        </table>'''
+
+        # Create the model and search for id attribute
+        sdm = SQLDataModel.from_html(raw_html, table_identifier="find-me")
+
+        # View output
+        print(sdm)
+        ```
+        ```shell
+        ┌───┬───────┬───────┐
+        │   │ Col 1 │ Col 2 │
+        ├───┼───────┼───────┤
+        │ 1 │ B     │ 2     │
+        │ 2 │ C     │ 3     │
+        └───┴───────┴───────┘
+        [3 rows x 2 columns]
+        ```
+        ---
+
+        Notes:
+            - `**kwargs` passed to method are used in `urllib.request.urlopen` if `html_source` is being considered as a web url.
+            - `**kwargs` passed to method are used in `open` if `html_source` is being considered as a filepath.
+            - The largest row size encountered will be used as the `column_count` for the returned `SQLDataModel`, rows will be padded with `None` if less.
+            
+        """        
+        if not isinstance(html_source, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(html_source).__name__}', argument for `html_source` must be of type 'str' representing a valid website url, HTML filepath or raw HTML string")
+            )
+        if html_source.startswith("http"):
+            try:
+                html_source = urllib.request.urlopen(html_source, **kwargs).read().decode(encoding)
+            except HTTPError as e:
+                e.add_note(SQLDataModel.ErrorFormat(f"\033[F{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check http parameters"))
+                raise e from None
+            except URLError as e:
+                e.add_note(SQLDataModel.ErrorFormat(f"\033[F{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check url parameters"))
+                raise e from None                     
+        elif os.path.exists(html_source):
+            try:
+                with open(html_source, 'r', encoding=encoding, **kwargs) as f:
+                    html_source = f.read()
+            except Exception as e:
+                e.add_note(SQLDataModel.ErrorFormat(f"\033[F{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`"))
+                raise e from None
+        tparser = HTMLParser(table_identifier=table_identifier)
+        chunks = [html_source[i:i+1024] for i in range(0, len(html_source), 1024)]
+        for c in chunks:
+            if tparser._is_finished:
+                break
+            tparser.feed(c)
+        data, headers = tparser.validate_table()
+        tparser.close() 
+        return cls(data=data, headers=headers)
+
     @classmethod
     def from_numpy(cls, array, headers:list[str]=None, **kwargs) -> SQLDataModel:
         """
