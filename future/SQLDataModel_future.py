@@ -2,7 +2,6 @@ from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime
 from typing import Generator, Callable, Literal, Iterator
 import urllib.request
-from urllib.error import HTTPError, URLError
 from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
@@ -1776,19 +1775,18 @@ class SQLDataModel:
         if html_source.startswith("http"):
             try:
                 html_source = urllib.request.urlopen(html_source, **kwargs).read().decode(encoding)
-            except HTTPError as e:
-                e.add_note(SQLDataModel.ErrorFormat(f"\033[F{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check http parameters"))
-                raise e from None
-            except URLError as e:
-                e.add_note(SQLDataModel.ErrorFormat(f"\033[F{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check url parameters"))
-                raise e from None                     
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check url parameters")
+                ) from None
         elif os.path.exists(html_source):
             try:
                 with open(html_source, 'r', encoding=encoding, **kwargs) as f:
                     html_source = f.read()
             except Exception as e:
-                e.add_note(SQLDataModel.ErrorFormat(f"\033[F{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`"))
-                raise e from None
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
+                ) from None
         tparser = HTMLParser(table_identifier=table_identifier)
         chunks = [html_source[i:i+1024] for i in range(0, len(html_source), 1024)]
         for c in chunks:
@@ -2138,6 +2136,97 @@ class SQLDataModel:
             headers = [x[0] for x in res.description]
             return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}
         
+    def to_html(self, filename:str=None, include_index:bool=None, style_params:dict=None) -> str:
+        """
+        Returns the current SQLDataModel as a lightly formatted HTML <table> element as a string if `filename` is None.
+        If `filename` is specified, writes the HTML to the specified file as .html and returns None.
+
+        Parameters:
+            - `filename` (str): The file path to save the HTML content. If None, returns the HTML as a string (default is None).
+            - `include_index` (bool): Whether to include the index column in the HTML table (default is current `display_index`).
+            - `style_params` (dict): A dictionary representing CSS styles {property: value} to customize the appearance of the HTML table (default is None).
+
+        Returns:
+            - `str` | `None`: If `filename` is None, returns the HTML content as a string. If `filename` is specified, writes to the file and returns None.
+
+        Raises:
+            - `TypeError`: If `filename` is not a valid string when specified or if `style_params` is not a dictionary when specified.
+            - `OSError`: If encountered while trying to open and write the HTML to the file.
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create the model
+        sdm = SQLDataModel(data=[(1, 'John'), (2, 'Doe')], headers=['ID', 'Name'])
+
+        # Create and save as new html file
+        sdm.to_html('output.html', style_params={'font-size': '12pt'})
+        
+        # Get HTML as a string
+        html_string = sdm.to_html()
+
+        # View output
+        print(html_string)
+        ```
+        ```html
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>John</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>Doe</td>
+            </tr>
+        </table>
+        <style>
+            table {font:size: 12pt;}
+        </style>
+        ```     
+
+        ---
+
+        Notes:
+            - Base styles are applied to reflect the styling of `SQLDataModel` in the terminal, including any `display_color` which is applied to the table CSS.
+            - Table index is determined by the instance `display_index` attribute unless specified in the argument of the same name, overriding the instance attribute.
+            - The default background-color is #E5E5E5, and the default font color is #090909, with 1 px solid border to mimic the `repr` for the instance.
+
+        """
+        if not isinstance(filename, str) and filename is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', if specified, `filename` must be of type 'str' representing a valid file path")
+            )
+        if not isinstance(style_params, dict) and style_params is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(style_params).__name__}', if specified, `style_params` must be of type 'dict' representing CSS {{'property': 'value'}} styles")
+            )
+        font_color, background_color = self.display_color.text_color_hex if self.display_color is not None else "#E5E5E5", "#090909"
+        if include_index is None:
+            include_index = self.display_index
+        display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
+        html_headers = "\n".join(("\t<tr>",*tuple(f"""\t\t<th class={f'"col-numeric"' if self.header_master[col][3] == '>' else '"col-text"'}>{col if col != self.sql_idx else " "}</th>""" for col in display_headers),"\t</tr>"))
+        html_body ="".join(["\n".join(("\n\t<tr>",*tuple(f"""\t\t<td>{cell}</td>""" for cell in tr),"\t</tr>")) for tr in self.iter_rows(include_index=include_index)])
+        col_styles = "\n".join([f'td:nth-child({i+1}) {{{"text-align:right;" if self.header_master[col][3] == '>' else "text-align:left;"}}}' for i,col in enumerate(display_headers)])
+        base_styles = f"""html {{background-color: {background_color}}}\ntable,th {{border: 1px solid {font_color}; border-collapse: collapse; overflow-x: auto;background-color:{background_color};color:{font_color};}}\ntr,td,th {{padding: 4px 6px;border-right: 1px solid {font_color}; font-family: Consolas; font-size: 9pt; font-weight:normal; overflow-x: auto;}}"""
+        cascade_styles = "".join(("\ntable,tr,td,th {",*tuple(f"""{attr}:{value};""" for attr,value in style_params.items()),"}")) if style_params is not None else ""
+        html_styling = "\n".join(("<style>",f"{base_styles}{cascade_styles}",".col-numeric {text-align: right;}",".col-text {text-align: left;}",col_styles,"</style>"))
+        html_table = f"""<!DOCTYPE html>\n<table>\n{html_headers}\n{html_body}\n</table>\n{html_styling}"""
+        if filename is None:
+            return html_table
+        try:
+            with open(filename, "w") as f:
+                f.write(html_table)
+        except Exception as e:
+            raise Exception (
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write html")
+            ) from None
+
     def to_list(self, include_index:bool=True, include_headers:bool=False) -> list[tuple]:
         """
         Returns a list of tuples containing all the `SQLDataModel` data without the headers by default.
