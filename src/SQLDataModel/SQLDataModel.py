@@ -1,6 +1,7 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json
 from typing import Generator, Callable, Literal, Iterator
+import urllib.request
 from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
@@ -8,6 +9,7 @@ from ast import literal_eval
 from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
 from SQLDataModel.ANSIColor import ANSIColor
 from SQLDataModel.StandardDeviation import StandardDeviation
+from SQLDataModel.HTMLParser import HTMLParser
 
 try:
     from dateutil.parser import parse as dateparser
@@ -94,54 +96,115 @@ class SQLDataModel:
     ### Notes
     use `SQLDM.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_c','sql_db_conn','display_float_precision','header_master')
+    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
     debug:bool=False
-    def __init__(self, data:list[list], headers:list[str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=4):
-        if not isinstance(data, list|tuple):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=2):
+        """
+        Initializes a new instance of `SQLDataModel`.
+
+        Parameters:
+            - `data` (list[list]): The data to populate the model. Should be a list of lists or a list of tuples.
+            - `headers` (list[str]): The column headers for the model. If not provided, default headers will be used.
+            - `dtypes` (dict): A dictionary specifying the data types for each column. Format: {'column': 'dtype'}.
+            - `display_max_rows` (int): The maximum number of rows to display. If not provided, all rows will be displayed.
+            - `min_column_width` (int): The minimum width for each column. Default is 4.
+            - `max_column_width` (int): The maximum width for each column. Default is 32.
+            - `column_alignment` (str): The alignment for columns ('left', 'center', 'right'). Default is None.
+            - `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
+            - `display_index` (bool): Whether to display row indices. Default is True.
+            - `display_float_precision` (int): The number of decimal places to display for float values. Default is 2.
+
+        Raises:
+            - `ValueError`: If `data` and `headers` are not provided, or if `data` is of insufficient length.
+            - `TypeError`: If `data` or `headers` is not a valid type (list or tuple), or if `dtypes` is not a dictionary.
+            - `DimensionError`: If the length of `headers` does not match the implied column count from the data.
+            - `SQLProgrammingError`: If there's an issue with executing SQL statements during initialization.
+
+        Notes:
+            - If `data` is not provided, an empty model is created with headers.
+            - If `headers` is not provided, default headers will be generated.
+            - If `dtypes` is provided, it should be a dictionary with column names as keys and Python data types as values.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create sample data
+        data=[('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
+
+        # Create the model with custom headers
+        sdm = SQLDataModel(data,headers=['Name','Age','Sex'])
+        
+
+        # Display the model
+        print(model)
+        ```
+        ```shell
+        ┌────────┬──────┬──────┐
+        │ Name   │  Age │ Sex  │
+        ├────────┼──────┼──────┤
+        │ Alice  │   20 │ F    │
+        │ Bob    │   25 │ M    │
+        │ Gerald │   30 │ M    │
+        └────────┴──────┴──────┘
+        [3 rows x 3 columns]
+        ```
+        """
+        if data is None:
+            if headers is None:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: data not found, an empty model cannot be created, to create a model with zero rows a `headers` argument is required")
+                )
+            had_data = False
+            data = [tuple(None for _ in range(len(headers)))]
+        else:
+            had_data = True
+        if not isinstance(data, list|tuple) and had_data:
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list or tuple...")
+                SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list or tuple")
                 )
-        if len(data) < 1:
+        if len(data) < 1 and had_data:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: data not found, data of length '{len(data)}' is insufficient to construct a valid model, additional rows of data required...")
+                SQLDataModel.ErrorFormat(f"ValueError: data not found, data of length '{len(data)}' is insufficient to construct a valid model, additional rows of data required")
                 )
-        try:
-            _ = data[0]
-        except Exception as e:
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: data index error, data index provided does not exist for length '{len(data)}' due to '{e}'...")
-                ) from None
-        if not isinstance(data[0], list|tuple):
-            if type(data[0]).__module__ != 'pyodbc': # check for pyodbc.Row which is acceptable
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data[0]).__name__}' is not a valid type for data rows, which must be of type list or tuple...")
+        if had_data:
+            try:
+                _ = data[0]
+            except Exception as e:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: data index error, data index provided does not exist for length '{len(data)}' due to '{e}'")
+                    ) from None
+            if not isinstance(data[0], list|tuple):
+                if type(data[0]).__module__ != 'pyodbc': # check for pyodbc.Row which is acceptable
+                    raise TypeError(
+                        SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data[0]).__name__}' is not a valid type for data rows, which must be of type list or tuple")
+                        )
+            if len(data[0]) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: data rows not found, data rows of length '{len(data[0])}' are insufficient to construct a valid model, at least one row is required")
                     )
-        if len(data[0]) < 1:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: data rows not found, data rows of length '{len(data[0])}' are insufficient to construct a valid model, at least one row is required...")
-                )
         if headers is not None:
             if not isinstance(headers, list|tuple):
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid header types, '{type(headers).__name__}' is not a valid type for headers, please provide a tuple or list type...")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid header types, '{type(headers).__name__}' is not a valid type for headers, please provide a tuple or list type")
                     )
-            if len(headers) != len(data[0]):
+            if (len(headers) != len(data[0])) and had_data:
                 raise DimensionError(
-                    SQLDataModel.ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length '{len(headers)} != {len(data[0])}', the implied column count for data provided...")
+                    SQLDataModel.ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length '{len(headers)} != {len(data[0])}', the implied column count for data provided")
                     )                
             if isinstance(headers,tuple):
                 try:
                     headers = list(headers)
                 except:
                     raise TypeError(
-                        SQLDataModel.ErrorFormat(f"TypeError: failed header conversion, unable to convert provided headers tuple to list type, please provide headers as a list type...")
+                        SQLDataModel.ErrorFormat(f"TypeError: failed header conversion, unable to convert provided headers tuple to list type, please provide headers as a list type")
                         ) from None
             if not all(isinstance(x, str) for x in headers):
                 try:
                     headers = [str(x) for x in headers]
                 except:
                     raise TypeError(
-                        SQLDataModel.ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string...")
+                        SQLDataModel.ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string")
                         ) from None
         else:
             headers = [f"col_{x}" for x in range(len(data[0]))]
@@ -153,7 +216,7 @@ class SQLDataModel:
         self.column_alignment = column_alignment
         self.display_index = display_index
         self.display_float_precision = display_float_precision
-        self.row_count = len(data)
+        self.row_count = len(data) if had_data else 0
         had_idx = True if headers[0] == self.sql_idx else False
         dyn_idx_offset,dyn_idx_bind,dyn_add_idx_insert = (1, "?,", f'"{self.sql_idx}",') if had_idx else (0, "", "")
         headers = headers[dyn_idx_offset:]
@@ -162,31 +225,42 @@ class SQLDataModel:
         self.display_color = ANSIColor(display_color) if isinstance(display_color,str|tuple) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
-        headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ if type(data[0][i+dyn_idx_offset]).__name__ != 'NoneType' else 'str' for i in range(self.column_count)}
-        headers_to_sql_dtypes_dict = {k:self.static_py_to_sql_map_dict[v] for (k,v) in headers_to_py_dtypes_dict.items()}
-        headers_with_sql_dtypes_str = ",".join(f'"{col}" {type}' for col,type in headers_to_sql_dtypes_dict.items())
+        headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}
+        if dtypes is not None:
+            if not isinstance(dtypes,dict):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(dtypes).__name__}', `dtypes` must be of type 'dict' with format of `{{'column':'dtype'}}` where 'dtype' must be a valid python datatype")
+                )
+            [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
+        headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[dtype]}' for col,dtype in headers_to_py_dtypes_dict.items())
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
         self.sql_db_conn.execute(sql_create_stmt)
         self._update_model_metadata()
+        if not had_data:
+            test_trigger = f"""CREATE TRIGGER 'zero_init' AFTER INSERT 
+            ON "{self.sql_model}" WHEN (select count("{self.sql_idx}") from "{self.sql_model}") = 1 
+            BEGIN update "{self.sql_model}" set "{self.sql_idx}" = 0 where "{self.sql_idx}" = 1; END;"""
+            self.sql_db_conn.execute(test_trigger)
+            return
         if not had_idx:
             first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
             try:
                 self.sql_db_conn.execute(first_row_insert_stmt, (0,*data[0]))
             except sqlite3.ProgrammingError as e:
                 raise SQLProgrammingError(
-                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
+                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"')
                 ) from None                
             data = data[1:] # remove first row from remaining data
         try:
             self.sql_db_conn.executemany(sql_insert_stmt,data)
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"...')
-            ) from None   
-                     
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"')
+            ) from None 
+   
 ################################################################################################################
 ################################################ static methods ################################################
 ################################################################################################################
@@ -345,53 +419,86 @@ class SQLDataModel:
             else:
                 dupes[col] = 1
                 yield col
-
-    def get_header_at_index(self, index:int) -> str:
+    
+    @staticmethod
+    def flatten_json(json_source:list|dict, flatten_rows:bool=True, level_sep:str='_', key_prefix:str=None) -> dict:
         """
-        Retrieves the name of the column in the `SQLDataModel` at the specified index.
+        Parses raw JSON data and flattens it into a dictionary with optional normalization.
 
         Parameters:
-            - `index` (int): The index of the column for which to retrieve the name.
-
-        Raises:
-            - `IndexError`: If the provided column index is outside the current column range.
+            - `json_source` (dict | list): The raw JSON data to be parsed.
+            - `flatten_rows` (bool): If True, the data will be normalized into columns and rows. If False,
+            columns will be concatenated from each row using the specified `key_prefix`.
+            - `level_sep` (str): Separates nested levels from other levels and used to concatenate prefix to column.
+            - `key_prefix` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
 
         Returns:
-            - `str`: The name of the column at the specified index.
+            - `dict`: A flattened dictionary representing the parsed JSON data.
 
-        Note:
-            - The method allows retrieving the name of a column identified by its index in the SQLDataModel.
-            - Handles negative indices by adjusting them relative to the end of the column range.
-
-        Usage:
+        Example:
         ```python
         import SQLDataModel
+        
+        # Sample JSON
+        json_source = [{
+            "alpha": "A",
+            "value": 1
+        },  
+        {
+            "alpha": "B",
+            "value": 2
+        },
+        {
+            "alpha": "C",
+            "value": 3
+        }]
 
-        headers = ['idx', 'first', 'last', 'age']
-        data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
-        ]
+        # Flatten JSON with normalization
+        flattened_data = flatten_json(json_data, flatten_rows=True)
 
-        # Create model with sample data
-        sqldm = SQLDataModel(data,headers)
+        # Format of result
+        flattened_data = {"alpha": ['A','B','C'], "value": [1, 2, 3]}
 
-        # Example: Get the name of the column at index 1
-        column_name = sqldm.get_header_at_index(1)
+        # Alternatively, flatten columns without rows and adding a prefix
+        flattened_data = flatten_json(raw_input,key_prefix='row_',flatten_rows=False)
 
-        # Outputs 'first'
-        print(column_name)
+        # Format of result
+        flattened_data = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
+
         ```
         """
-        if index < 0:
-            index = self.column_count + (index)
-        if (index < 0 or index >= self.column_count):
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
-            )        
-        return self.headers[index]
+        if isinstance(json_source, dict):
+            json_source = [json_source]
+        key_prefix = key_prefix if key_prefix is not None else ''
+        headers, rows, output = [], [], {}
+        def flatten(x:list|dict, pref:str='', cols:list=[], rows:list=[]):
+            if isinstance(x, dict):
+                for a in x:
+                    flatten(x[a], pref + a + level_sep, cols=cols)
+            elif isinstance(x, list):
+                i = 0
+                for a in x:
+                    flatten(a, pref + f"{i}" + level_sep, cols=cols)
+                    if i not in rows:
+                        rows.append(i)
+                    i += 1
+            else:
+                output[pref[:-1]] = x
+                col_id = pref[len(key_prefix):-1].split(level_sep,1)[-1]
+                if col_id not in cols:
+                    cols.append(col_id)
+        flatten(json_source, pref=key_prefix, cols=headers, rows=rows)
+        if not flatten_rows:
+            return output
+        flat_dict = {col:[] for col in headers}
+        for col in headers:
+            for rfound in rows:
+                rowcol = f"{key_prefix}{rfound}_{col}"
+                if rowcol in output:
+                    flat_dict[col].append(output[rowcol])
+                else:
+                    flat_dict[col].append(None)
+        return flat_dict
     
     def rename_column(self, column:int|str, new_column_name:str) -> None:
         """
@@ -534,67 +641,6 @@ class SQLDataModel:
         else:
             replace_stmt = " ".join(("select",",".join([f""" replace("{col}",'{pattern}','{replacement}') as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
             return self.execute_fetch(replace_stmt, **kwargs)
-
-    def set_header_at_index(self, index:int, new_value:str) -> None:
-        """
-        Renames a column in the `SQLDataModel` at the specified index with the provided new value.
-
-        Parameters:
-            - `index` (int): The index of the column to be renamed.
-            - `new_value` (str): The new name for the specified column.
-
-        Raises:
-            - `IndexError`: If the provided column index is outside the current column range.
-            - `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
-
-        Note:
-            - The method allows renaming a column identified by its index in the SQLDataModel.
-            - Handles negative indices by adjusting them relative to the end of the column range.
-            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        headers = ['idx', 'first', 'last', 'age']
-        data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
-        ]
-
-        # Create the model with sample data
-        sqldm = SQLDataModel(data,headers)
-
-        # Example: Rename the column at index 1 to 'first_name'
-        sqldm.set_header_at_index(1, 'first_name')
-
-        # Get current values
-        new_headers = sqldm.get_headers()
-
-        # Outputs ['first_name', 'last', 'age']
-        print(new_headers)
-        ```
-        """
-        if index < 0:
-            index = self.column_count + (index)
-        if (index < 0 or index >= self.column_count):
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{index}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
-            )
-        rename_stmts = f"""alter table "{self.sql_model}" rename column "{self.headers[index]}" to "{new_value}" """
-        full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
-        try:
-            self.sql_db_conn.executescript(full_stmt)
-            self.sql_db_conn.commit()
-        except Exception as e:
-            self.sql_db_conn.rollback()
-            raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
-            ) from None
-        self.headers[index] = new_value # replace old column at specified index with new value to retain original column ordering
-        self._update_model_metadata()
 
     def get_headers(self) -> list[str]:
         """
@@ -1606,12 +1652,12 @@ class SQLDataModel:
         return cls(data, headers, **kwargs)
     
     @classmethod
-    def from_dict(cls, data:dict, **kwargs) -> SQLDataModel:
+    def from_dict(cls, data:dict|list, **kwargs) -> SQLDataModel:
         """
         Create a new `SQLDataModel` instance from the provided dictionary.
 
         Parameters:
-            - `data` (dict): The dictionary to convert to a SQLDataModel.
+            - `data` (dict): The dictionary or list of dictionaries to convert to SQLDataModel.
             If keys are of type int, they will be used as row indexes; otherwise, keys will be used as headers.
             - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
@@ -1620,20 +1666,50 @@ class SQLDataModel:
 
         Raises:
             - `TypeError`: If the provided dictionary values are not of type 'list', 'tuple', or 'dict'.
+            - `ValueError`: If the provided data appears to be a list of dicts but is empty.
 
         Example:
         ```python
+        import SQLDataModel
+
+        # Sample data
         data_dict = {1: [10, 'A'], 2: [20, 'B'], 3: [30, 'C']}
+
+        # Create the model
         sdm_obj = SQLDataModel.from_dict(data_dict)
+
+        # View output
+        print(sdm_obj)
         ```
+        ```shell
+        ┌───┬───────┬───────┐
+        │   │ col_0 │ col_1 │
+        ├───┼───────┼───────┤
+        │ 1 │    10 │ A     │
+        │ 2 │    20 │ B     │
+        │ 3 │    30 │ C     │
+        └───┴───────┴───────┘
+        [3 rows x 2 columns]
+        ```
+        ---
 
         Note:
             - The method determines the structure of the SQLDataModel based on the format of the provided dictionary.
             - If the keys are integers, they are used as row indexes; otherwise, keys are used as headers.
+            
         """
+        if isinstance(data, list):
+            if len(data) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient data length '{len(data)}', if `data` is of type 'list' at least 1 row is required for `from_dict()` method")
+                )
+            if not isinstance(data[0], dict):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type in list '{type(data[0].__name__)}', if `data` is of type 'list' its items must be of type 'dict' to use the `from_dict()` method")
+                )
+            return cls.from_json(data)
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
         if rowwise:
-            # column_count = len(data[next(iter(data))])
             headers = ['idx',*[f'col_{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
             return cls([tuple([k,*v]) for k,v in data.items()], headers, **kwargs)
         else:
@@ -1651,8 +1727,333 @@ class SQLDataModel:
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
                 )
-            return cls(data, headers, **kwargs)
+            return cls(data, headers, **kwargs)  
+
+    @classmethod
+    def from_json(cls, json_source:str|list|dict, encoding:str='utf-8', **kwargs) -> SQLDataModel:
+        """
+        Creates a new `SQLDataModel` instance from JSON file path or JSON-like source, flattening if required.
+
+        Parameters:
+            - `json_source` (str | list | dict): The JSON source. If a string, it can represent a file path or a JSON-like object.
+            - `encoding` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
+            - `**kwargs`: Additional keyword arguments to pass to the file reading operation.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel instance created from the JSON source.
+
+        Raises:
+            - `TypeError`: If the `json_source` argument is not of type 'str', 'list', or 'dict'.
+            - `OSError`: If related exception occurs when trying to open and read from `json_source` as file path.
+
+        ---
+
+        Example 1: From JSON String
+
+        ```python
+        import SQLDataModel
+
+        # Sample JSON string
+        json_data = '''[{
+              "id": 1,
+              "color": "red",
+              "value": "#f00"
+            },
+            {   
+              "id": 2,
+              "color": "green",
+              "value": "#0f0"
+            },
+            {
+              "id": 3,
+              "color": "blue",
+              "value": "#00f"
+        }]'''   
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_data)
+
+        # View result
+        print(sdm)
+
+        ```
+        ```shell
+        ┌──────┬───────┬───────┐
+        │   id │ color │ value │
+        ├──────┼───────┼───────┤
+        │    1 │ red   │ #f00  │
+        │    2 │ green │ #0f0  │
+        │    3 │ blue  │ #00f  │
+        └──────┴───────┴───────┘
+        [3 rows x 3 columns]
+
+        ```
+
+        ---
+
+        Example 2: From JSON-like Object
+
+        ```python
+        import SQLDataModel
+
+        # JSON-like sample
+        json_data = [{
+            "alpha": "A",
+            "value": "1"
+        },  
+        {
+            "alpha": "B",
+            "value": "2"
+        },
+        {
+            "alpha": "C",
+            "value": "3"
+        }]
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_data)
+
+        # Output
+        print(sdm)
+        ```
+        ```shell
+        ┌───────┬───────┐
+        │ alpha │ value │
+        ├───────┼───────┤
+        │ A     │ 1     │
+        │ B     │ 2     │
+        │ C     │ 3     │
+        └───────┴───────┘
+        [3 rows x 2 columns]
+
+        ```
+
+        ---
+
+        Example 3: From JSON file
+
+        ```python
+        import SQLDataModel
+
+        # JSON file path
+        json_data = 'data/json-sample.json'
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_data, encoding='latin-1')
+
+        # View output
+        print(sdm)
+        ```
+
+        ```shell
+        ┌──────┬────────┬───────┬─────────┐
+        │   id │ color  │ value │ notes   │
+        ├──────┼────────┼───────┼─────────┤
+        │    1 │ red    │ #f00  │ primary │
+        │    2 │ green  │ #0f0  │         │
+        │    3 │ blue   │ #00f  │ primary │
+        │    4 │ cyan   │ #0ff  │         │
+        │    5 │ yellow │ #ff0  │         │
+        │    5 │ black  │ #000  │         │
+        └──────┴────────┴───────┴─────────┘
+        [6 rows x 4 columns]
+
+        ```
         
+        ---
+
+        Notes:
+            - If `json_source` is deeply-nested it will be flattened according to the staticmethod `flatten_json()`
+            - If `json_source` is a JSON-like string object that is not an array, it will be wrapped according as an array.
+        
+        """
+        if not isinstance(json_source, str|list|dict):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(json_source).__name__}', expected `json_source` to be one of 'str', 'list' or 'dict' representing a JSON file path or JSON-like object")
+            )
+        if isinstance(json_source, str):
+            if os.path.exists(json_source):
+                try:
+                    with open(json_source, 'r', encoding=encoding, **kwargs) as f:
+                        json_source = f.read()
+                except Exception as e:
+                    raise Exception (
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
+                    ) from None    
+            json_source = json.loads(json_source)
+        data_dict = SQLDataModel.flatten_json(json_source)
+        return cls.from_dict(data_dict)
+
+    @classmethod
+    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, **kwargs) -> SQLDataModel:
+        """
+        Parses HTML table element from one of three possible sources: web page at url, local file at path, raw HTML string literal.
+        If `table_identifier` is not specified, the first <table> element successfully parsed is returned, otherwise if `table_identifier` is a `str`, the parser will return the corresponding 'id' or 'name' HTML attribute that matches the identifier specified. 
+        If `table_identifier` is an `int`, the parser will return the table matched as a sequential index after parsing all <table> elements from the top of the page down, starting at '0'. 
+        By default, the first <table> element found is returned if `table_identifier` is not specified.
+
+        Parameters:
+            - `html_source` (str): The HTML source, which can be a URL, a valid path to an HTML file, or a raw HTML string.
+                - If starts with 'http', the argument is considered a url and the table will be parsed from returned the web request
+                - If is a valid file path, the argument is considered a local file and the table will be parsed from its html
+                - If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input
+            - `encoding` (str): The encoding to use for reading HTML when `html_source` is considered a valid url or file path (default is 'utf-8').
+            - `table_identifier` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
+                - If is `int`, identifier is treated as the indexed location of the <table> element on the page from top to bottom starting from zero and will return the corresponding position when encountered.
+                - If is `str`, identifier is treated as a target HTML 'id' or 'name' attribute to search for and will return the first case-insensitive match when encountered.
+            - `**kwargs`: Additional keyword arguments to pass when using `urllib.request.urlopen` to fetch HTML from a URL.
+
+        Returns:
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the data from the parsed HTML table.
+
+        Raises:
+            - `TypeError`: If `html_source` is not of type `str` representing a possible url, filepath or raw HTML stream.
+            - `HTTPError`: Raised from `urllib` when `html_source` is considered a url and an HTTP exception occurs.
+            - `URLError`: Raised from `urllib` when `html_source` is considered a url and a URL exception occurs.
+            - `ValueError`: If no <table> elements are found or if the targeted `table_identifier` is not found.
+            - `OSError`: Related exceptions that may be raised when `html_source` is considered a file path.
+
+        ---
+
+        From URL Example:
+
+        ```python
+        import SQLDataModel
+
+        # From URL
+        url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
+        
+        # Lets get the 94th table from the 1998 World Cup
+        sdm = SQLDataModel.from_html(url, table_identifier=94)
+
+        # View result:
+        print(sdm)
+        ```
+        ```shell
+        ┌────┬─────────────┬────┬────┬────┬────┬────┬────┬────┬─────┬──────┐
+        │  R │ Team        │ G  │  P │  W │  D │  L │ GF │ GA │ GD  │ Pts. │
+        ├────┼─────────────┼────┼────┼────┼────┼────┼────┼────┼─────┼──────┤
+        │  1 │ France      │ C  │  7 │  6 │  1 │  0 │ 15 │  2 │ +13 │   19 │
+        │  2 │ Brazil      │ A  │  7 │  4 │  1 │  2 │ 14 │ 10 │ +4  │   13 │
+        │  3 │ Croatia     │ H  │  7 │  5 │  0 │  2 │ 11 │  5 │ +6  │   15 │
+        │  4 │ Netherlands │ E  │  7 │  3 │  3 │  1 │ 13 │  7 │ +6  │   12 │
+        │  5 │ Italy       │ B  │  5 │  3 │  2 │  0 │  8 │  3 │ +5  │   11 │
+        │  6 │ Argentina   │ H  │  5 │  3 │  1 │  1 │ 10 │  4 │ +6  │   10 │
+        │  7 │ Germany     │ F  │  5 │  3 │  1 │  1 │  8 │  6 │ +2  │   10 │
+        │  8 │ Denmark     │ C  │  5 │  2 │  1 │  2 │  9 │  7 │ +2  │    7 │
+        └────┴─────────────┴────┴────┴────┴────┴────┴────┴────┴─────┴──────┘
+        [8 rows x 11 columns]
+        ```  
+
+        ---
+
+        From Local File Example: 
+
+        ```python
+        import SQLDataModel
+
+        # From HTML file
+        sdm = SQLDataModel.from_html('path/to/file.html')
+
+        # View output
+        print(sdm)
+        ```
+        ```shell
+        ┌─────────────┬────────┬──────┐
+        │ Team        │ Points │ Rank │
+        ├─────────────┼────────┼──────┤
+        │ Brazil      │ 63.7   │ 1    │
+        │ England     │ 50.7   │ 2    │
+        │ Spain       │ 50.0   │ 3    │
+        │ Germany [a] │ 49.3   │ 4    │
+        │ Mexico      │ 47.3   │ 5    │
+        │ France      │ 46.0   │ 6    │
+        │ Italy       │ 44.3   │ 7    │
+        │ Argentina   │ 44.0   │ 8    │
+        └─────────────┴────────┴──────┘
+        [8 rows x 3 columns]
+        ```
+        
+        ---
+
+        From Raw HTML Example:
+
+        ```python
+        import SQLDataModel
+
+        # Raw HTML
+        raw_html = 
+        '''<table id="find-me">
+            <tr>
+                <th>Col 1</th>
+                <th>Col 2</th>
+            </tr>    
+            <tr>
+                <td>A</td>
+                <td>1</td>
+            </tr>
+            <tr>
+                <td>B</td>
+                <td>2</td>
+            </tr>
+            <tr>
+                <td>C</td>
+                <td>3</td>
+            </tr>                
+        </table>'''
+
+        # Create the model and search for id attribute
+        sdm = SQLDataModel.from_html(raw_html, table_identifier="find-me")
+
+        # View output
+        print(sdm)
+        ```
+        ```shell
+        ┌───┬───────┬───────┐
+        │   │ Col 1 │ Col 2 │
+        ├───┼───────┼───────┤
+        │ 1 │ B     │ 2     │
+        │ 2 │ C     │ 3     │
+        └───┴───────┴───────┘
+        [3 rows x 2 columns]
+        ```
+        ---
+
+        Notes:
+            - `**kwargs` passed to method are used in `urllib.request.urlopen` if `html_source` is being considered as a web url.
+            - `**kwargs` passed to method are used in `open` if `html_source` is being considered as a filepath.
+            - The largest row size encountered will be used as the `column_count` for the returned `SQLDataModel`, rows will be padded with `None` if less.
+            
+        """        
+        if not isinstance(html_source, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(html_source).__name__}', argument for `html_source` must be of type 'str' representing a valid website url, HTML filepath or raw HTML string")
+            )
+        if html_source.startswith("http"):
+            try:
+                html_source = urllib.request.urlopen(html_source, **kwargs).read().decode(encoding)
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check url parameters")
+                ) from None
+        elif os.path.exists(html_source):
+            try:
+                with open(html_source, 'r', encoding=encoding, **kwargs) as f:
+                    html_source = f.read()
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
+                ) from None
+        tparser = HTMLParser(table_identifier=table_identifier)
+        chunks = [html_source[i:i+1024] for i in range(0, len(html_source), 1024)]
+        for c in chunks:
+            if tparser._is_finished:
+                break
+            tparser.feed(c)
+        data, headers = tparser.validate_table()
+        tparser.close() 
+        return cls(data=data, headers=headers)
+
     @classmethod
     def from_numpy(cls, array, headers:list[str]=None, **kwargs) -> SQLDataModel:
         """
@@ -1906,7 +2307,7 @@ class SQLDataModel:
             data = data[0]
         if len(data) == 1: # if only single cell
             data = data[0]
-        return [tuple([x[0] for x in res.description]),data] if include_headers else data
+        return [tuple(x[0] for x in res.description),*data] if include_headers else data
 
     def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', include_index:bool=False, **kwargs) -> None:
         """
@@ -1946,52 +2347,300 @@ class SQLDataModel:
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: csv file "{csv_file}" created'))
 
-    def to_dict(self, rowwise:bool=True) -> dict:
+    def to_dict(self, orient:Literal["rows","columns","list"]="rows", include_index:bool=None) -> dict|list[dict]:
         """
-        Convert the `SQLDataModel` to a dictionary, using either index rows or model headers as keys.
+        Converts the `SQLDataModel` instance to a dictionary or a list of dictionaries based on the specified orientation.
 
         Parameters:
-            - `rowwise` (bool, optional): If True, use index rows as keys; if False, use model headers as keys. Default is True.
+            - `orient` (Literal["rows", "columns", "list"]): The orientation of the output, see examples for more detail.
+                - "rows": Returns a dictionary with index values as keys and row values as values.
+                - "columns": Returns a dictionary with column names as keys and column values as tuples.
+                - "list": Returns a list of dictionaries, where each dictionary represents a row.
+            - `include_index` (bool): Whether to include the index column in the output. Defaults to the display_index property.
+
+        Raises:
+            - `ValueError`: if value for `orient` is not one of "rows", "columns" or "list".
 
         Returns:
-            `dict`: The dictionary representation of the SQLDataModel.
+            - `dict` | `list[dict]`: The converted data structure based on the specified orientation.
 
-        Examples:
+        ---
+
+        Example 1: Orient by Rows
+
         ```python
         import SQLDataModel
 
-        # Convert to a dictionary using index rows as keys
-        result_dict = sqldm.to_dict(rowwise=True)
+        # Sample data
+        headers = ['Col A','Col B', 'Col C']
+        data = [
+            ['A,0', 'A,1', 'A,2'],
+            ['B,0', 'B,1', 'B,2'],
+            ['C,0', 'C,1', 'C,2']
+        ]
 
-        # Example of output format:
-        result_dict = {
-             0: ['john', 'smith', 'new york']
-            ,1: ['sarah', 'west', 'chicago']
-        }
+        # Create the model
+        sdm = SQLDataModel(data, headers)
 
-        # Convert to a dictionary using model headers as keys
-        result_dict = sqldm.to_dict(rowwise=False)
+        # Convert to dictionary with rows as keys and values
+        rows_dict = sdm.to_dict(orient="rows")
 
-        # Example of output format when not rowwise:
-        result_dict = {
-            "first_name" : ['john', 'sarah']
-            "last_name" : ['smith', 'west']
-            "city" : ['new york', 'chicago']
-        }
+        # View output
+        for k, v in rows_dict.items():
+            print(f"{k}: {v}")    
         ```
-        Note:
-            - The method uses all of the underlying data, to selectively output simple index the SQLDataModel instance.
-            - If `rowwise` is True, each index row is a key, and its corresponding values are a tuple of the row data.
-            - If `rowwise` is False, each model header is a key, and its corresponding values are a tuple of the column data.
-        """
-        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=True))
-        if rowwise:
-            return {row[0]:row[1:] for row in res.fetchall()}
-        else:
-            data = res.fetchall()
-            headers = [x[0] for x in res.description]
-            return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}
+
+        ```shell
+
+        0: ('A,0', 'B,0', 'C,0')
+        1: ('A,1', 'B,1', 'C,1')
+        2: ('A,2', 'B,2', 'C,2')
+        ```
+        ---
+
+        Example 2: Orient by Columns
         
+        ```python
+
+        # Convert to dictionary with columns as keys and rows as values
+        columns_dict = sdm.to_dict(orient="columns")
+
+        # View output
+        for k, v in columns_dict.items():
+            print(f"{k}: {v}") 
+        ```
+        ```shell
+
+        Col A: ('A,0', 'A,1', 'A,2')
+        Col B: ('B,0', 'B,1', 'B,2')
+        Col C: ('C,0', 'C,1', 'C,2')
+        ```
+        ---
+
+        Example 3: Orient by List
+        
+        ```python
+
+        # Convert to list of dictionaries with each dictionary representing a row with columns as keys
+        list_dict = sdm.to_dict(orient="list")
+
+        # View output
+        for row in list_dict:
+            print(row)
+        ```
+        ```shell
+
+        {'Col A': 'A,0', 'Col B': 'B,0', 'Col C': 'C,0'}
+        {'Col A': 'A,1', 'Col B': 'B,1', 'Col C': 'C,1'}
+        {'Col A': 'A,2', 'Col B': 'B,2', 'Col C': 'C,2'}
+        ```
+        ---
+
+        Notes:
+            - Use `include_index` to return index data, otherwise current instance `display_index` value will be used.
+            - For 'list' orientation, data returned is JSON-like in structure, where each row has its own "column": "value" data.
+        """   
+        if orient not in ("rows", "columns", "list"):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid argument '{orient}', value for `orient` must be one of 'rows', 'columns' or 'list' to determine the object returned for the `to_dict()` method")
+            )
+        include_index = self.display_index if include_index is None else include_index
+        if orient == "rows":
+            return {row[0]:row[1:] for row in self.sql_db_conn.execute(self._generate_sql_stmt(include_index=True)).fetchall()}
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
+        data, headers = res.fetchall(),[x[0] for x in res.description] 
+        if orient == "columns":
+            return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}    
+        return [{col:row[i] for i,col in enumerate(headers)} for row in data]
+        
+    def to_html(self, filename:str=None, include_index:bool=None, encoding:str='utf-8', style_params:dict=None) -> str:
+        """
+        Returns the current SQLDataModel as a lightly formatted HTML <table> element as a string if `filename` is None.
+        If `filename` is specified, writes the HTML to the specified file as .html and returns None.
+
+        Parameters:
+            - `filename` (str): The file path to save the HTML content. If None, returns the HTML as a string (default is None).
+            - `include_index` (bool): Whether to include the index column in the HTML table (default is current `display_index`).
+            - `encoding` (str): Character encoding to use when writing model to HTML file, default set to 'utf-8'.            
+            - `style_params` (dict): A dictionary representing CSS styles {property: value} to customize the appearance of the HTML table (default is None).
+
+        Returns:
+            - `str` | `None`: If `filename` is None, returns the HTML content as a string. If `filename` is specified, writes to the file and returns None.
+
+        Raises:
+            - `TypeError`: If `filename` is not a valid string when specified or if `style_params` is not a dictionary when specified.
+            - `OSError`: If encountered while trying to open and write the HTML to the file.
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create the model
+        sdm = SQLDataModel(data=[(1, 'John'), (2, 'Doe')], headers=['ID', 'Name'])
+
+        # Create and save as new html file
+        sdm.to_html('output.html', style_params={'font-size': '12pt'})
+        
+        # Get HTML as a string
+        html_string = sdm.to_html()
+
+        # View output
+        print(html_string)
+        ```
+        ```html
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>John</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>Doe</td>
+            </tr>
+        </table>
+        <style>
+            table {font:size: 12pt;}
+        </style>
+        ```     
+
+        ---
+
+        Notes:
+            - Base styles are applied to reflect the styling of `SQLDataModel` in the terminal, including any `display_color` which is applied to the table CSS.
+            - Table index is determined by the instance `display_index` attribute unless specified in the argument of the same name, overriding the instance attribute.
+            - The default background-color is #E5E5E5, and the default font color is #090909, with 1 px solid border to mimic the `repr` for the instance.
+
+        """
+        if not isinstance(filename, str) and filename is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', if specified, `filename` must be of type 'str' representing a valid file path")
+            )
+        if not isinstance(style_params, dict) and style_params is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(style_params).__name__}', if specified, `style_params` must be of type 'dict' representing CSS {{'property': 'value'}} styles")
+            )
+        font_color, background_color = self.display_color.text_color_hex if self.display_color is not None else "#E5E5E5", "#090909"
+        if include_index is None:
+            include_index = self.display_index
+        display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
+        html_headers = "\n".join(("\t<tr>",*tuple(f"""\t\t<th class={f'"col-numeric"' if self.header_master[col][3] == '>' else '"col-text"'}>{col}</th>""" for col in display_headers),"\t</tr>")) # replace `{col}` with `{col if col != self.sql_idx else " "}` to revert idx display
+        html_body ="".join(["\n".join(("\n\t<tr>",*tuple(f"""\t\t<td>{cell}</td>""" for cell in tr),"\t</tr>")) for tr in self.iter_rows(include_index=include_index)])
+        col_styles = "\n".join([f'td:nth-child({i+1}) {{{"text-align:right;" if self.header_master[col][3] == '>' else "text-align:left;"}}}' for i,col in enumerate(display_headers)])
+        base_styles = f"""html {{background-color: {background_color}}}\ntable,th {{border: 1px solid {font_color}; border-collapse: collapse; overflow-x: auto;background-color:{background_color};color:{font_color};}}\ntr,td,th {{padding: 4px 6px;border-right: 1px solid {font_color}; font-family: Consolas; font-size: 9pt; font-weight:normal; overflow-x: auto;}}"""
+        cascade_styles = "".join(("\ntable,tr,td,th {",*tuple(f"""{attr}:{value};""" for attr,value in style_params.items()),"}")) if style_params is not None else ""
+        html_styling = "\n".join(("<style>",f"{base_styles}{cascade_styles}",".col-numeric {text-align: right;}",".col-text {text-align: left;}",col_styles,"</style>"))
+        html_table = f"""<!DOCTYPE html>\n<table>\n{html_headers}\n{html_body}\n</table>\n{html_styling}"""
+        if filename is None:
+            return html_table
+        try:
+            with open(filename, "w", encoding=encoding) as f:
+                f.write(html_table)
+        except Exception as e:
+            raise Exception (
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write html")
+            ) from None
+
+    def to_json(self, filename:str=None, include_index:bool=None, **kwargs) -> list|None:
+        """
+        Converts the `SQLDataModel` instance to JSON format. If `filename` is specified, the JSON is written to the file;
+        otherwise, a JSON-like object is returned.
+
+        Parameters:
+            - `filename` (str): The path to the file where JSON will be written. If None, no file is created and JSON-like object is returned.
+            - `include_index` (bool): Whether to include the index column in the JSON. Defaults to the `display_index` property.
+            - `**kwargs`: Additional keyword arguments to pass to the json.dump() method.
+
+        Returns:
+            - `list` | `None`: If `filename` is None, a list containing a JSON-like object is returned. Otherwise JSON file created and returns `None`.
+
+        Raises:
+            - `TypeError`: If `filename` is not of type 'str'.
+            - `Exception`: If there is an OS related error encountered when opening or writing to the provided `filename`.
+
+        Example:
+
+        ```python
+        import SQLDataModel
+
+        # Sample JSON to first create model
+        json_source = [
+            {"id": 1, "color": "red", "value": "#f00", "notes": "primary"}
+            ,{"id": 2, "color": "green", "value": "#0f0", "notes": None}
+            ,{"id": 3, "color": "blue", "value": "#00f", "notes": "primary"}
+            ,{"id": 4, "color": "cyan", "value": "#0ff", "notes": None}
+            ,{"id": 5, "color": "yellow", "value": "#ff0", "notes": None}
+            ,{"id": 5, "color": "black", "value": "#000", "notes": None}
+        ]
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_source)
+
+        # View current state
+        print(sdm)
+        ```
+        ```shell
+        ┌──────┬────────┬───────┬─────────┐
+        │   id │ color  │ value │ notes   │
+        ├──────┼────────┼───────┼─────────┤
+        │    1 │ red    │ #f00  │ primary │
+        │    2 │ green  │ #0f0  │         │
+        │    3 │ blue   │ #00f  │ primary │
+        │    4 │ cyan   │ #0ff  │         │
+        │    5 │ yellow │ #ff0  │         │
+        │    5 │ black  │ #000  │         │
+        └──────┴────────┴───────┴─────────┘
+        [6 rows x 4 columns]
+
+        ```
+        ```python
+
+        # Write model to JSON file
+        sdm.to_json('output.json')
+
+        # Or convert to JSON-like object
+        json_data = sdm.to_json()
+
+        # View JSON object
+        print(json_data)
+        ```
+        ```shell
+        [{'id': 1, 'color': 'red', 'value': '#f00', 'notes': 'primary'}
+        ,{'id': 2, 'color': 'green', 'value': '#0f0', 'notes': None}
+        ,{'id': 3, 'color': 'blue', 'value': '#00f', 'notes': 'primary'}
+        ,{'id': 4, 'color': 'cyan', 'value': '#0ff', 'notes': None}
+        ,{'id': 5, 'color': 'yellow', 'value': '#ff0', 'notes': None}
+        ,{'id': 5, 'color': 'black', 'value': '#000', 'notes': None}]
+        ```
+        ---
+
+        Notes:
+            - When no filename is specified, JSON-like object will be returned as a rowwise array.
+            - Any nested structure will be flattened by this method as well as the `from_json()` method.
+        """
+        if not isinstance(filename, str) and filename is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', expected `filename` to be of type 'str' representing a valid file path to write json")
+            )
+        include_index = self.display_index if include_index is None else include_index
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
+        res_headers = [x[0] for x in res.description] 
+        json_data = [{col:row[i] for i,col in enumerate(res_headers)} for row in res.fetchall()]
+        if filename is not None:
+            try:
+                with open(filename, "w") as f:
+                    json.dump(json_data, f, **kwargs)
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write json")
+                ) from None
+        else:
+            return json_data
+
     def to_list(self, include_index:bool=True, include_headers:bool=False) -> list[tuple]:
         """
         Returns a list of tuples containing all the `SQLDataModel` data without the headers by default.
@@ -2305,6 +2954,395 @@ class SQLDataModel:
 ####################################################################################################################
 ############################################## dunder special methods ##############################################
 ####################################################################################################################
+
+    def __lt__(self, other) -> SQLDataModel:
+        """
+        Implements the less than operator '<' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'age' column
+        sdm = sdm[sdm['age'] < 40]
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last   │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
+        │ 1 │ Kelly │ Lee    │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 2 │ Mike  │ Harlin │   36 │    3.90 │ 2020-08-27 │ Male   │
+        └───┴───────┴────────┴──────┴─────────┴────────────┴────────┘
+        [3 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """        
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] < other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] < other)
+        return (row_idxs)
+    
+    def __le__(self, other) -> SQLDataModel:
+        """
+        Implements the less than or equal to operator '<=' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'age' column
+        sdm = sdm[sdm['age'] <= 40]
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last   │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
+        │ 1 │ Kelly │ Lee    │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 2 │ Mike  │ Harlin │   36 │    3.90 │ 2020-08-27 │ Male   │
+        └───┴───────┴────────┴──────┴─────────┴────────────┴────────┘
+        [3 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] <= other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] <= other)
+        return (row_idxs)
+    
+    def __eq__(self, other) -> SQLDataModel:
+        """
+        Implements the is equal to operator '==' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'gender' column
+        sdm = sdm[sdm['gender'] == 'Female']
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬──────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼──────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ Kelly │ Lee  │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 1 │ Sarah │ West │   51 │    0.70 │ 2023-10-01 │ Female │
+        └───┴───────┴──────┴──────┴─────────┴────────────┴────────┘
+        [2 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """        
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] == other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] == other)
+        return (row_idxs)
+
+    def __ne__(self, other) -> SQLDataModel:
+        """
+        Implements the not equal to operator '!=' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'first' column
+        sdm = sdm[sdm['first'] != 'John']
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last    │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 1 │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │ Male   │
+        │ 2 │ Sarah │ West    │   51 │    0.70 │ 2023-10-01 │ Female │
+        │ 3 │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │ Male   │
+        └───┴───────┴─────────┴──────┴─────────┴────────────┴────────┘
+        [4 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] != other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] != other)
+        return (row_idxs)
+
+    def __gt__(self, other) -> SQLDataModel:
+        """
+        Implements the greater than operator '>' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'service' column
+        sdm = sdm[sdm['service'] > 5.0]
+                
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last    │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │ Female │
+        │ 1 │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │ Male   │
+        └───┴───────┴─────────┴──────┴─────────┴────────────┴────────┘
+        [2 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which were returned from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] > other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] > other)
+        return (row_idxs)
+
+    def __ge__(self, other) -> SQLDataModel:
+        """
+        Implements the greater than or equal to operator '>=' for comparing `SQLDataModel` against `other` and performing the equivalent set operation against the model's current indicies.
+
+        Parameters:
+            - `other`: The `SQLDataModel` or scalar (`int`, `str`, `float`) to compare with.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel containing the result rows of the operation.
+
+        Notes:
+            - For scalar `other` (int, str, or float), compares each element with the scalar and returns the row indicies evaluating to `True`.
+            - For SQLDataModel `other`, compares each element across X rows for Y columns for all (X_i, Y_j) in range of `row_count` and `column_count` and returns those row indicies evaluating to `True`.
+        ---
+
+        Example:
+        
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+        ]  
+
+        # Create the model
+        sdm = SQLDataModel(data, headers) 
+
+        # Filter by 'hire_date' column
+        sdm = sdm[sdm['hire_date'] >= datetime.date(2020,1,1)]
+
+        # View result
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
+        │   │ first │ last   │  age │ service │ hire_date  │ gender │
+        ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
+        │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
+        │ 1 │ Mike  │ Harlin │   36 │    3.90 │ 2020-08-27 │ Male   │
+        │ 2 │ Sarah │ West   │   51 │    0.70 │ 2023-10-01 │ Female │
+        └───┴───────┴────────┴──────┴─────────┴────────────┴────────┘
+        [3 rows x 6 columns]
+        ```
+        ---
+        Note:
+            - All the equality operations return a python `set` object containing the row indicies which result from the evaluation.
+            - All operations on standard types like `int`, `float` or `str` follow standard behavior and are not modified by performing the operations.
+            - Operations can be chained using standard `set` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+
+        """          
+        self_data = self.data()
+        if isinstance(other, SQLDataModel):
+            other_data = other.data()
+            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] >= other_data[i][j] for j in range(self.column_count)))
+        if isinstance(other, int|str|float|datetime.date):
+            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] >= other)
+        return (row_idxs)
 
     def __add__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
         """
@@ -2897,21 +3935,18 @@ class SQLDataModel:
         display_max_rows = self.display_max_rows if self.display_max_rows is not None else (total_available_height - 6) if (total_available_height - 6 > 0) else 1
         vertical_truncation_required = display_max_rows < self.row_count
         max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
-        display_max_rows_check = 12 # 12 makes sense to get possible second digit incrementation in values
         split_row = max_display_rows // 2
-        split_top = split_row
-        split_bottom = (self.row_count - 1) - split_row
+        check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
+        check_width_bottom = (self.row_count-1) - check_width_top
         display_index = self.display_index
-        display_headers = [self.sql_idx] + self.headers if display_index else self.headers
-        headers_select_length = f"""select max("{self.sql_idx}") as 'x',""" if display_index else """select """
+        display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_select_length = f"""{headers_select_length} {",".join([f'''case when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) > {self.max_column_width} then {self.max_column_width} when max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) < {self.min_column_width} then {self.min_column_width} else max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) end as '{col}' ''' for col in self.headers])} from("""
-        headers_sub_select = f""" select(select max(length("{self.sql_idx}")) from (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {split_top} or "{self.sql_idx}" > {split_bottom}) order by "{self.sql_idx}" desc limit {max_display_rows+1})) "{self.sql_idx}", """ if display_index else """select """
-        headers_sub_select = f"""{headers_sub_select} {",".join([f'"{col}"' for col in display_headers])} from "{self.sql_model}" order by "{self.sql_idx}" asc limit {display_max_rows_check} )"""
-        headers_full_select = f"{headers_select_length}{headers_sub_select}"
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
+        headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{self.min_column_width}),{self.max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
+        headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
-        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}  
+        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}
         table_repr = """""" # big things...
         table_left_edge = """│ """
         table_left_edge_width = 2
@@ -2959,7 +3994,6 @@ class SQLDataModel:
             END from (select "{self.sql_idx}",'{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
         else:
             fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
-        # print(f"fetch_fmt_stmt:\n{'-'*total_available_width}\n{fetch_fmt_stmt}\n{'-'*total_available_width}")
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if self.column_alignment is None:
             formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
@@ -2974,10 +4008,403 @@ class SQLDataModel:
         table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
         table_repr = "".join([table_repr, table_caption])
         return table_repr if self.display_color is None else self.display_color.wrap(table_repr)
-
+    
 ##################################################################################################################
 ############################################## sqldatamodel methods ##############################################
 ##################################################################################################################
+
+    def concat(self, other:SQLDataModel|list|tuple, inplace:bool=True) -> None|SQLDataModel:
+        """
+        Concatenates the provided data to `SQLDataModel` along the row axis, returning a new model or modifying the existing instance inplace.
+
+        Parameters:
+            - `other` (SQLDataModel | list | tuple): The SQLDataModel, list, or tuple to concatenate or append.
+            - `inplace` (bool, optional): If True (default), performs the concatenation in-place, modifying the current model. If False,
+            returns a new `SQLDataModel` instance with the concatenated result.
+
+        Returns:
+            - `None`: when `inplace = True`
+            - `SQLDataModel`: when `inplace = False`
+
+        Raises:
+            - `TypeError`: If the `other` argument is not one of type `SQLDataModel`, `list`, or `tuple`.
+            - `ValueError`: If `other` is a list or tuple with insufficient data where the column dimension is < 1.
+            - `DimensionError`: If the column count of the current model does not match the column count of the `other` model or tuple.
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Datasets a and b
+        data_a = (['A', 1], ['B', 2])
+        data_b = (['C', 3], ['D', 4])
+
+        # Create the models
+        sdm_a = SQLDataModel(data_a, headers=['letter', 'number'])
+        sdm_b = SQLDataModel(data_b, headers=['letter', 'number'])
+
+        # Concatenate the two models
+        sdm_ab = sdm_a.concat(sdm_b, inplace=False)
+
+        # View result
+        print(sdm_ab)
+
+        # Outputs
+        ```
+        ```shell
+        ┌────────┬────────┐
+        │ letter │ number │
+        ├────────┼────────┤
+        │ A      │ 1      │
+        │ B      │ 2      │
+        │ C      │ 3      │
+        │ D      │ 4      │
+        └────────┴────────┘
+        [4 rows x 2 columns]
+        ```
+        ```python
+
+        # List or tuples can also be used directly
+        data_e = ['E', 5]
+
+        # Append in place
+        sdm_ab.concat(data_e)
+
+        # View result
+        print(sdm_ab)
+
+        ```
+        ```shell
+        ┌───┬────────┬────────┐
+        │   │ letter │ number │
+        ├───┼────────┼────────┤
+        │ 0 │ A      │      1 │
+        │ 1 │ B      │      2 │
+        │ 2 │ C      │      3 │
+        │ 3 │ D      │      4 │
+        │ 4 │ E      │      5 │
+        └───┴────────┴────────┘
+        [5 rows x 2 columns]        
+        ```
+
+        ---
+        Notes:
+            - Models must be of compatible dimensions with equal `column_count` or equivalent dimension if `list` or `tuple`
+            - Headers are inherited from the model calling the `concat()` method whether done inplace or being returned as new instance.
+        """        
+        if not isinstance(other, SQLDataModel|list|tuple):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(other).__name__}', argument for `other` must be of type 'SQLDataModel' to concatenate compatible models")
+            )
+        if isinstance(other, SQLDataModel):
+            num_cols_other = other.column_count
+            num_rows_other = other.row_count
+            other = other.data()
+        elif isinstance(other, list|tuple):
+            if len(other) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient data length '{len(other)}', argument `other` must have length >= 1 or contain at least 1 row to concatenate")
+                )
+            if not isinstance(other[0], list|tuple):
+                other = [other]
+            num_cols_other = len(other[0])
+            num_rows_other = len(other)
+        if self.column_count != num_cols_other:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: incompatible column count '{num_cols_other}', cannot concatenate model shape '{self.get_shape()}' to model shape '({num_rows_other}, {num_cols_other})' as same number of columns are required")
+            )
+        if inplace:
+            sql_insert_stmt = f"""insert into "{self.sql_model}" ({','.join([f'"{col}"' for col in self.headers])}) values ({','.join(['?' if self.header_master[col][1] not in ('datetime','date') else "datetime(?)" if self.header_master[col][1] == 'datetime' else "date(?)" for col in self.headers])})"""
+            self.sql_db_conn.executemany(sql_insert_stmt, other)
+            self._update_model_metadata(update_row_meta=True)
+            return
+        else:
+            return type(self)((*self.data(),*other), self.headers, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+
+    def count(self) -> SQLDataModel:
+        """
+        Returns a new `SQLDataModel` containing the total counts and unique values for each column in the model for both null and non-null values.
+
+        Returns:
+            - SQLDataModel: A new SQLDataModel containing columns 'column', 'unique', and 'count' representing the column name, total unique values, and total values count, respectively.
+        
+        Notes:
+            - 'column' contains the names of the columns counted.
+            - 'na' contains the total number of null values in the column.
+            - 'unique' contains the total number of unique values in the column.
+            - 'count' contains the total number of non-null values in the column.
+            - 'total' contains the total number of all null and non-null values in the column.
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Gender']
+        data = [
+            ('Alice', 25, 'Female'), 
+            ('Bob', 30, None), 
+            ('Alice', 25, 'Female')
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # Get the value count information
+        count_model = sdm.count()
+
+        # View the count information
+        print(count_model)
+
+        # Output
+        ```
+        ```shell
+        ┌────────┬──────┬────────┬───────┬───────┐
+        │ column │   na │ unique │ count │ total │
+        ├────────┼──────┼────────┼───────┼───────┤
+        │ Name   │    0 │      2 │     3 │     3 │
+        │ Age    │    0 │      2 │     3 │     3 │
+        │ Gender │    1 │      1 │     2 │     3 │
+        └────────┴──────┴────────┴───────┴───────┘
+        [3 rows x 5 columns]
+        ```
+
+        """
+        fetch_stmt = " UNION ALL ".join([f"""select '{col}' as 'column', sum(case when "{col}" is null then 1 else 0 end) as 'na', count(distinct "{col}") as 'unique', count("{col}") as 'count',sum(case when "{col}" is null then 1 else 1 end) as 'total' from "{self.sql_model}" """ for col in self.headers])
+        return self.execute_fetch(fetch_stmt)
+
+    def deduplicate(self, subset:list[str]=None, reset_index:bool=True, keep_first:bool=True, inplace:bool=True) -> None|SQLDataModel:
+        """
+        Removes duplicate rows from the SQLDataModel based on the specified subset of columns. Deduplication occurs inplace by default, otherwise use `inplace=False` to return a new `SQLDataModel`.
+
+        Parameters:
+            - `subset` (list[str], optional): List of columns to consider when identifying duplicates.
+            If None, all columns are considered. Defaults to None.
+            - `reset_index` (bool, optional): If True, resets the index after deduplication starting at 0; otherwise retains current indicies.
+            - `keep_first` (bool, optional): If True, keeps the first occurrence of each duplicated row; otherwise,
+            keeps the last occurrence. Defaults to True.
+            - `inplace` (bool, optional): If True, modifies the current SQLDataModel in-place; otherwise, returns
+            a new SQLDataModel without duplicates. Defaults to True.
+
+        Returns:
+            - `None`: If `inplace` is True, the method modifies the current SQLDataModel in-place.
+            - `SQLDataModel`: If `inplace` is False, returns a new SQLDataModel without duplicates.
+
+        Raises:
+            - `ValueError`: If a column specified in `subset` is not found in the SQLDataModel.
+
+        Example:
+        ```python
+        import SQLDataModel
+        # Example 1: Deduplicate based on a specific column
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+        sqldm.deduplicate(subset='ID', keep_first=True, inplace=True)
+
+        # Example 2: Deduplicate based on multiple columns
+        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+        sqldm_deduped = sqldm.deduplicate(subset=['ID', 'Name'], keep_first=False, inplace=False)
+        ```
+        """        
+        dyn_keep_order = 'min' if keep_first else 'max'
+        if subset is not None:
+            if isinstance(subset, str):
+                subset = [subset]
+            for col in subset:
+                if col not in self.headers:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', provided columns in `subset` must be valid columns, use `get_headers()` to view current valid column names")
+                    )
+        else:
+            subset = self.headers
+        if inplace:
+            sql_stmt = f"""delete from "{self.sql_model}" where rowid not in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
+            self.sql_db_conn.execute(sql_stmt)
+            self.sql_db_conn.commit()
+            if reset_index:
+                self.reset_index()
+                return
+            self._update_model_metadata(update_row_meta=True)
+            return
+        else:
+            index_str = f'"{self.sql_idx}",' if not reset_index else ''
+            headers_str = ",".join([f'"{col}"' for col in self.headers])
+            sql_stmt = f"""select {index_str}{headers_str} from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
+            return self.execute_fetch(sql_stmt)
+
+    def fillna(self, value, strictly_null:bool=False, inplace:bool=True) -> None|SQLDataModel:
+        """
+        Fills missing (na or nan) values in the current `SQLDataModel` with the provided `value` inplace or as a new instance.
+
+        Parameters:
+            - `value`: The scalar value to fill missing values with. Should be of type 'str', 'int', 'float', 'bytes', or 'bool'.
+            - `inplace` (bool): If True, modifies the current instance in-place. If False, returns a new instance with missing values filled.
+            - `strictly_null` (bool): If True, only strictly null values are filled. If False, values like 'NA', 'NaN', 'n/a', 'na', and whitespace only strings are also filled.
+
+        Returns:
+            - `None` (if `inplace` is True): The method modifies the current instance in-place.
+            - `SQLDataModel` (if `inplace` is False): A new SQLDataModel instance with missing values filled.
+
+        Raises:
+            - `TypeError`: If `value` is not a scalar type or is incompatible with SQLite's type system.
+            
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create sample data
+        data = [('Alice', 25, None), ('Bob', None, 'N/A'), ('Charlie', 'NaN', ' '), ('David', 30, 'NA')]
+
+        # Create the model
+        sdm = SQLDataModel(data, headers=['Name', 'Age', 'Status'])
+
+        # Fill missing values with 0
+        sdm_filled = sdm.fillna(value=0, strictly_null=False, inplace=False)
+
+        # View the filled model
+        print(sdm_filled)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬─────────┬──────┬────────┐
+        │   │ Name    │  Age │ Status │
+        ├───┼─────────┼──────┼────────┤
+        │ 0 │ Alice   │   25 │      0 │
+        │ 1 │ Bob     │    0 │      0 │
+        │ 2 │ Charlie │    0 │      0 │
+        │ 3 │ David   │   30 │      0 │
+        └───┴─────────┴──────┴────────┘
+        [4 rows x 3 columns]    
+        ```
+        ---
+        Notes:
+            - The method supports filling missing values with various scalar types which are then adapted to the columns set dtype.
+            - The `strictly_null` parameter controls whether additional values like 'NA', 'NAN', 'n/a', 'na', and empty strings are treated as null.
+        """
+        if not isinstance(value,str|int|float|bytes|bool) and value is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(value).__name__}', `value` argument for `fillna()` must be scalar type or one of 'str', 'int', 'bytes', 'bool' or 'float'")
+            )
+        na_values = ('none','null','nan','n/a','na','')
+        if inplace:
+            for col in self.headers:
+                null_predicate = "" if strictly_null else f'or (trim(lower("{col}")) in {na_values})'
+                fillna_col_stmt = f"""update "{self.sql_model}" set "{col}" = ? where "{col}" is null {null_predicate}"""
+                self.sql_db_conn.execute(fillna_col_stmt,(value,))
+            return
+        fetch_na_stmt = ",".join([f"""case when lower(trim("{col}")) in {na_values} or "{col}" is null then ? else "{col}" end as '{col}'""" if not strictly_null else f"""case when "{col}" is null then ? else "{col}" end as '{col}'""" for col in self.headers])
+        fetch_na_stmt, fetch_na_params = f"""select {fetch_na_stmt} from "{self.sql_model}" """, tuple(value for _ in range(self.column_count))
+        return self.execute_fetch(fetch_na_stmt,fetch_na_params)
+
+    def group_by(self, columns:str|list[str], order_by_count:bool=True) -> SQLDataModel:
+        """
+        Returns a new `SQLDataModel` after performing a group by operation on specified columns.
+
+        Parameters:
+            - `columns` (str, list, tuple): Columns to group by. Accepts either individual strings or a list/tuple of strings.
+
+        Keyword Args:
+            - `order_by_count` (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
+
+        Returns:
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the group by operation.
+
+        Raises:
+            - `TypeError`: If the columns argument is not of type str, list, or tuple.
+            - `ValueError`: If any specified column does not exist in the current model.
+            - `SQLProgrammingError`: If any specified columns or aggregate keywords are invalid or incompatible with the current model.
+
+        ---
+        Example:
+        ```python
+        import SQLDataModel
+
+        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+        data = [
+            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+            ('Sarah', 'West', 39, 0.7, '2023-10-01', 'Female'),
+            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female')
+        ]        
+        # Create the model
+        sdm = SQLDataModel(data, headers, display_float_precision=2, display_index=True)
+
+        # Group by 'gender' column
+        sdm_gender = sdm.group_by("gender")
+
+        # View model
+        print(sdm_gender)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬────────┬───────┐
+        │   │ gender │ count │
+        ├───┼────────┼───────┤
+        │ 0 │ Male   │     3 │
+        │ 1 │ Female │     2 │
+        └───┴────────┴───────┘
+        [2 rows x 2 columns]        
+        ```
+        ---
+
+        Example 2:
+        ```python
+        import SQLDataModel
+
+        # Create the model
+        sdm = SQLDataModel.from_csv('data.csv')
+
+        # Group by multiple columns
+        sdm.group_by(["country", "state", "city"])
+
+        ```
+        Notes:
+            - Use `order_by_count=False` to change ordering from count to column arguments.
+        """
+        if not isinstance(columns, str|list|tuple):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(columns).__name__}', arguments for `columns` must be one of 'str', 'list' or 'tuple'")
+                )
+        if isinstance(columns,str):
+            columns = [columns]
+        for col in columns:
+            if col not in self.headers:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns are required for grouping, use `get_headers()` to view current valid arguments")
+                    )
+        columns_group_by = ",".join(f'"{col}"' for col in columns)
+        order_by = "count(*)" if order_by_count else columns_group_by
+        group_by_stmt = f"""select {columns_group_by}, count(*) as count from "{self.sql_model}" group by {columns_group_by} order by {order_by} desc"""
+        return self.execute_fetch(group_by_stmt)
+
+    def head(self, n_rows:int=5) -> SQLDataModel:
+        """
+        Returns the first `n_rows` of the current `SQLDataModel`.
+
+        Parameters:
+            - `n_rows` (int, optional): Number of rows to return. Defaults to 5.
+
+        Returns:
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the specified number of rows.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create the  model
+        sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+
+        # Generate a new model with top 3 rows
+        head_result = sdm.head(3)
+        ```
+        """
+        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="asc"))
 
     def iter_rows(self, min_row:int=None, max_row:int=None, include_index:bool=True, include_headers:bool=False) -> Generator:
         """
@@ -3037,53 +4464,198 @@ class SQLDataModel:
             ) from None
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_idx_col))
         yield from (Row(*x) for x in res.fetchall())
-
-    def head(self, n_rows:int=5) -> SQLDataModel:
+    
+    def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None) -> SQLDataModel:
         """
-        Returns the first `n_rows` of the current `SQLDataModel`.
+        Merges two `SQLDataModel` instances based on specified columns and merge type, returning the result as a new instance. 
+        If the join column shares the same name in both models, `left_on` and `right_on` column arguments are not required and will be inferred. Otherwise, explicit arguments for both are required.
 
         Parameters:
-            - `n_rows` (int, optional): Number of rows to return. Defaults to 5.
+            - `merge_with` (SQLDataModel): The SQLDataModel to merge with the current model.
+            - `how` (Literal["left", "right", "inner", "full outer", "cross"]): The type of merge to perform.
+            - `left_on` (str): The column name from the current model to use as the left join key.
+            - `right_on` (str): The column name from the `merge_with` model to use as the right join key.
 
         Returns:
-            - `SQLDataModel`: A new `SQLDataModel` instance containing the specified number of rows.
+            - `SQLDataModel`: A new SQLDataModel containing the product of the merged result.
+
+        Raises:
+            - `TypeError`: If `merge_with` is not of type 'SQLDataModel'.
+            - `DimensionError`: If no shared column exists, and explicit `left_on` and `right_on` arguments are not provided.
+            - `ValueError`: If the specified `left_on` or `right_on` column is not found in the respective models.
+            
+        Notes:
+            - The resulting SQLDataModel is created based on the `sqlite3` join definition and specified columns and merge type.
+            - The columns from both models are included in the result, with aliasing to avoid naming conflicts.
+        ---
 
         Example:
         ```python
         import SQLDataModel
 
-        # Create the  model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+        # Create sample data
+        data_a = [('Alice', 25, 'Female'), ('Bob', 30, 'Male')]
+        data_b = [('Alice', 'Marketing'), ('Charlie', 'Engineering')]
 
-        # Generate a new model with top 3 rows
-        head_result = sdm.head(3)
+        # Create the models
+        sdm_a = SQLDataModel(data_a, headers=['Name', 'Age', 'Gender'])
+        sdm_b = SQLDataModel(data_b, headers=['Name', 'Department'])
+
+        # Merge the models based on the 'Name' column
+        merged_model = sdm_a.merge(merge_with=sdm_b, how="inner", left_on="Name", right_on="Name")
+
+        # View the merged result
+        print(merged_model)
+
+        # Output
         ```
+        ```shell
+        ┌────────┬──────┬───────┬────────────┐
+        │ Name   │ Age  │ Gender│ Department │
+        ├────────┼──────┼───────┼────────────┤
+        │ Alice  │ 25   │ Female│ Marketing  │
+        └────────┴──────┴───────┴────────────┘
+        [1 row x 4 columns]
+        ```
+        ---
+
+        """        
+        if not isinstance(merge_with, SQLDataModel):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid merge type '{type(merge_with).__name__}', argument `merge_with` must be another instance of type `SQLDataModel`")
+            )
+        if left_on is None and right_on is None:
+            shared_column = set(self.headers) & set(merge_with.headers)
+            if len(shared_column) != 1:
+                raise DimensionError(
+                    SQLDataModel.ErrorFormat(f"DimensionError: no shared column exists, a shared column name is required to merge without explicit `left_on` and `right_on` arguments")
+                )
+            shared_column = next(iter(shared_column))
+            left_on, right_on = shared_column, shared_column
+        else:
+            if left_on not in self.headers:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{left_on}', a valid `left_on` column is required, use `get_headers()` to view current valid arguments")
+                )
+            if right_on not in merge_with.headers:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{right_on}', a valid `right_on` column is required, use `get_headers()` to view current valid arguments")
+                )            
+        tmp_table_name = "_merge_with"
+        merge_with.to_sql(tmp_table_name, self.sql_db_conn)
+        all_cols = [*self.headers, *merge_with.headers]
+        headers_str = ",".join([f'a."{col}" as "{alias}"' if i < self.column_count else f'b."{col}" as "{alias}"' for i, (col, alias) in enumerate(zip(all_cols,SQLDataModel.alias_duplicates(all_cols)))])
+        fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b on a."{left_on}" = b."{right_on}" """))
+        return self.execute_fetch(fetch_stmt)
+      
+    def reset_index(self, start_index:int=0) -> None:
         """
-        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="asc"))
-    
-    def tail(self, n_rows:int=5) -> SQLDataModel:
-        """
-        Returns the last `n_rows` of the current `SQLDataModel`.
+        Resets the index of the `SQLDataModel` instance inplace to zero-based sequential autoincrement, or to specified `start_index` base with sequential incrementation.
 
         Parameters:
-            - `n_rows` (int, optional): Number of rows to return. Defaults to 5.
+            - `start_index` (int, optional): The starting index for the reset operation. Defaults to 0.
 
-        Returns:
-            - `SQLDataModel`: A new `SQLDataModel` instance containing the specified number of rows.
+        Raises:
+            - `TypeError`: If provided `start_index` argument is not of type `int`
+            - `ValueError`: If the specified `start_index` is greater than the minimum index in the current model.
+            - `SQLProgrammingError`: If reset index execution results in constraint violation or programming error.
 
         Example:
         ```python
         import SQLDataModel
 
-        # Create the  model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+        headers = ['idx', 'first', 'last', 'age', 'service']
+        data = [
+            (0, 'john', 'smith', 27, 1.22),
+            (1, 'sarah', 'west', 39, 0.7),
+            (2, 'mike', 'harlin', 36, 3),
+            (3, 'pat', 'douglas', 42, 11.5)
+        ]        
 
-        # Generate a new model with bottom 3 rows
-        head_result = sdm.tail(3)
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # View current state
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌─────┬────────┬─────────┬────────┬─────────┐
+        │     │ first  │ last    │    age │ service │
+        ├─────┼────────┼─────────┼────────┼─────────┤
+        │ 994 │ john   │ smith   │     27 │    1.22 │
+        │ 995 │ sarah  │ west    │     39 │    0.70 │
+        │ 996 │ mike   │ harlin  │     36 │    3.00 │
+        │ 997 │ pat    │ douglas │     42 │   11.50 │
+        └─────┴────────┴─────────┴────────┴─────────┘
+        [4 rows x 4 columns]        
+        ```
+
+        ```python
+
+        # Reset the index with default start value
+        sdm.reset_index()
+
+        # View updated model
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌───┬────────┬─────────┬────────┬─────────┐
+        │   │ first  │ last    │    age │ service │
+        ├───┼────────┼─────────┼────────┼─────────┤
+        │ 0 │ john   │ smith   │     27 │    1.22 │
+        │ 1 │ sarah  │ west    │     39 │    0.70 │
+        │ 2 │ mike   │ harlin  │     36 │    3.00 │
+        │ 3 │ pat    │ douglas │     42 │   11.50 │
+        └───┴────────┴─────────┴────────┴─────────┘
+        [4 rows x 4 columns]        
+        ```
+        ```python
+
+        # Reset the index with a different value
+        sdm.reset_index(start_index = -3)
+
+        # View updated model
+        print(sdm)
+
+        # Output
+        ```
+        ```shell
+        ┌────┬────────┬─────────┬────────┬─────────┐
+        │    │ first  │ last    │    age │ service │
+        ├────┼────────┼─────────┼────────┼─────────┤
+        │ -3 │ john   │ smith   │     27 │    1.22 │
+        │ -2 │ sarah  │ west    │     39 │    0.70 │
+        │ -1 │ mike   │ harlin  │     36 │    3.00 │
+        │  0 │ pat    │ douglas │     42 │   11.50 │
+        └────┴────────┴─────────┴────────┴─────────┘
+        [4 rows x 4 columns]        
         ```
         """
-        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
-    
+        if not isinstance(start_index,int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"""TypeError: invalid start index type '{type(start_index).__name__}', start index must be type 'int'""")
+            )            
+        if start_index > 0:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"""ValueError: invalid start index '{start_index}', constraints require start index <= minimum index, which is '0' in the current model""")
+            )
+        start_index = start_index - 1
+        tmp_table_name = f"_temp_{self.sql_model}"
+        created_headers = [self.sql_idx,*self.headers]
+        headers_str = ",".join([f'"{col}"' for col in created_headers[1:]])
+        headers_dtypes_str = ",".join([f'"{col}" {self.header_master[col][0]}' if self.header_master[col][2] else f'"{col}" {self.header_master[col][0]} PRIMARY KEY' for col in created_headers])
+        reset_idx_stmt = f"""drop table if exists "{tmp_table_name}";create table "{tmp_table_name}"({headers_dtypes_str}); 
+        insert into "{tmp_table_name}"("{self.sql_idx}",{headers_str})
+        select row_number() over (order by "{self.sql_idx}" asc) + {start_index} as "{self.sql_idx}",{headers_str} from "{self.sql_model}" order by "{self.sql_idx}" asc;
+        drop table if exists "{self.sql_model}"; alter table "{tmp_table_name}" rename to "{self.sql_model}";"""
+        self.execute_transaction(reset_idx_stmt)
+        self._update_model_metadata(update_row_meta=True)        
+        return
+
     def set_display_color(self, color:str|tuple):
         """
         Sets the table string representation color when `SQLDataModel` is displayed in the terminal.
@@ -3207,6 +4779,29 @@ class SQLDataModel:
         sort_stmt = " ".join(("select",headers_str,f'from "{self.sql_model}" order by {sort_by_str}'))
         return self.execute_fetch(sort_stmt)
 
+    def tail(self, n_rows:int=5) -> SQLDataModel:
+        """
+        Returns the last `n_rows` of the current `SQLDataModel`.
+
+        Parameters:
+            - `n_rows` (int, optional): Number of rows to return. Defaults to 5.
+
+        Returns:
+            - `SQLDataModel`: A new `SQLDataModel` instance containing the specified number of rows.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Create the  model
+        sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+
+        # Generate a new model with bottom 3 rows
+        head_result = sdm.tail(3)
+        ```
+        """
+        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
+  
     def where(self, predicate:str) -> SQLDataModel:
         """
         Filters the rows of the current `SQLDataModel` object based on the specified SQL predicate and returns a
@@ -3256,114 +4851,6 @@ class SQLDataModel:
             )
         fetch_stmt = f""" select * from "{self.sql_model}" where {predicate} """
         return self.execute_fetch(fetch_stmt)
-        
-    def reset_index(self, start_index:int=0) -> None:
-        """
-        Resets the index of the `SQLDataModel` instance inplace to zero-based sequential autoincrement, or to specified `start_index` base with sequential incrementation.
-
-        Parameters:
-            - `start_index` (int, optional): The starting index for the reset operation. Defaults to 0.
-
-        Raises:
-            - `TypeError`: If provided `start_index` argument is not of type `int`
-            - `ValueError`: If the specified `start_index` is greater than the minimum index in the current model.
-            - `SQLProgrammingError`: If reset index execution results in constraint violation or programming error.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        headers = ['idx', 'first', 'last', 'age', 'service']
-        data = [
-            (0, 'john', 'smith', 27, 1.22),
-            (1, 'sarah', 'west', 39, 0.7),
-            (2, 'mike', 'harlin', 36, 3),
-            (3, 'pat', 'douglas', 42, 11.5)
-        ]        
-
-        # Create the model
-        sdm = SQLDataModel(data, headers)
-
-        # View current state
-        print(sdm)
-
-        # Output
-        ```
-        ```shell
-        ┌─────┬────────┬─────────┬────────┬─────────┐
-        │     │ first  │ last    │    age │ service │
-        ├─────┼────────┼─────────┼────────┼─────────┤
-        │ 994 │ john   │ smith   │     27 │    1.22 │
-        │ 995 │ sarah  │ west    │     39 │    0.70 │
-        │ 996 │ mike   │ harlin  │     36 │    3.00 │
-        │ 997 │ pat    │ douglas │     42 │   11.50 │
-        └─────┴────────┴─────────┴────────┴─────────┘
-        [4 rows x 4 columns]        
-        ```
-
-        ```python
-
-        # Reset the index with default start value
-        sdm.reset_index()
-
-        # View updated model
-        print(sdm)
-
-        # Output
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┬─────────┐
-        │   │ first  │ last    │    age │ service │
-        ├───┼────────┼─────────┼────────┼─────────┤
-        │ 0 │ john   │ smith   │     27 │    1.22 │
-        │ 1 │ sarah  │ west    │     39 │    0.70 │
-        │ 2 │ mike   │ harlin  │     36 │    3.00 │
-        │ 3 │ pat    │ douglas │     42 │   11.50 │
-        └───┴────────┴─────────┴────────┴─────────┘
-        [4 rows x 4 columns]        
-        ```
-        ```python
-
-        # Reset the index with a different value
-        sdm.reset_index(start_index = -3)
-
-        # View updated model
-        print(sdm)
-
-        # Output
-        ```
-        ```shell
-        ┌────┬────────┬─────────┬────────┬─────────┐
-        │    │ first  │ last    │    age │ service │
-        ├────┼────────┼─────────┼────────┼─────────┤
-        │ -3 │ john   │ smith   │     27 │    1.22 │
-        │ -2 │ sarah  │ west    │     39 │    0.70 │
-        │ -1 │ mike   │ harlin  │     36 │    3.00 │
-        │  0 │ pat    │ douglas │     42 │   11.50 │
-        └────┴────────┴─────────┴────────┴─────────┘
-        [4 rows x 4 columns]        
-        ```
-        """
-        if not isinstance(start_index,int):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"""TypeError: invalid start index type '{type(start_index).__name__}', start index must be type 'int'""")
-            )            
-        if start_index > 0:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"""ValueError: invalid start index '{start_index}', constraints require start index <= minimum index, which is '0' in the current model""")
-            )
-        start_index = start_index - 1
-        tmp_table_name = f"_temp_{self.sql_model}"
-        created_headers = [self.sql_idx,*self.headers]
-        headers_str = ",".join([f'"{col}"' for col in created_headers[1:]])
-        headers_dtypes_str = ",".join([f'"{col}" {self.header_master[col][0]}' if self.header_master[col][2] else f'"{col}" {self.header_master[col][0]} PRIMARY KEY' for col in created_headers])
-        reset_idx_stmt = f"""drop table if exists "{tmp_table_name}";create table "{tmp_table_name}"({headers_dtypes_str}); 
-        insert into "{tmp_table_name}"("{self.sql_idx}",{headers_str})
-        select row_number() over (order by "{self.sql_idx}" asc) + {start_index} as "{self.sql_idx}",{headers_str} from "{self.sql_model}" order by "{self.sql_idx}" asc;
-        drop table if exists "{self.sql_model}"; alter table "{tmp_table_name}" rename to "{self.sql_model}";"""
-        self.execute_transaction(reset_idx_stmt)
-        self._update_model_metadata(update_row_meta=True)        
-        return
 
 ##############################################################################################################
 ################################################ sql commands ################################################
@@ -3686,189 +5173,8 @@ class SQLDataModel:
         self.sql_model = new_name
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed primary model alias to "{new_name}"'))
-
-    def deduplicate(self, subset:list[str]=None, keep_first:bool=True, inplace:bool=True) -> None|SQLDataModel:
-        """
-        Removes duplicate rows from the SQLDataModel based on the specified subset of columns. Deduplication occurs inplace by default, otherwise use `inplace=False` to return a new `SQLDataModel`.
-
-        Parameters:
-            - `subset` (list[str], optional): List of columns to consider when identifying duplicates.
-            If None, all columns are considered. Defaults to None.
-            - `keep_first` (bool, optional): If True, keeps the first occurrence of each duplicated row; otherwise,
-            keeps the last occurrence. Defaults to True.
-            - `inplace` (bool, optional): If True, modifies the current SQLDataModel in-place; otherwise, returns
-            a new SQLDataModel without duplicates. Defaults to True.
-
-        Returns:
-            - `None`: If `inplace` is True, the method modifies the current SQLDataModel in-place.
-            - `SQLDataModel`: If `inplace` is False, returns a new SQLDataModel without duplicates.
-
-        Raises:
-            - `ValueError`: If a column specified in `subset` is not found in the SQLDataModel.
-
-        Example:
-        ```python
-        import SQLDataModel
-        # Example 1: Deduplicate based on a specific column
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
-        sqldm.deduplicate(subset='ID', keep_first=True, inplace=True)
-
-        # Example 2: Deduplicate based on multiple columns
-        sqldm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
-        sqldm_deduped = sqldm.deduplicate(subset=['ID', 'Name'], keep_first=False, inplace=False)
-        ```
-        """        
-        dyn_keep_order = 'min' if keep_first else 'max'
-        if subset is not None:
-            if isinstance(subset, str):
-                subset = [subset]
-            for col in subset:
-                if col not in self.headers:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', provided columns in `subset` must be valid columns, use `get_headers()` to view current valid column names")
-                    )
-        else:
-            subset = self.headers
-        if inplace:
-            sql_stmt = f"""delete from "{self.sql_model}" where rowid not in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
-            self.sql_db_conn.execute(sql_stmt)
-            self.sql_db_conn.commit()
-            self._update_model_metadata(update_row_meta=True)
-            return
-        else:
-            sql_stmt = f"""select * from "{self.sql_model}" where rowid in (select {dyn_keep_order}(rowid) from "{self.sql_model}" group by {','.join(f'"{col}"' for col in subset)})"""
-            return self.execute_fetch(sql_stmt)
-
-    def group_by(self, columns:str|list[str], order_by_count:bool=True) -> SQLDataModel:
-        """
-        Returns a new `SQLDataModel` after performing a group by operation on specified columns.
-
-        Parameters:
-            - `columns` (str, list, tuple): Columns to group by. Accepts either individual strings or a list/tuple of strings.
-
-        Keyword Args:
-            - `order_by_count` (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
-
-        Returns:
-            - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the group by operation.
-
-        Raises:
-            - `TypeError`: If the columns argument is not of type str, list, or tuple.
-            - `ValueError`: If any specified column does not exist in the current model.
-            - `SQLProgrammingError`: If any specified columns or aggregate keywords are invalid or incompatible with the current model.
-
-        ---
-        Example:
-        ```python
-        import SQLDataModel
-
-        headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
-        data = [
-            ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
-            ('Sarah', 'West', 39, 0.7, '2023-10-01', 'Female'),
-            ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
-            ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
-            ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female')
-        ]        
-        # Create the model
-        sdm = SQLDataModel(data, headers, display_float_precision=2, display_index=True)
-
-        # Group by 'gender' column
-        sdm_gender = sdm.group_by("gender")
-
-        # View model
-        print(sdm_gender)
-
-        # Output
-        ```
-        ```shell
-        ┌───┬────────┬───────┐
-        │   │ gender │ count │
-        ├───┼────────┼───────┤
-        │ 0 │ Male   │     3 │
-        │ 1 │ Female │     2 │
-        └───┴────────┴───────┘
-        [2 rows x 2 columns]        
-        ```
-        ---
-
-        Example 2:
-        ```python
-        import SQLDataModel
-
-        # Create the model
-        sdm = SQLDataModel.from_csv('data.csv')
-
-        # Group by multiple columns
-        sdm.group_by(["country", "state", "city"])
-
-        ```
-        Notes:
-            - Use `order_by_count=False` to change ordering from count to column arguments.
-        """
-        if not isinstance(columns, str|list|tuple):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(columns).__name__}', arguments for `columns` must be one of 'str', 'list' or 'tuple'")
-                )
-        if isinstance(columns,str):
-            columns = [columns]
-        for col in columns:
-            if col not in self.headers:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns are required for grouping, use `get_headers()` to view current valid arguments")
-                    )
-        columns_group_by = ",".join(f'"{col}"' for col in columns)
-        order_by = "count(*)" if order_by_count else columns_group_by
-        group_by_stmt = f"""select {columns_group_by}, count(*) as count from "{self.sql_model}" group by {columns_group_by} order by {order_by} desc"""
-        return self.execute_fetch(group_by_stmt)
-    
-    def join_model(self, model:SQLDataModel, left:bool=True, on_column:str=None) -> SQLDataModel:
-        """
-        Performs a left or right join using the caller `SQLDataModel` as the base table and another `model` of type `SQLDataModel` instance as the joined table.
-
-        Parameters:
-            - `model` (SQLDataModel): The `SQLDataModel` instance to join with.
-            - `left` (bool, optional): If True (default), performs a left join. If False, performs a right join.
-            - `on_column` (str, optional): The shared column used for joining. If None, attempts to automatically find a matching column.
-
-        Returns:
-            - `SQLDataModel`: A new `SQLDataModel` instance containing the result of the join operation.
-
-        Raises:
-            - `DimensionError`: If no shared column is found, or if the provided column is not present in both models.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        sqldm_1 = SQLDataModel.from_csv('base-data.csv')  # create first model from data
-        sqldm_2 = SQLDataModel.from_csv('join-data.csv')  # create second model from data
-        result = sqldm_1.join_model(sqldm_2, left=True, on_column='shared_column')  # perform left join on a shared column
-        ```
-        """
-        validated_join_col = False
-        join_tablename = 'f_table'
-        join_cols = model.headers
-        if on_column is None:
-            for col in join_cols:
-                if col in self.headers:
-                    on_column = col
-                    validated_join_col = True
-                    break
-        else:
-            if (on_column in self.headers) and (on_column in join_cols):
-                validated_join_col = True
-        if not validated_join_col:
-            raise DimensionError(
-                SQLDataModel.ErrorFormat(f"DimensionError: no shared column, no matching join column was found in the provided model, ensure one is available or specify one explicitly with on_column='shared_column'")
-                )
-        model.to_sql(join_tablename, self.sql_db_conn)
-        join_cols = [x for x in join_cols if x != on_column] # removing shared join column
-        sql_join_stmt = self._generate_sql_fetch_for_joining_tables(self.headers, join_tablename, join_column=on_column, join_headers=join_cols, join_type='left' if left else 'right')
-        res = self.sql_db_conn.execute(sql_join_stmt)
-        return type(self)(data=res.fetchall(), headers=[x[0] for x in res.description], display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
-
-    def execute_fetch(self, sql_query:str, **kwargs) -> SQLDataModel:
+     
+    def execute_fetch(self, sql_query:str, sql_params:tuple=None, **kwargs) -> SQLDataModel:
         """
         Returns a new `SQLDataModel` object after executing the provided SQL query using the current `SQLDataModel`. 
         This method is called by other methods which expect results to be returned from their execution.
@@ -3903,7 +5209,7 @@ class SQLDataModel:
             - This function is the primary method used by `SQLDataModel` methods that are expected to return a new instance.
         """
         try:
-            res = self.sql_db_conn.execute(sql_query)
+            res = self.sql_db_conn.execute(sql_query) if sql_params is None else self.sql_db_conn.execute(sql_query, sql_params) 
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"')
@@ -4629,48 +5935,6 @@ class SQLDataModel:
         self._update_model_metadata()
         return
 
-    def _generate_sql_fetch_for_joining_tables(self, base_headers:list[str], join_table:str, join_column:str, join_headers:list[str], join_type:str='left') -> str:
-        """
-        Generates a SQL SELECT statement for joining tables, called by the `join_model()` method for performning left or right joins.
-
-        Usage:
-            Constructs a SQL SELECT statement to join the base table (specified by 'base_headers') with another table
-            (specified by 'join_table') based on a common column ('join_column'). The columns to be selected from
-            the base and joined tables are specified by 'base_headers' and 'join_headers', respectively.
-
-        Parameters:
-            - `base_headers` (list[str]): List of column names to be selected from the base table.
-            - `join_table` (str): Name of the table to be joined with the base table.
-            - `join_column` (str): Common column used as the join predicate between the base and joined tables.
-            - `join_headers` (list[str]): List of column names to be selected from the joined table.
-            - `join_type` (str, optional): Type of join ('left' by default). Can be 'left' or 'left outer'.
-
-        Returns:
-            str: A SQL SELECT statement for joining tables.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        # Example usage:
-        sql_stmt = sqldm._generate_sql_fetch_for_joining_tables(
-            base_headers=['ID', 'Name', 'Value'],
-            join_table='other_table',
-            join_column='ID',
-            join_headers=['Description', 'Category'],
-            join_type='left'
-        )
-        print(sql_stmt)
-        ```
-        """
-        # base_headers_str = ",".join([f"""a.\"{v[0]}\" as \"{v[0]}\"""" for v in self.header_idx_dtype_dict.values() if v[0] in base_headers])
-        base_headers_str = ",".join([f"""a.\"{col}\" as \"{col}\"""" for col in base_headers])
-        join_headers_str = ",".join([f"""b.\"{col}\" as \"{col}\" """ for col in join_headers])
-        join_type_str = "left join" if join_type == 'left' else 'left outer join'
-        join_predicate_str = f"""from {self.sql_model} a {join_type_str} \"{join_table}\" b on a.\"{join_column}\" = b.\"{join_column}\" """
-        sql_join_stmt = f"""select {base_headers_str}, {join_headers_str} {join_predicate_str}"""
-        return sql_join_stmt
-
     def _get_sql_create_stmt(self) -> str:
         """
         Retrieves the SQL CREATE statement used to create the SQLDataModel database.
@@ -4708,19 +5972,37 @@ class SQLDataModel:
         self.sql_db_conn.execute("select sql from sqlite_master")
         return self.sql_db_conn.fetchone()[0]
 
+    def _get_display_args(self) -> dict:
+        """
+        Retrieves the current display configuration settings of the `SQLDataModel` with the correct `kwargs` for the class `__init__()` method.
+
+        Returns:
+            - `dict`: A dictionary containing the display configuration settings in the format `{'setting': 'value'}`.
+
+        Notes:
+            - `display_max_rows`: The maximum number of rows to display.
+            - `min_column_width`: The minimum width of columns when displaying the model.
+            - `max_column_width`: The maximum width of columns when displaying the model.
+            - `column_alignment`: The alignment of columns ('left', 'center', or 'right').
+            - `display_color`: True if color formatting is enabled, False otherwise.
+            - `display_index`: True if displaying index column, False otherwise.
+            - `display_float_precision`: The precision for displaying floating-point numbers.
+        """        
+        return {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
+
     def validate_indicies(self, indicies) -> tuple[int|slice, list[str]]:
         """
-        Validates and returns indices for accessing rows and columns in the `SQLDataModel`.
+        Validates and returns a predictable notation form of indices for accessing rows and columns in the `SQLDataModel` from varying indexing input types.
 
         Parameters:
             - `indicies`: Specifies the indices for rows and columns. It can be of various types:
             - int: Single row index.
             - slice: Range of row indices.
-            - tuple: Tuple of disconnected row indices.
+            - set: Discontiguous row indicies.
+            - tuple: Like set, discontiguous row indices.
             - str: Single column name.
             - list: List of column names.
             - tuple[int|slice, str|list]: Two-dimensional indexing with rows and columns.
-            - `strict_validation` (bool, optional): If True, performs strict validation for column names against the current model headers. Default is True.
 
         Returns:
             - `tuple` containing validated row indices and column indices.
@@ -4785,11 +6067,11 @@ class SQLDataModel:
             stop_idx = stop_idx if stop_idx > 0 else self.row_count + stop_idx
             if start_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             if stop_idx <= start_idx:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{start_idx-stop_idx}', provided row index returns no valid rows within current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{start_idx-stop_idx}', provided row index returns no valid rows within current model range of '0:{self.row_count}'")
                 )
             if row_slice.step is None:
                 return (slice(start_idx,stop_idx), self.headers)
@@ -4797,9 +6079,16 @@ class SQLDataModel:
                 rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_slice.step)]
                 if (num_rows_in_scope := len(rows_in_scope)) < 1:
                     raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range '0:{self.row_count}'")
+                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                     )
                 return (rows_in_scope, self.headers)
+        ### single set of row indicies ###
+        if isinstance(indicies, set):
+            if (len_set := len(indicies)) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '0:{self.row_count}'")
+                )
+            return (tuple(indicies), self.headers)
         ### columns by str or list of str ###
         if isinstance(indicies, str|list):
             col_index = indicies
@@ -4850,11 +6139,11 @@ class SQLDataModel:
             min_row_idx, max_row_idx = min(row_indicies), max(row_indicies)
             if min_row_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             if max_row_idx > self.row_count:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             validated_row_indicies = row_indicies
         else: # is slice
@@ -4862,11 +6151,11 @@ class SQLDataModel:
             stop_idx = self.row_count if row_indicies.stop is None else row_indicies.stop if row_indicies.stop >= 0 else (self.row_count + row_indicies.stop)
             if start_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
                 )
             if stop_idx <= start_idx:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{stop_idx - start_idx}', provided row slice returned no valid row indicies within current model range '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{stop_idx - start_idx}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                 )    
             if row_indicies.step is None:
                 validated_row_indicies = slice(start_idx, stop_idx)
@@ -4874,13 +6163,13 @@ class SQLDataModel:
                 rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_indicies.step)]
                 if (num_rows_in_scope := len(rows_in_scope)) < 1:
                     raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range '0:{self.row_count}'")
+                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                     )
                 validated_row_indicies = rows_in_scope
         ### then columns ###
         if not isinstance(col_indicies, int|slice|tuple|str|list):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing a slice, list or str type is required")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing one of 'slice', 'list' or 'str' type is required")
                 )        
         if isinstance(col_indicies, int):
             try:
@@ -4893,7 +6182,7 @@ class SQLDataModel:
             col_indicies = self.headers[col_indicies]
             if (len_col_args := len(col_indicies)) < 1:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient columns '{len_col_args}', provided column slice returned no valid column indicies within current model range '0:{self.column_count}'")
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient columns '{len_col_args}', provided column slice returned no valid column indicies within current model range of '0:{self.column_count}'")
                 )
         elif isinstance(col_indicies, tuple):
             col_indicies = list(col_indicies)
