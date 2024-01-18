@@ -1,5 +1,5 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json
 from typing import Generator, Callable, Literal, Iterator
 import urllib.request
 from collections import namedtuple
@@ -427,6 +427,86 @@ class SQLDataModel:
             else:
                 dupes[col] = 1
                 yield col
+    
+    @staticmethod
+    def flatten_json(json_source:list|dict, flatten_rows:bool=True, level_sep:str='_', key_prefix:str=None) -> dict:
+        """
+        Parses raw JSON data and flattens it into a dictionary with optional normalization.
+
+        Parameters:
+            - `json_source` (dict | list): The raw JSON data to be parsed.
+            - `flatten_rows` (bool): If True, the data will be normalized into columns and rows. If False,
+            columns will be concatenated from each row using the specified `key_prefix`.
+            - `level_sep` (str): Separates nested levels from other levels and used to concatenate prefix to column.
+            - `key_prefix` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
+
+        Returns:
+            - `dict`: A flattened dictionary representing the parsed JSON data.
+
+        Example:
+        ```python
+        import SQLDataModel
+        
+        # Sample JSON
+        json_source = [{
+            "alpha": "A",
+            "value": 1
+        },  
+        {
+            "alpha": "B",
+            "value": 2
+        },
+        {
+            "alpha": "C",
+            "value": 3
+        }]
+
+        # Flatten JSON with normalization
+        flattened_data = flatten_json(json_data, flatten_rows=True)
+
+        # Format of result
+        flattened_data = {"alpha": ['A','B','C'], "value": [1, 2, 3]}
+
+        # Alternatively, flatten columns without rows and adding a prefix
+        flattened_data = flatten_json(raw_input,key_prefix='row_',flatten_rows=False)
+
+        # Format of result
+        flattened_data = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
+
+        ```
+        """
+        if isinstance(json_source, dict):
+            json_source = [json_source]
+        key_prefix = key_prefix if key_prefix is not None else ''
+        headers, rows, output = [], [], {}
+        def flatten(x:list|dict, pref:str='', cols:list=[], rows:list=[]):
+            if isinstance(x, dict):
+                for a in x:
+                    flatten(x[a], pref + a + level_sep, cols=cols)
+            elif isinstance(x, list):
+                i = 0
+                for a in x:
+                    flatten(a, pref + f"{i}" + level_sep, cols=cols)
+                    if i not in rows:
+                        rows.append(i)
+                    i += 1
+            else:
+                output[pref[:-1]] = x
+                col_id = pref[len(key_prefix):-1].split(level_sep,1)[-1]
+                if col_id not in cols:
+                    cols.append(col_id)
+        flatten(json_source, pref=key_prefix, cols=headers, rows=rows)
+        if not flatten_rows:
+            return output
+        flat_dict = {col:[] for col in headers}
+        for col in headers:
+            for rfound in rows:
+                rowcol = f"{key_prefix}{rfound}_{col}"
+                if rowcol in output:
+                    flat_dict[col].append(output[rowcol])
+                else:
+                    flat_dict[col].append(None)
+        return flat_dict
     
     def rename_column(self, column:int|str, new_column_name:str) -> None:
         """
@@ -1580,12 +1660,12 @@ class SQLDataModel:
         return cls(data, headers, **kwargs)
     
     @classmethod
-    def from_dict(cls, data:dict, **kwargs) -> SQLDataModel:
+    def from_dict(cls, data:dict|list, **kwargs) -> SQLDataModel:
         """
         Create a new `SQLDataModel` instance from the provided dictionary.
 
         Parameters:
-            - `data` (dict): The dictionary to convert to a SQLDataModel.
+            - `data` (dict): The dictionary or list of dictionaries to convert to SQLDataModel.
             If keys are of type int, they will be used as row indexes; otherwise, keys will be used as headers.
             - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
@@ -1594,20 +1674,50 @@ class SQLDataModel:
 
         Raises:
             - `TypeError`: If the provided dictionary values are not of type 'list', 'tuple', or 'dict'.
+            - `ValueError`: If the provided data appears to be a list of dicts but is empty.
 
         Example:
         ```python
+        import SQLDataModel
+
+        # Sample data
         data_dict = {1: [10, 'A'], 2: [20, 'B'], 3: [30, 'C']}
+
+        # Create the model
         sdm_obj = SQLDataModel.from_dict(data_dict)
+
+        # View output
+        print(sdm_obj)
         ```
+        ```shell
+        ┌───┬───────┬───────┐
+        │   │ col_0 │ col_1 │
+        ├───┼───────┼───────┤
+        │ 1 │    10 │ A     │
+        │ 2 │    20 │ B     │
+        │ 3 │    30 │ C     │
+        └───┴───────┴───────┘
+        [3 rows x 2 columns]
+        ```
+        ---
 
         Note:
             - The method determines the structure of the SQLDataModel based on the format of the provided dictionary.
             - If the keys are integers, they are used as row indexes; otherwise, keys are used as headers.
+            
         """
+        if isinstance(data, list):
+            if len(data) < 1:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient data length '{len(data)}', if `data` is of type 'list' at least 1 row is required for `from_dict()` method")
+                )
+            if not isinstance(data[0], dict):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type in list '{type(data[0].__name__)}', if `data` is of type 'list' its items must be of type 'dict' to use the `from_dict()` method")
+                )
+            return cls.from_json(data)
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
         if rowwise:
-            # column_count = len(data[next(iter(data))])
             headers = ['idx',*[f'col_{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
             return cls([tuple([k,*v]) for k,v in data.items()], headers, **kwargs)
         else:
@@ -1625,7 +1735,162 @@ class SQLDataModel:
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
                 )
-            return cls(data, headers, **kwargs)
+            return cls(data, headers, **kwargs)  
+
+    @classmethod
+    def from_json(cls, json_source:str|list|dict, encoding:str='utf-8', **kwargs) -> SQLDataModel:
+        """
+        Creates a new `SQLDataModel` instance from JSON file path or JSON-like source, flattening if required.
+
+        Parameters:
+            - `json_source` (str | list | dict): The JSON source. If a string, it can represent a file path or a JSON-like object.
+            - `encoding` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
+            - `**kwargs`: Additional keyword arguments to pass to the file reading operation.
+
+        Returns:
+            - `SQLDataModel`: A new SQLDataModel instance created from the JSON source.
+
+        Raises:
+            - `TypeError`: If the `json_source` argument is not of type 'str', 'list', or 'dict'.
+            - `OSError`: If related exception occurs when trying to open and read from `json_source` as file path.
+
+        ---
+
+        Example 1: From JSON String
+
+        ```python
+        import SQLDataModel
+
+        # Sample JSON string
+        json_data = '''[{
+              "id": 1,
+              "color": "red",
+              "value": "#f00"
+            },
+            {   
+              "id": 2,
+              "color": "green",
+              "value": "#0f0"
+            },
+            {
+              "id": 3,
+              "color": "blue",
+              "value": "#00f"
+        }]'''   
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_data)
+
+        # View result
+        print(sdm)
+
+        ```
+        ```shell
+        ┌──────┬───────┬───────┐
+        │   id │ color │ value │
+        ├──────┼───────┼───────┤
+        │    1 │ red   │ #f00  │
+        │    2 │ green │ #0f0  │
+        │    3 │ blue  │ #00f  │
+        └──────┴───────┴───────┘
+        [3 rows x 3 columns]
+
+        ```
+
+        ---
+
+        Example 2: From JSON-like Object
+
+        ```python
+        import SQLDataModel
+
+        # JSON-like sample
+        json_data = [{
+            "alpha": "A",
+            "value": "1"
+        },  
+        {
+            "alpha": "B",
+            "value": "2"
+        },
+        {
+            "alpha": "C",
+            "value": "3"
+        }]
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_data)
+
+        # Output
+        print(sdm)
+        ```
+        ```shell
+        ┌───────┬───────┐
+        │ alpha │ value │
+        ├───────┼───────┤
+        │ A     │ 1     │
+        │ B     │ 2     │
+        │ C     │ 3     │
+        └───────┴───────┘
+        [3 rows x 2 columns]
+
+        ```
+
+        ---
+
+        Example 3: From JSON file
+
+        ```python
+        import SQLDataModel
+
+        # JSON file path
+        json_data = 'data/json-sample.json'
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_data, encoding='latin-1')
+
+        # View output
+        print(sdm)
+        ```
+
+        ```shell
+        ┌──────┬────────┬───────┬─────────┐
+        │   id │ color  │ value │ notes   │
+        ├──────┼────────┼───────┼─────────┤
+        │    1 │ red    │ #f00  │ primary │
+        │    2 │ green  │ #0f0  │         │
+        │    3 │ blue   │ #00f  │ primary │
+        │    4 │ cyan   │ #0ff  │         │
+        │    5 │ yellow │ #ff0  │         │
+        │    5 │ black  │ #000  │         │
+        └──────┴────────┴───────┴─────────┘
+        [6 rows x 4 columns]
+
+        ```
+        
+        ---
+
+        Notes:
+            - If `json_source` is deeply-nested it will be flattened according to the staticmethod `flatten_json()`
+            - If `json_source` is a JSON-like string object that is not an array, it will be wrapped according as an array.
+        
+        """
+        if not isinstance(json_source, str|list|dict):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(json_source).__name__}', expected `json_source` to be one of 'str', 'list' or 'dict' representing a JSON file path or JSON-like object")
+            )
+        if isinstance(json_source, str):
+            if os.path.exists(json_source):
+                try:
+                    with open(json_source, 'r', encoding=encoding, **kwargs) as f:
+                        json_source = f.read()
+                except Exception as e:
+                    raise Exception (
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
+                    ) from None    
+            json_source = json.loads(json_source)
+        data_dict = SQLDataModel.flatten_json(json_source)
+        return cls.from_dict(data_dict)
 
     @classmethod
     def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, **kwargs) -> SQLDataModel:
@@ -2090,53 +2355,113 @@ class SQLDataModel:
         if SQLDataModel.debug:
             print(SQLDataModel.SuccessFormat(f'SQLDataModel: csv file "{csv_file}" created'))
 
-    def to_dict(self, rowwise:bool=True) -> dict:
+    def to_dict(self, orient:Literal["rows","columns","list"]="rows", include_index:bool=None) -> dict|list[dict]:
         """
-        Convert the `SQLDataModel` to a dictionary, using either index rows or model headers as keys.
+        Converts the `SQLDataModel` instance to a dictionary or a list of dictionaries based on the specified orientation.
 
         Parameters:
-            - `rowwise` (bool, optional): If True, use index rows as keys; if False, use model headers as keys. Default is True.
+            - `orient` (Literal["rows", "columns", "list"]): The orientation of the output, see examples for more detail.
+                - "rows": Returns a dictionary with index values as keys and row values as values.
+                - "columns": Returns a dictionary with column names as keys and column values as tuples.
+                - "list": Returns a list of dictionaries, where each dictionary represents a row.
+            - `include_index` (bool): Whether to include the index column in the output. Defaults to the display_index property.
+
+        Raises:
+            - `ValueError`: if value for `orient` is not one of "rows", "columns" or "list".
 
         Returns:
-            `dict`: The dictionary representation of the SQLDataModel.
+            - `dict` | `list[dict]`: The converted data structure based on the specified orientation.
 
-        Examples:
+        ---
+
+        Example 1: Orient by Rows
+
         ```python
         import SQLDataModel
 
-        # Convert to a dictionary using index rows as keys
-        result_dict = sqldm.to_dict(rowwise=True)
+        # Sample data
+        headers = ['Col A','Col B', 'Col C']
+        data = [
+            ['A,0', 'A,1', 'A,2'],
+            ['B,0', 'B,1', 'B,2'],
+            ['C,0', 'C,1', 'C,2']
+        ]
 
-        # Example of output format:
-        result_dict = {
-             0: ['john', 'smith', 'new york']
-            ,1: ['sarah', 'west', 'chicago']
-        }
+        # Create the model
+        sdm = SQLDataModel(data, headers)
 
-        # Convert to a dictionary using model headers as keys
-        result_dict = sqldm.to_dict(rowwise=False)
+        # Convert to dictionary with rows as keys and values
+        rows_dict = sdm.to_dict(orient="rows")
 
-        # Example of output format when not rowwise:
-        result_dict = {
-            "first_name" : ['john', 'sarah']
-            "last_name" : ['smith', 'west']
-            "city" : ['new york', 'chicago']
-        }
+        # View output
+        for k, v in rows_dict.items():
+            print(f"{k}: {v}")    
         ```
-        Note:
-            - The method uses all of the underlying data, to selectively output simple index the SQLDataModel instance.
-            - If `rowwise` is True, each index row is a key, and its corresponding values are a tuple of the row data.
-            - If `rowwise` is False, each model header is a key, and its corresponding values are a tuple of the column data.
-        """
-        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=True))
-        if rowwise:
-            return {row[0]:row[1:] for row in res.fetchall()}
-        else:
-            data = res.fetchall()
-            headers = [x[0] for x in res.description]
-            return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}
+
+        ```shell
+
+        0: ('A,0', 'B,0', 'C,0')
+        1: ('A,1', 'B,1', 'C,1')
+        2: ('A,2', 'B,2', 'C,2')
+        ```
+        ---
+
+        Example 2: Orient by Columns
         
-    def to_html(self, filename:str=None, include_index:bool=None, style_params:dict=None) -> str:
+        ```python
+
+        # Convert to dictionary with columns as keys and rows as values
+        columns_dict = sdm.to_dict(orient="columns")
+
+        # View output
+        for k, v in columns_dict.items():
+            print(f"{k}: {v}") 
+        ```
+        ```shell
+
+        Col A: ('A,0', 'A,1', 'A,2')
+        Col B: ('B,0', 'B,1', 'B,2')
+        Col C: ('C,0', 'C,1', 'C,2')
+        ```
+        ---
+
+        Example 3: Orient by List
+        
+        ```python
+
+        # Convert to list of dictionaries with each dictionary representing a row with columns as keys
+        list_dict = sdm.to_dict(orient="list")
+
+        # View output
+        for row in list_dict:
+            print(row)
+        ```
+        ```shell
+
+        {'Col A': 'A,0', 'Col B': 'B,0', 'Col C': 'C,0'}
+        {'Col A': 'A,1', 'Col B': 'B,1', 'Col C': 'C,1'}
+        {'Col A': 'A,2', 'Col B': 'B,2', 'Col C': 'C,2'}
+        ```
+        ---
+
+        Notes:
+            - Use `include_index` to return index data, otherwise current instance `display_index` value will be used.
+            - For 'list' orientation, data returned is JSON-like in structure, where each row has its own "column": "value" data.
+        """   
+        if orient not in ("rows", "columns", "list"):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid argument '{orient}', value for `orient` must be one of 'rows', 'columns' or 'list' to determine the object returned for the `to_dict()` method")
+            )
+        include_index = self.display_index if include_index is None else include_index
+        if orient == "rows":
+            return {row[0]:row[1:] for row in self.sql_db_conn.execute(self._generate_sql_stmt(include_index=True)).fetchall()}
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
+        data, headers = res.fetchall(),[x[0] for x in res.description] 
+        if orient == "columns":
+            return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}    
+        return [{col:row[i] for i,col in enumerate(headers)} for row in data]
+        
+    def to_html(self, filename:str=None, include_index:bool=None, encoding:str='utf-8', style_params:dict=None) -> str:
         """
         Returns the current SQLDataModel as a lightly formatted HTML <table> element as a string if `filename` is None.
         If `filename` is specified, writes the HTML to the specified file as .html and returns None.
@@ -2144,6 +2469,7 @@ class SQLDataModel:
         Parameters:
             - `filename` (str): The file path to save the HTML content. If None, returns the HTML as a string (default is None).
             - `include_index` (bool): Whether to include the index column in the HTML table (default is current `display_index`).
+            - `encoding` (str): Character encoding to use when writing model to HTML file, default set to 'utf-8'.            
             - `style_params` (dict): A dictionary representing CSS styles {property: value} to customize the appearance of the HTML table (default is None).
 
         Returns:
@@ -2210,7 +2536,7 @@ class SQLDataModel:
         if include_index is None:
             include_index = self.display_index
         display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
-        html_headers = "\n".join(("\t<tr>",*tuple(f"""\t\t<th class={f'"col-numeric"' if self.header_master[col][3] == '>' else '"col-text"'}>{col if col != self.sql_idx else " "}</th>""" for col in display_headers),"\t</tr>"))
+        html_headers = "\n".join(("\t<tr>",*tuple(f"""\t\t<th class={f'"col-numeric"' if self.header_master[col][3] == '>' else '"col-text"'}>{col}</th>""" for col in display_headers),"\t</tr>")) # replace `{col}` with `{col if col != self.sql_idx else " "}` to revert idx display
         html_body ="".join(["\n".join(("\n\t<tr>",*tuple(f"""\t\t<td>{cell}</td>""" for cell in tr),"\t</tr>")) for tr in self.iter_rows(include_index=include_index)])
         col_styles = "\n".join([f'td:nth-child({i+1}) {{{"text-align:right;" if self.header_master[col][3] == '>' else "text-align:left;"}}}' for i,col in enumerate(display_headers)])
         base_styles = f"""html {{background-color: {background_color}}}\ntable,th {{border: 1px solid {font_color}; border-collapse: collapse; overflow-x: auto;background-color:{background_color};color:{font_color};}}\ntr,td,th {{padding: 4px 6px;border-right: 1px solid {font_color}; font-family: Consolas; font-size: 9pt; font-weight:normal; overflow-x: auto;}}"""
@@ -2220,12 +2546,108 @@ class SQLDataModel:
         if filename is None:
             return html_table
         try:
-            with open(filename, "w") as f:
+            with open(filename, "w", encoding=encoding) as f:
                 f.write(html_table)
         except Exception as e:
             raise Exception (
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write html")
             ) from None
+
+    def to_json(self, filename:str=None, include_index:bool=None, **kwargs) -> list|None:
+        """
+        Converts the `SQLDataModel` instance to JSON format. If `filename` is specified, the JSON is written to the file;
+        otherwise, a JSON-like object is returned.
+
+        Parameters:
+            - `filename` (str): The path to the file where JSON will be written. If None, no file is created and JSON-like object is returned.
+            - `include_index` (bool): Whether to include the index column in the JSON. Defaults to the `display_index` property.
+            - `**kwargs`: Additional keyword arguments to pass to the json.dump() method.
+
+        Returns:
+            - `list` | `None`: If `filename` is None, a list containing a JSON-like object is returned. Otherwise JSON file created and returns `None`.
+
+        Raises:
+            - `TypeError`: If `filename` is not of type 'str'.
+            - `Exception`: If there is an OS related error encountered when opening or writing to the provided `filename`.
+
+        Example:
+
+        ```python
+        import SQLDataModel
+
+        # Sample JSON to first create model
+        json_source = [
+            {"id": 1, "color": "red", "value": "#f00", "notes": "primary"}
+            ,{"id": 2, "color": "green", "value": "#0f0", "notes": None}
+            ,{"id": 3, "color": "blue", "value": "#00f", "notes": "primary"}
+            ,{"id": 4, "color": "cyan", "value": "#0ff", "notes": None}
+            ,{"id": 5, "color": "yellow", "value": "#ff0", "notes": None}
+            ,{"id": 5, "color": "black", "value": "#000", "notes": None}
+        ]
+
+        # Create the model
+        sdm = SQLDataModel.from_json(json_source)
+
+        # View current state
+        print(sdm)
+        ```
+        ```shell
+        ┌──────┬────────┬───────┬─────────┐
+        │   id │ color  │ value │ notes   │
+        ├──────┼────────┼───────┼─────────┤
+        │    1 │ red    │ #f00  │ primary │
+        │    2 │ green  │ #0f0  │         │
+        │    3 │ blue   │ #00f  │ primary │
+        │    4 │ cyan   │ #0ff  │         │
+        │    5 │ yellow │ #ff0  │         │
+        │    5 │ black  │ #000  │         │
+        └──────┴────────┴───────┴─────────┘
+        [6 rows x 4 columns]
+
+        ```
+        ```python
+
+        # Write model to JSON file
+        sdm.to_json('output.json')
+
+        # Or convert to JSON-like object
+        json_data = sdm.to_json()
+
+        # View JSON object
+        print(json_data)
+        ```
+        ```shell
+        [{'id': 1, 'color': 'red', 'value': '#f00', 'notes': 'primary'}
+        ,{'id': 2, 'color': 'green', 'value': '#0f0', 'notes': None}
+        ,{'id': 3, 'color': 'blue', 'value': '#00f', 'notes': 'primary'}
+        ,{'id': 4, 'color': 'cyan', 'value': '#0ff', 'notes': None}
+        ,{'id': 5, 'color': 'yellow', 'value': '#ff0', 'notes': None}
+        ,{'id': 5, 'color': 'black', 'value': '#000', 'notes': None}]
+        ```
+        ---
+
+        Notes:
+            - When no filename is specified, JSON-like object will be returned as a rowwise array.
+            - Any nested structure will be flattened by this method as well as the `from_json()` method.
+        """
+        if not isinstance(filename, str) and filename is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', expected `filename` to be of type 'str' representing a valid file path to write json")
+            )
+        include_index = self.display_index if include_index is None else include_index
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
+        res_headers = [x[0] for x in res.description] 
+        json_data = [{col:row[i] for i,col in enumerate(res_headers)} for row in res.fetchall()]
+        if filename is not None:
+            try:
+                with open(filename, "w") as f:
+                    json.dump(json_data, f, **kwargs)
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write json")
+                ) from None
+        else:
+            return json_data
 
     def to_list(self, include_index:bool=True, include_headers:bool=False) -> list[tuple]:
         """
