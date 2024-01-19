@@ -37,6 +37,12 @@ try:
 except ModuleNotFoundError:
     _has_pd = False
 
+try:
+    from pyarrow import parquet as _pq, Table as _pq_Table
+    _has_pq = True
+except ModuleNotFoundError:
+    _has_pq = False
+
 class SQLDataModel:
     """
     ## SQLDataModel 
@@ -248,10 +254,10 @@ class SQLDataModel:
         self.sql_db_conn.execute(sql_create_stmt)
         self._update_model_metadata()
         if not had_data:
-            test_trigger = f"""CREATE TRIGGER 'zero_init' AFTER INSERT 
+            trig_zero_init = f"""CREATE TRIGGER 'zero_init' AFTER INSERT 
             ON "{self.sql_model}" WHEN (select count("{self.sql_idx}") from "{self.sql_model}") = 1 
             BEGIN update "{self.sql_model}" set "{self.sql_idx}" = 0 where "{self.sql_idx}" = 1; END;"""
-            self.sql_db_conn.execute(test_trigger)
+            self.sql_db_conn.execute(trig_zero_init)
             return
         if not had_idx:
             first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
@@ -2120,7 +2126,87 @@ class SQLDataModel:
         data = [x[1:] for x in df.itertuples()]
         headers = df.columns.tolist() if headers is None else headers
         return cls(data=data,headers=headers, **kwargs)
-    
+
+    @classmethod
+    def from_parquet(self, filename:str, **kwargs) -> SQLDataModel:
+        """
+        Returns a new `SQLDataModel` instance from the specified parquet file.
+
+        Parameters:
+            - `filename` (str): The file path to the parquet file, e.g., `filename = 'user/data/titanic.parquet'`.
+            - `**kwargs`: Additional keyword arguments to pass to the pyarrow `read_table` function, e.g., `filters = [('Name','=','Alice')]`.
+
+        Returns:
+            - `SQLDataModel`: A new instance of `SQLDataModel` created from the parquet file.
+
+        Raises:
+            - `ModuleNotFoundError`: If the required package `pyarrow` is not installed as determined by `_has_pq` flag.
+            - `TypeError`: If the `filename` argument is not of type 'str' representing a valid parquet file path.
+            - `FileNotFoundError`: If the specified parquet `filename` is not found.
+            - `Exception`: If any unexpected exception occurs during the file or parquet reading process.
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Sample parquet file
+        pq_file = "titanic.parquet"
+
+        # Create the model
+        sdm = SQLDataModel.from_parquet(pq_file)
+
+        # View column counts
+        print(sdm.count())
+
+        ```
+        ```shell
+        ┌────┬─────────────┬──────┬────────┬───────┬───────┐
+        │    │ column      │   na │ unique │ count │ total │
+        ├────┼─────────────┼──────┼────────┼───────┼───────┤
+        │  0 │ PassengerId │    0 │    891 │   891 │   891 │
+        │  1 │ Survived    │    0 │      2 │   891 │   891 │
+        │  2 │ Pclass      │    0 │      3 │   891 │   891 │
+        │  3 │ Name        │    0 │    891 │   891 │   891 │
+        │  4 │ Sex         │    0 │      2 │   891 │   891 │
+        │  5 │ Age         │  177 │     88 │   714 │   891 │
+        │  6 │ SibSp       │    0 │      7 │   891 │   891 │
+        │  7 │ Parch       │    0 │      7 │   891 │   891 │
+        │  8 │ Ticket      │    0 │    681 │   891 │   891 │
+        │  9 │ Fare        │    0 │    248 │   891 │   891 │
+        │ 10 │ Cabin       │  687 │    147 │   204 │   891 │
+        │ 11 │ Embarked    │    2 │      3 │   889 │   891 │
+        └────┴─────────────┴──────┴────────┴───────┴───────┘
+        [12 rows x 5 columns]
+        ```
+        ---
+
+        Notes:
+            - The pyarrow package is required to use this method as well as the `to_parquet()` method.
+            - Once the file is read into pyarrow.parquet, the `to_pydict()` method is used to pass the data to this package's `from_dict()` method.
+            - Titanic parquet data used in example available at https://www.kaggle.com/code/taruntiwarihp/titanic-dataset
+
+        """
+        if not _has_pq:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.from_parquet()` method")
+            )
+        if not isinstance(filename, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid parquet file path")
+            )
+        try:
+            pq_array = _pq.read_table(filename, **kwargs)
+        except FileNotFoundError:
+            raise FileNotFoundError (
+                SQLDataModel.ErrorFormat(f"FileNotFoundError: file not found '{filename}' encountered when trying to open and read from parquet")
+            ) from None
+        except Exception as e:
+            raise Exception (
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from parquet")
+            ) from None
+        return SQLDataModel.from_dict(pq_array.to_pydict())
+
     @classmethod
     def from_pickle(cls, filename:str=None, **kwargs) -> SQLDataModel:
         """
@@ -2153,31 +2239,7 @@ class SQLDataModel:
         with open(filename, 'rb') as f:
             tot_raw = pickle.load(f) # Tuple of Tuples raw data
             return cls(tot_raw[1:],headers=tot_raw[0], **kwargs)
-
-    @classmethod
-    def get_supported_sql_connections(cls) -> tuple:
-        """
-        Returns the currently tested DB API 2.0 dialects for use with `SQLDataModel.from_sql()` method.
-
-        Returns:
-            - `tuple`: A tuple of supported DB API 2.0 dialects.
-
-        Example:
-        ```python
-        import SQLDataModel
-
-        # Get supported dialects
-        supported_dialects = SQLDataModel.get_supported_sql_connections()
-
-        # View details
-        print(supported_dialects)
-
-        # Outputs
-        supported_dialects = ('sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql')
-        ```
-        """
-        return ('sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql')
-    
+ 
     @classmethod
     def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, **kwargs) -> SQLDataModel:
         """
@@ -2288,6 +2350,30 @@ class SQLDataModel:
         headers = [x[0] for x in sql_c.description]
         return cls(data, headers, **kwargs)
 
+    @classmethod
+    def get_supported_sql_connections(cls) -> tuple:
+        """
+        Returns the currently tested DB API 2.0 dialects for use with `SQLDataModel.from_sql()` method.
+
+        Returns:
+            - `tuple`: A tuple of supported DB API 2.0 dialects.
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Get supported dialects
+        supported_dialects = SQLDataModel.get_supported_sql_connections()
+
+        # View details
+        print(supported_dialects)
+
+        # Outputs
+        supported_dialects = ('sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql')
+        ```
+        """
+        return ('sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql')
+   
 ################################################################################################################
 ############################################## conversion methods ##############################################
 ################################################################################################################
@@ -2538,7 +2624,7 @@ class SQLDataModel:
         display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
         html_headers = "\n".join(("\t<tr>",*tuple(f"""\t\t<th class={f'"col-numeric"' if self.header_master[col][3] == '>' else '"col-text"'}>{col}</th>""" for col in display_headers),"\t</tr>")) # replace `{col}` with `{col if col != self.sql_idx else " "}` to revert idx display
         html_body ="".join(["\n".join(("\n\t<tr>",*tuple(f"""\t\t<td>{cell}</td>""" for cell in tr),"\t</tr>")) for tr in self.iter_rows(include_index=include_index)])
-        col_styles = "\n".join([f'td:nth-child({i+1}) {{{"text-align:right;" if self.header_master[col][3] == '>' else "text-align:left;"}}}' for i,col in enumerate(display_headers)])
+        col_styles = "\n".join([f"""td:nth-child({i+1}) {{{"text-align:right;" if self.header_master[col][3] == '>' else "text-align:left;"}}}""" for i,col in enumerate(display_headers)])
         base_styles = f"""html {{background-color: {background_color}}}\ntable,th {{border: 1px solid {font_color}; border-collapse: collapse; overflow-x: auto;background-color:{background_color};color:{font_color};}}\ntr,td,th {{padding: 4px 6px;border-right: 1px solid {font_color}; font-family: Consolas; font-size: 9pt; font-weight:normal; overflow-x: auto;}}"""
         cascade_styles = "".join(("\ntable,tr,td,th {",*tuple(f"""{attr}:{value};""" for attr,value in style_params.items()),"}")) if style_params is not None else ""
         html_styling = "\n".join(("<style>",f"{base_styles}{cascade_styles}",".col-numeric {text-align: right;}",".col-text {text-align: left;}",col_styles,"</style>"))
@@ -2776,6 +2862,80 @@ class SQLDataModel:
         indicies = [x[0] for x in raw_data] if include_index else None
         columns = ([x[0] for x in res.description[1:]] if include_index else [x[0] for x in res.description]) if include_headers else None
         return _pd.DataFrame(data=data,columns=columns,index=indicies)
+
+    def to_parquet(self, filename:str, **kwargs) -> None:
+        """
+        Writes the current SQLDataModel to the specified parquet filename.
+
+        Parameters:
+            - `filename` (str): The file path to save the parquet file, e.g., `filename = 'user/data/output.parquet'`.
+            - `**kwargs`: Additional keyword arguments to pass to the pyarrow `write_table` function.
+
+        Raises:
+            - `ModuleNotFoundError`: If the required package `pyarrow` is not installed as determined by `_has_pq` flag.        
+            - `TypeError`: If the `filename` argument is not of type 'str' representing a valid parquet file path.
+            - `Exception`: If any unexpected exception occurs during the parquet writing process.
+        
+        Returns:
+            - `None`: If successful, a new parquet file `filename` is created and `None` is returned.
+        ---
+
+        Example:
+        ```python
+        import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Rate']
+        data = [('Alice', 25, 26.50), ('Bob', 30, 21.25), ('Will', 35, 24.00)]
+        
+        # Create the model
+        sdm = SQLDataModel(data,headers, display_index=False)
+
+        # Parquet file
+        pq_file = "output.parquet"
+
+        # Write the model as parquet file
+        sdm.to_parquet(pq_file)
+
+        # Confirm result by reading back file
+        sdm_result = SQLDataModel.from_parquet(pq_file)
+
+        # View model
+        print(sdm_result)
+        ```
+        ```shell
+        ┌───────┬──────┬────────┐
+        │ Name  │  Age │   Rate │
+        ├───────┼──────┼────────┤
+        │ Alice │   25 │  26.50 │
+        │ Bob   │   30 │  21.25 │
+        │ Will  │   35 │  24.00 │
+        └───────┴──────┴────────┘
+        [3 rows x 3 columns]        
+        ```
+        ---
+
+        Notes:
+            - The pyarrow package is required to use this method as well as the `from_parquet()` method.
+            - The `to_dict()` method is used prior to writing to parquet to convert the `SQLDataModel` into a dictionary suitable for parquet Table format.
+            - Exceptions raised by the pyarrow package and its methods are caught and reraised when encountered to keep with package error formatting.
+
+        """
+        if not _has_pq:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.to_parquet()` method")
+            )        
+        if not isinstance(filename, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid parquet file path")
+            )
+        try:
+            pqtable = _pq_Table.from_pydict(self.to_dict(orient='columns'))
+        except Exception as e:
+            raise Exception (
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write parquet file")
+            ) from None        
+        _pq.write_table(pqtable, filename, **kwargs)
 
     def to_pickle(self, filename:str=None) -> None:
         """
@@ -5911,7 +6071,7 @@ class SQLDataModel:
             update_sql_script = f"""alter table "{self.sql_model}" add column "{new_column}" {new_column_sql_dtype};"""
         if not rowwise_update:
             values_to_update = values_to_update[0][0]
-            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes|datetime.date) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"'{values_to_update.replace("'","''")}'" if not isinstance(values_to_update,bytes) else f"""X'{values_to_update.hex()}'"""
+            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes|datetime.date) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"""'{values_to_update.replace("'","''")}'""" if not isinstance(values_to_update,bytes) else f"""X'{values_to_update.hex()}'"""
             col_val_param = ','.join([f""" "{column}" = {values_to_update} """ for column in columns_to_update]) 
             if update_sql_script is None:
                 update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
