@@ -12,12 +12,17 @@ try:
     from SQLDataModel.ANSIColor import ANSIColor
     from SQLDataModel.StandardDeviation import StandardDeviation
     from SQLDataModel.HTMLParser import HTMLParser
+    from SQLDataModel.extensions.str_check import check as str_check_ext
+    from SQLDataModel.extensions.str_escape import replace_single_quote as str_escape_ext
+
 # in ./future/SQLDataModel_future.py
 except:
     from exceptions import DimensionError, SQLProgrammingError
     from ANSIColor import ANSIColor
     from StandardDeviation import StandardDeviation
     from HTMLParser import HTMLParser
+    from extensions.str_check import check as str_check_ext
+    from extensions.str_escape import replace_single_quote as str_escape_ext
 
 try:
     from dateutil.parser import parse as dateparser
@@ -45,50 +50,171 @@ except ModuleNotFoundError:
 
 class SQLDataModel:
     """
-    ## SQLDataModel 
+    ### SQLDataModel 
     Primary class for the package of the same name. Its meant to provide a fast & light-weight alternative to the common pandas, numpy and sqlalchemy setup for moving data in a source/destination agnostic manner. It is not an ORM, any modifications outside of basic joins, group bys and table alteration requires knowledge of SQL. The primary use-case envisaged by the package is one where a table needs to be ETL'd from location A to destination B with arbitrary modifications made if needed:
     
     ---
-    ### Usage
+
+    #### Summary
+        - Extract your data from SQL, websites or HTML, parquet, JSON, CSV, pandas, numpy, pickle, python dictionaries, lists, etc.
+        - Transform your data using raw SQL or any number of built-in methods covering some of the most used pandas data methods.
+        - Load your data to any number of sources including popular SQL databases, CSV files, JSON, HTML, parquet, pickle, etc.
+    
+    ---
+
+    #### Usage
     ```python
     from SQLDataModel import SQLDataModel
     
-    source_db_conn = pyodbc.connect(...) # your source connection details
-    destination_db_conn = sqlite3.connect(...) # your destination connection details
+    # Lets grab a random table from Wikipedia
+    sdm = SQLDataModel.from_html("https://en.wikipedia.org/wiki/FIFA_World_Cup", table_identifier=6)
 
-    # get the data from sql, csv, pandas, numpy, pickle, dictionary, python lists etc.
+    # Lets see what we found
+    print(sdm)
+    ```
+    ```shell
+    ┌───────────────┬──────┬──────┬──────────┬──────────┬──────┬──────┬───────┐
+    │ Confederation │  AFC │  CAF │ CONCACAF │ CONMEBOL │  OFC │ UEFA │ Total │
+    ├───────────────┼──────┼──────┼──────────┼──────────┼──────┼──────┼───────┤
+    │ Teams         │   43 │   49 │       46 │       89 │    4 │  258 │   489 │
+    │ Top 16        │    9 │   11 │       15 │       37 │    1 │   99 │   172 │
+    │ Top 8         │    2 │    4 │        5 │       36 │    0 │  105 │   152 │
+    │ Top 4         │    1 │    1 │        1 │       23 │    0 │   62 │    88 │
+    │ Top 2         │    0 │    0 │        0 │       15 │    0 │   29 │    44 │
+    │ 4th           │    1 │    1 │        0 │        5 │    0 │   15 │    22 │
+    │ 3rd           │    0 │    0 │        1 │        3 │    0 │   18 │    22 │
+    │ 2nd           │    0 │    0 │        0 │        5 │    0 │   17 │    22 │
+    │ 1st           │    0 │    0 │        0 │       10 │    0 │   12 │    22 │
+    └───────────────┴──────┴──────┴──────────┴──────────┴──────┴──────┴───────┘
+    [9 rows x 8 columns]
+    ```
+
+    ---
+
+    #### Example
+
+
+    ```python
+    from SQLDataModel import SQLDataModel
+
+    # For example, setup a source connection
+    source_db_conn = pyodbc.connect(...)
+
+    # A destination connection
+    destination_db_conn = sqlite3.connect(...)
+
+    # Grab your source table
     sdm = SQLDataModel.from_sql("select * from source_table", source_db_conn)
-    
-    # execute arbitrary SQL to transform the model
-    sdm = sdm.execute_fetch("select first_name, last_name, dob, job_title from sdm where job_title = "sales" ")
-    sdm.set_headers(["first", "last", "dob", "position"])
 
-    # iterate through the data
-    for row in sdm.iter_rows():
-        print(row)
-    
-    # group or aggregate the data:
-    sdm.group_by(["first", "last", "position"])
-    
-    # load it to another sql database:
+    # Modify it however you want, whether through plain SQL
+    sdm = sdm.execute_fetch('select "whatever", "i", "want" from "wherever_i_want" where "what_i_need" is not null ')
+
+    # Or through any number of built-in methods like filtering
+    sdm = sdm[sdm['create_date'] >= '2023-01-01']
+
+    # Or creating new columns
+    sdm['new_date'] = datetime.now()
+
+    # Or modifying existing ones
+    sdm['salary'] = sdm['salary'] * 2
+
+    # Or applying functions
+    sdm['user_id'] = sdm['user_id'].apply(lambda x: x**2)
+
+    # Or deduplicating
+    sdm = sdm.deduplicate(subset=['user_id','user_name'])
+
+    # Or iterate through it row-by-row and modify it
+    for idx, row in sdm.iter_tuples(include_index=True):
+        if row['number'] % 2 == 0:
+            row[idx,'odd_even'] = 'even'
+        else:
+            row[idx,'odd_even'] = 'odd'
+
+    # Or join it using any of the standard join operations
+    sdm = sdm_left.merge(sdm_right, how='left', left_on='id', right_on='id')
+
+    # Or group or aggregate the data:
+    sdm_agg = sdm.group_by(["first", "last", "position"])            
+
+
+    # Or have your data imported and described for you
+    sdm = SQLDataModel.from_parquet('titanic.parquet').describe()
+
+    # View result
+    print(sdm)
+    ```
+    ```shell
+    ┌────────┬─────────────┬──────────┬────────┬────────┬───────┬────────┐
+    │ metric │ passengerid │ survived │ pclass │    sex │   age │   fare │
+    ├────────┼─────────────┼──────────┼────────┼────────┼───────┼────────┤
+    │ count  │         891 │      891 │    891 │    891 │   714 │    891 │
+    │ unique │         891 │        2 │      3 │      2 │    88 │    248 │
+    │ top    │         891 │        0 │      3 │   male │    24 │   8.05 │
+    │ freq   │           1 │      549 │    491 │    577 │    30 │     43 │
+    │ mean   │         446 │        0 │      2 │    NaN │  29.7 │   32.2 │
+    │ std    │         257 │        0 │      0 │    NaN │ 14.53 │  49.69 │
+    │ min    │           1 │        0 │      1 │ female │  0.42 │      0 │
+    │ p25    │         223 │        0 │      2 │    NaN │     6 │    7.9 │
+    │ p50    │         446 │        0 │      3 │    NaN │    24 │  14.45 │
+    │ p75    │         669 │        1 │      3 │    NaN │    35 │     31 │
+    │ max    │         891 │        1 │      3 │   male │    80 │ 512.33 │
+    │ dtype  │         int │      int │    int │    str │ float │  float │
+    └────────┴─────────────┴──────────┴────────┴────────┴───────┴────────┘
+    [12 rows x 7 columns]
+    ```
+    ```python
+
+    # Load it to your destination database:
     sdm.to_sql("new_table", destination_db_conn)
 
-    # or save it for later in any number of formats:
-    sdm.to_csv("modified_data.csv")
-    sdm.to_text("modified_data.txt")
-    sdm.to_pickle("modified_data.sdm")
-    sdm.to_local_db("modified_data.db")
+    # Or any number of formats including:
+    sdm.to_csv("output.csv")
+    sdm.to_html("output.html")
+    sdm.to_json("output.json")
+    sdm.to_parquet("output.parquet")
+    sdm.to_pickle("output.sdm")
+    sdm.to_text("output.txt")
+    sdm.to_local_db("output.db")
 
-    # reload it later from any number of formats:
-    sdm = SQLDataModel.from_csv("modified_data.csv")
-    sdm = SQLDataModel.from_numpy(x) # numpy.ndarray
-    sdm = SQLDataModel.from_pandas(df) # pandas.DataFrame
-    sdm = SQLDataModel.from_pickle("modified_data.sdm")
-    sdm = SQLDataModel.from_sql("modified_data", sqlite3.connect('modified_data.db'))
+    # Reload it back again from more formats:
+    sdm = SQLDataModel.from_csv("output.csv")
+    sdm = SQLDataModel.from_dict(py_dict)
+    sdm = SQLDataModel.from_html("output.html")
+    sdm = SQLDataModel.from_json("output.json")
+    sdm = SQLDataModel.from_numpy(np_arr)
+    sdm = SQLDataModel.from_pandas(pd_df)
+    sdm = SQLDataModel.from_parquet("output.parquet")
+    sdm = SQLDataModel.from_pickle("output.sdm")
+    sdm = SQLDataModel.from_sql("output", sqlite3.connect('output.db'))
+
     ```
     ---
 
-    ### Pretty Printing
+    #### Data Formats
+    SQLDataModel can be constructed from, or exported to, many different formats including:
+        - CSV: extract from and and write to comma separated value files.
+        - HTML: extract from the web, .html files, or from raw hmtl strings and write to .html files.
+        - JSON: extract from .json files, JSON-like objects, and write to .json files or return JSON-like objects.
+        - numpy: convert to and from `numpy.ndarray` objects, `numpy` package required or `ModuleNotFound` is raised.
+        - pandas: convert to and from `pandas.DataFrame` objects, `pandas` package required or `ModuleNotFound` is raised.
+        - parquet: extract from .parquet files and write to .parquet files, `pyarrow` package required or `ModuleNotFound` is raised.
+        - pickle: extract from pickled files and write with pickle using any compatible extension, default used is '.sdm'.
+        - SQL: extract from and write to the following popular SQL databases:
+            - SQLite: using the built-in `sqlite3` package.
+            - PostgreSQL: using the `psycopg2` package.
+            - SQL Server: using the `pyodbc` package.
+            - Oracle: using the `cx_Oracle` package.
+            - Teradata: using the `teradatasql` package.
+        - text: write the table representation of the model to '.txt' files.
+        - Python objects:
+            - dictionaries: convert to and from python `dict` objects.
+            - lists: convert to and from python `list` objects.
+            - namedtuples: convert to and from python `namedtuples` objects.
+
+    ---
+
+    #### Pretty Printing
     SQLDataModel also pretty prints your table in any color you specify, use `SQLDataModel.set_display_color(t_color)` and provide either a hex value or a tuple of rgb and print the table, example output:
     ```shell
     ┌───┬─────────────────────┬────────────┬──────────────────────────────────┬─────────────┬────────┬─────────┬────────────┐
@@ -106,12 +232,15 @@ class SQLDataModel:
     │ 9 │ Hunter Donaldson    │ 2023-06-30 │ dolor.nulla@google.edu           │ Belgium     │   1593 │    4.58 │  171152418 │
     └───┴─────────────────────┴────────────┴──────────────────────────────────┴─────────────┴────────┴─────────┴────────────┘
     ```
+
     ---
-    ### Notes
-    use `SQLDataModel.get_supported_sql_connections()` to view supported databases, please reach out with any issues or questions, thanks!
+
+    #### Notes
+        - No additional dependencies are installed with this package, however you will obviously need to have pandas or numpy to create pandas or numpy objects.
+        - Use `SQLDataModel.set_display_color()` to modify the terminal color of the table, by default no color styling is applied.
+        - Use `SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
-    debug:bool=False
     def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=2):
         """
         Initializes a new instance of `SQLDataModel`.
@@ -224,6 +353,12 @@ class SQLDataModel:
                     raise TypeError(
                         SQLDataModel.ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string")
                         ) from None
+            ### finding and escaping invalid chars in headers ###
+            for col in headers:
+                if not str_check_ext(col):
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: invalid character in column '{col}', headers must be of type 'str' consisting of valid SQL column identifiers")
+                    )
         else:
             headers = [f"col_{x}" for x in range(len(data[0]))]
         self.sql_idx = "idx"
@@ -250,8 +385,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(dtypes).__name__}', `dtypes` must be of type 'dict' with format of `{{'column':'dtype'}}` where 'dtype' must be a valid python datatype")
                 )
             [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
-        # headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[dtype]}' for col,dtype in headers_to_py_dtypes_dict.items())
-        headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in headers)
+        headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -270,14 +404,14 @@ class SQLDataModel:
                 self.sql_db_conn.execute(first_row_insert_stmt, (0,*data[0]))
             except sqlite3.ProgrammingError as e:
                 raise SQLProgrammingError(
-                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"')
+                    SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid or inconsistent data, failed with '{e}'")
                 ) from None                
             data = data[1:] # remove first row from remaining data
         try:
             self.sql_db_conn.executemany(sql_insert_stmt,data)
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or inconsistent data, failed with "{e}"')
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid or inconsistent data, failed with '{e}'")
             ) from None 
    
 ################################################################################################################
@@ -735,8 +869,6 @@ class SQLDataModel:
             ) from None
         self.headers = new_headers
         self._update_model_metadata()
-        if SQLDataModel.debug:
-            print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed all model columns'))
 
     def normalize_headers(self, apply_function:Callable=None) -> None:
         """
@@ -964,8 +1096,10 @@ class SQLDataModel:
 
         Raises:
             - `TypeError`: If the provided alignment is not a valid f-string alignment formatter.
+        ---
 
         Example:
+
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -1072,15 +1206,30 @@ class SQLDataModel:
 
         Returns:
             - `tuple[int]`: A tuple representing the number of rows and columns in the SQLDataModel.
+        ---
 
         Example:
+
         ```python
         from SQLDataModel import SQLDataModel
 
+        # Create the model
         sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+        # Get shape
         shape = sdm.get_shape()
-        print(shape)  # Output: (10, 3)
+
+        # View output
+        print(shape)
         ```
+        ```shell
+        (10, 3)
+        ```
+        ---
+
+        Notes:
+            - If an empty model is initialized, the `rowcount` will be 0 until the first row is inserted.
+            - Using the __getitem__ syntax of `sdm[row, col]` returns a new model instance with the corresponding shape.
         """
         return (self.row_count,self.column_count)
     
@@ -1112,8 +1261,10 @@ class SQLDataModel:
         Raises:
             - `TypeError`: If the `float_precision` argument is not of type 'int'.
             - `ValueError`: If the `float_precision` argument is a negative value, as it must be a valid f-string precision identifier.
+        ---
 
         Example:
+
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -1148,13 +1299,18 @@ class SQLDataModel:
         ```
 
         ```python
+
         # Get the updated float display precision
         updated_precision = sdm.get_display_float_precision()
 
         # Outputs 2
         print(updated_precision)
         ```
+        ---
 
+        Note:
+            - The `display_float_precision` attribute only affects the precision for displaying real or floating point values.
+            - The actual precision of the stored value in the model is unaffected by the value set.
         """
         if not isinstance(float_precision, int):
             raise TypeError(
@@ -2343,16 +2499,16 @@ class SQLDataModel:
             )
         db_dialect = type(sql_connection).__module__.split('.')[0].lower()
         if db_dialect not in cls.get_supported_sql_connections():
-            print(SQLDataModel.WarnFormat(f"""SQLDataModelWarning: provided SQL connection has not been tested, behavior for "{db_dialect}" may be unpredictable or unstable..."""))
+            print(SQLDataModel.WarnFormat(f"""SQLDataModelWarning: provided SQL connection has not been tested, behavior for "{db_dialect}" may be unpredictable or unstable"""))
         if len(sql_query.split()) == 1:
             sql_query = f""" select * from {sql_query} """
         try:
             sql_c = sql_connection.cursor()
         except Exception as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL connection is not opened or valid, failed with: {e}...")
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL connection is not opened or valid, failed with: '{e}'")
             ) from None
-        if db_dialect == 'sqlite3':
+        if db_dialect == 'sqlite3' and dtypes is None:
             try:
                 table_name = sql_query.lower().split("from",1)[-1].split()[0].replace('"','')
                 sql_c.execute(f"""
@@ -2369,16 +2525,17 @@ class SQLDataModel:
             except:
                 dtypes = None
         try:
-            sql_c.execute(sql_query)
-            data = sql_c.fetchall()
+            data = sql_c.execute(sql_query).fetchall()
         except Exception as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: {e}...")
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: '{e}'")
             ) from None
         if (len(data) < 1) or (data is None):
-            raise DimensionError("DimensionError: provided SQL query returned no data, please provide a valid query with sufficient return data...")
+            raise DimensionError(
+                SQLDataModel.ErrorFormat("DimensionError: provided SQL query returned no data, please provide a valid query with sufficient data to construct a model")
+            )
         headers = [x[0] for x in sql_c.description]
-        return cls(data, headers, dtypes=dtypes, **kwargs)
+        return cls(data=data, headers=headers, dtypes=dtypes, **kwargs)
 
     @classmethod
     def get_supported_sql_connections(cls) -> tuple:
@@ -2468,8 +2625,6 @@ class SQLDataModel:
             csvwriter = csv.writer(file,delimiter=delimeter,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, **kwargs)
             csvwriter.writerow(write_headers)
             csvwriter.writerows(res.fetchall())
-        if SQLDataModel.debug:
-            print(SQLDataModel.SuccessFormat(f'SQLDataModel: csv file "{csv_file}" created'))
 
     def to_dict(self, orient:Literal["rows","columns","list"]="rows", include_index:bool=None) -> dict|list[dict]:
         """
@@ -3021,8 +3176,6 @@ class SQLDataModel:
         serialized_data = tuple(x for x in self.iter_rows(include_index=True,include_headers=True)) # no need to send sql_store_id aka index to pickle
         with open(filename, 'wb') as handle:
             pickle.dump(serialized_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        if SQLDataModel.debug:
-            print(SQLDataModel.SuccessFormat(f'SQLDataModel: pickle file "{filename}" created'))
 
     def to_sql(self, table:str, extern_conn:sqlite3.Connection, replace_existing:bool=True, include_index:bool=True) -> None:
         """
@@ -3126,8 +3279,6 @@ class SQLDataModel:
         contents = f"{datetime.datetime.now().strftime('%B %d %Y %H:%M:%S')} status:\n" + self.__repr__() if include_ts else self.__repr__()
         with open(filename, "w", encoding='utf-8') as file:
             file.write(contents)
-        if SQLDataModel.debug:
-            print(SQLDataModel.SuccessFormat(f'SQLDataModel: text file "{filename}" created'))
 
     def to_local_db(self, db:str=None) -> None:
         """
@@ -3138,17 +3289,14 @@ class SQLDataModel:
             If not provided (None), the current filename will be used as a default target.
 
         Raises:
+            - `TypeError`: If `db` is provided and is not of type 'str' representing a valid sqlite database save path.
             - `sqlite3.Error`: If there is an issue with the SQLite database operations during backup.
-
-        Note:
-            - The method connects to the specified local disk database using sqlite3.
-            - It performs a backup of the in-memory database to the local disk database.
-            - If `db=None`, the current filename is used as the default target.
-            - After successful backup, it prints a success message indicating the creation of the local database.
         ---
 
         Example:
+
         ```python
+        import sqlite3
         from SQLDataModel import SQLDataModel
 
         # Example 1: Store the in-memory database to a local disk database with a specific filename
@@ -3156,12 +3304,27 @@ class SQLDataModel:
 
         # Example 2: Store the in-memory database to a local disk database using the default filename
         sdm.to_local_db()
+
+        # Reload model from local db using default path 'sdm_local_db.db'
+        sdm_loaded = SQLDataModel.from_sql("sdm", sqlite3.connect("sdm_local_db.db"))
+
         ```
+        ---
+
+        Note:
+            - The method connects to the specified local disk database using sqlite3.
+            - It performs a backup of the in-memory database to the local disk database.
+            - If `db=None`, the current filename is used as the default target.
+            - After successful backup, it prints a success message indicating the creation of the local database.
         """
+        if not isinstance(db, str) and db is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"invalid type '{type(db).__name__}', argument for `db` must be of type 'str' representing a valid sqlite database save path")
+            )
+        if db is None:
+            db = "sdm_local_db.db"
         with sqlite3.connect(db) as target:
             self.sql_db_conn.backup(target)
-        if SQLDataModel.debug:
-            print(SQLDataModel.SuccessFormat(f'SQLDataModel: local db "{db}" created'))
 
 ####################################################################################################################
 ############################################## dunder special methods ##############################################
@@ -4966,8 +5129,6 @@ class SQLDataModel:
         try:
             pen = ANSIColor(color)
             self.display_color = pen
-            if SQLDataModel.debug:
-                print(SQLDataModel.SuccessFormat(f"""SQLDataModel: display color changed, the terminal display color has been changed to {pen.wrap(f"color {pen.text_color_str}")}"""))
         except:
             print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code..."))
 
@@ -5482,11 +5643,9 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename model table, SQL execution failed with: "{e}"')
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: unable to rename model table, SQL execution failed with: '{e}'")
             ) from None
         self.sql_model = new_name
-        if SQLDataModel.debug:
-            print(SQLDataModel.SuccessFormat(f'SQLDataModel: Successfully renamed primary model alias to "{new_name}"'))
      
     def execute_fetch(self, sql_query:str, sql_params:tuple=None, **kwargs) -> SQLDataModel:
         """
@@ -5839,7 +5998,7 @@ class SQLDataModel:
             self.sql_db_conn.create_function(func_name, func_argcount, func)
         except Exception as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to create function with provided callable "{func}", SQL process failed with: {e}')
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: unable to create function with provided callable '{func}', SQL process failed with: '{e}'")
             ) from None
         if func_argcount == 1:
             input_columns = target_column
@@ -5847,7 +6006,7 @@ class SQLDataModel:
             input_columns = ",".join([f"\"{col}\"" for col in self.headers])
         else:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f'ValueError: invalid function arg count: {func_argcount}, input args to "{func_name}" must be 1 or {self.column_count} based on the current models structure, ie...\n{self.generate_apply_function_stub()}')
+                SQLDataModel.ErrorFormat(f"ValueError: invalid function arg count: '{func_argcount}', input args to '{func_name}' must be 1 or '{self.column_count}' based on the current models structure, e.g.,\n{self.generate_apply_function_stub()}")
                 )
         sql_apply_update_stmt = f"""update {self.sql_model} set {target_column} = {func_name}({input_columns})"""
         full_stmt = f"""begin transaction; {sql_apply_update_stmt}; end transaction;"""
@@ -5857,11 +6016,9 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to apply function, SQL execution failed with: {e}')
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: unable to apply function, SQL execution failed with: '{e}'")
             ) from None
         self._update_model_metadata()
-        if SQLDataModel.debug:
-            print(SQLDataModel.SuccessFormat(f'SQLDataModel: applied function "{func_name}()" to current model')        )
 
     def generate_apply_function_stub(self) -> str:
         """
@@ -6138,7 +6295,7 @@ class SQLDataModel:
             ) order by "_ordered_name"='_rowmeta' desc, {",".join([f'"_ordered_name"="{col}" desc' for col in self.headers])}"""
         else:
             fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
-        # print(fetch_metadata.replace("\\'","'"))
+        print(fetch_metadata.replace("\\'","'"))
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
         if update_row_meta:
             self.row_count = metadata[0][-1]
