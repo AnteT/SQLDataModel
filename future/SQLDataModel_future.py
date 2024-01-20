@@ -2246,7 +2246,7 @@ class SQLDataModel:
             return cls(tot_raw[1:],headers=tot_raw[0], **kwargs)
  
     @classmethod
-    def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, **kwargs) -> SQLDataModel:
+    def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, dtypes:dict=None, **kwargs) -> SQLDataModel:
         """
         Create a `SQLDataModel` object by executing the provided SQL query using the specified SQL connection.
         If a single word is provided as the `sql_query`, the method wraps it and executes a select all treating the text as the target table.
@@ -2254,12 +2254,14 @@ class SQLDataModel:
         Parameters:
             - `sql_query` (str): The SQL query to execute and create the SQLDataModel.
             - `sql_connection` (sqlite3.Connection): The SQLite3 database connection object.
+            - `dtypes` (dict, optional): A dictionary of the format 'column': 'python dtype' to assign to values.
             - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
             - `SQLDataModel`: The SQLDataModel object created from the executed SQL query.
 
         Raises:
+            - `TypeError`: If dtypes argument is provided and is not of type `dict` representing python data types to assign to values.
             - `WarnFormat`: If the provided SQL connection has not been tested, a warning is issued.
             - `SQLProgrammingError`: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
             - `DimensionError`: If the provided SQL query returns no data.
@@ -2333,8 +2335,12 @@ class SQLDataModel:
         Note:
             - Connections with write access can be used in the `to_sql()` method for writing to the same connection types.
             - Unsupported connection object will output a `SQLDataModelWarning` advising unstable or undefined behaviour.
+            - The `dtypes`, if provided, are only applied to `sqlite3` connection objects as remaining supported connections implement SQL to python adapters.
         """
-        ### type checking connection to ensure compatible ###
+        if dtypes is not None and not isinstance(dtypes, dict):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', argument for `dtypes` must be of type 'dict' representing 'column': 'python dtype' values to assign model")
+            )
         db_dialect = type(sql_connection).__module__.split('.')[0].lower()
         if db_dialect not in cls.get_supported_sql_connections():
             print(SQLDataModel.WarnFormat(f"""SQLDataModelWarning: provided SQL connection has not been tested, behavior for "{db_dialect}" may be unpredictable or unstable..."""))
@@ -2346,6 +2352,22 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL connection is not opened or valid, failed with: {e}...")
             ) from None
+        if db_dialect == 'sqlite3':
+            try:
+                table_name = sql_query.lower().split("from",1)[-1].split()[0].replace('"','')
+                sql_c.execute(f"""
+                select "name" as "column_name"
+                ,case upper(substr("type",1,3)) 
+                    when 'TEX' then 'str'
+                    when 'TIM' then 'datetime'
+                    when 'REA' then 'float'
+                    when 'INT' then 'int'
+                    when 'DAT' then 'date'
+                    else 'str' end as "column_dtype"
+                from pragma_table_info("{table_name}") """)
+                dtypes = {res[0]: res[1] for res in sql_c.fetchall()}
+            except:
+                dtypes = None
         try:
             sql_c.execute(sql_query)
             data = sql_c.fetchall()
@@ -2356,7 +2378,7 @@ class SQLDataModel:
         if (len(data) < 1) or (data is None):
             raise DimensionError("DimensionError: provided SQL query returned no data, please provide a valid query with sufficient return data...")
         headers = [x[0] for x in sql_c.description]
-        return cls(data, headers, **kwargs)
+        return cls(data, headers, dtypes=dtypes, **kwargs)
 
     @classmethod
     def get_supported_sql_connections(cls) -> tuple:
