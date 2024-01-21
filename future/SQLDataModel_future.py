@@ -6,23 +6,25 @@ from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
 
-# in ./src/SQLDataModel/SQLDataModel.py
-try:
-    from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
-    from SQLDataModel.ANSIColor import ANSIColor
-    from SQLDataModel.StandardDeviation import StandardDeviation
-    from SQLDataModel.HTMLParser import HTMLParser
-    from SQLDataModel.extensions.str_check import check as str_check_ext
-    from SQLDataModel.extensions.str_escape import replace_single_quote as str_escape_ext
+from extensions.str_utils import str_is_valid
+from .exceptions import DimensionError, SQLProgrammingError
+from .ANSIColor import ANSIColor
+from .StandardDeviation import StandardDeviation
+from .HTMLParser import HTMLParser
 
+# in ./src/SQLDataModel/SQLDataModel.py
+# try:
+    # from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
+    # from SQLDataModel.ANSIColor import ANSIColor
+    # from SQLDataModel.StandardDeviation import StandardDeviation
+    # from SQLDataModel.HTMLParser import HTMLParser
+# 
 # in ./future/SQLDataModel_future.py
-except:
-    from exceptions import DimensionError, SQLProgrammingError
-    from ANSIColor import ANSIColor
-    from StandardDeviation import StandardDeviation
-    from HTMLParser import HTMLParser
-    from extensions.str_check import check as str_check_ext
-    from extensions.str_escape import replace_single_quote as str_escape_ext
+# except:
+    # from exceptions import DimensionError, SQLProgrammingError
+    # from ANSIColor import ANSIColor
+    # from StandardDeviation import StandardDeviation
+    # from HTMLParser import HTMLParser
 
 try:
     from dateutil.parser import parse as dateparser
@@ -355,7 +357,7 @@ class SQLDataModel:
                         ) from None
             ### finding and escaping invalid chars in headers ###
             for col in headers:
-                if not str_check_ext(col):
+                if not str_is_valid(col):
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: invalid character in column '{col}', headers must be of type 'str' consisting of valid SQL column identifiers")
                     )
@@ -6295,7 +6297,6 @@ class SQLDataModel:
             ) order by "_ordered_name"='_rowmeta' desc, {",".join([f'"_ordered_name"="{col}" desc' for col in self.headers])}"""
         else:
             fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
-        print(fetch_metadata.replace("\\'","'"))
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
         if update_row_meta:
             self.row_count = metadata[0][-1]
@@ -6438,7 +6439,6 @@ class SQLDataModel:
                 update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
             else:
                 update_sql_script += f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
-            # print(f'final update script generated:\n{update_sql_script}')
             self.execute_transaction(update_sql_script)
             return            
         if num_rows_to_update != num_value_rows_to_update:
@@ -6459,7 +6459,7 @@ class SQLDataModel:
             self.sql_db_conn.commit()
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with \"{e}\"")
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with '{e}'")
             ) from None
         self._update_model_metadata()
         return
