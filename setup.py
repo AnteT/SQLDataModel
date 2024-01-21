@@ -3,7 +3,7 @@ import setuptools
 with open("README.md", "r", encoding='utf-8') as fh:
     long_description = fh.read()
 
-str_utils_ext = setuptools.Extension('extensions.str_utils',sources=['extensions/str_utils.c'])
+str_utils_ext = setuptools.Extension('SQLDataModel.extensions.str_utils',sources=['src/SQLDataModel/extensions/str_utils.c'])
 
 setuptools.setup(
      name='SQLDataModel',  

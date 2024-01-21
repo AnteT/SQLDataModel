@@ -6,7 +6,7 @@ from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
 
-from extensions.str_utils import str_is_valid
+from .extensions.str_utils import str_is_valid
 from .exceptions import DimensionError, SQLProgrammingError
 from .ANSIColor import ANSIColor
 from .StandardDeviation import StandardDeviation

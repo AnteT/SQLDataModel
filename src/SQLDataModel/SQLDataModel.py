@@ -6,25 +6,11 @@ from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
 
-from SQLDataModel.extensions.str_utils import str_is_valid
-from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
-from SQLDataModel.ANSIColor import ANSIColor
-from SQLDataModel.StandardDeviation import StandardDeviation
-from SQLDataModel.HTMLParser import HTMLParser
-
-# in ./src/SQLDataModel/SQLDataModel.py
-# try:
-    # from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
-    # from SQLDataModel.ANSIColor import ANSIColor
-    # from SQLDataModel.StandardDeviation import StandardDeviation
-    # from SQLDataModel.HTMLParser import HTMLParser
-# 
-# in ./future/SQLDataModel_future.py
-# except:
-    # from exceptions import DimensionError, SQLProgrammingError
-    # from ANSIColor import ANSIColor
-    # from StandardDeviation import StandardDeviation
-    # from HTMLParser import HTMLParser
+from .extensions.str_utils import str_is_valid
+from .exceptions import DimensionError, SQLProgrammingError
+from .ANSIColor import ANSIColor
+from .StandardDeviation import StandardDeviation
+from .HTMLParser import HTMLParser
 
 try:
     from dateutil.parser import parse as dateparser
