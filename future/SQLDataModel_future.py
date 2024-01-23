@@ -3236,10 +3236,6 @@ class SQLDataModel:
         extern_conn.commit()
         extern_c.executemany(sql_insert_stmt,model_data)
         extern_conn.commit()
-        if not replace_existing:
-            sql_dedupe_stmt = f"""delete from "{table}" where rowid not in (select min(rowid) from "{table}" group by {','.join(f'"{col}"' for col in model_headers)})"""
-            extern_c.execute(sql_dedupe_stmt)
-            extern_conn.commit()
         return
 
     def to_text(self, filename:str, include_ts:bool=False) -> None:
@@ -6485,8 +6481,7 @@ class SQLDataModel:
         Note:
             - This method provides insight into the structure of the database schema.
         """
-        self.sql_db_conn.execute("select sql from sqlite_master")
-        return self.sql_db_conn.fetchone()[0]
+        return self.sql_db_conn.execute("select sql from sqlite_master").fetchone()[0]
 
     def _get_display_args(self) -> dict:
         """
