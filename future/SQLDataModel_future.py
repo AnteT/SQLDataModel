@@ -6,25 +6,10 @@ from collections import namedtuple
 from pathlib import Path
 from ast import literal_eval
 
-from .extensions.str_utils import str_is_valid
 from .exceptions import DimensionError, SQLProgrammingError
 from .ANSIColor import ANSIColor
 from .StandardDeviation import StandardDeviation
 from .HTMLParser import HTMLParser
-
-# in ./src/SQLDataModel/SQLDataModel.py
-# try:
-    # from SQLDataModel.exceptions import DimensionError, SQLProgrammingError
-    # from SQLDataModel.ANSIColor import ANSIColor
-    # from SQLDataModel.StandardDeviation import StandardDeviation
-    # from SQLDataModel.HTMLParser import HTMLParser
-# 
-# in ./future/SQLDataModel_future.py
-# except:
-    # from exceptions import DimensionError, SQLProgrammingError
-    # from ANSIColor import ANSIColor
-    # from StandardDeviation import StandardDeviation
-    # from HTMLParser import HTMLParser
 
 try:
     from dateutil.parser import parse as dateparser
@@ -355,9 +340,8 @@ class SQLDataModel:
                     raise TypeError(
                         SQLDataModel.ErrorFormat(f"TypeError: invalid header values, all headers provided must be of type string")
                         ) from None
-            ### finding and escaping invalid chars in headers ###
             for col in headers:
-                if not str_is_valid(col):
+                if "'" in col:
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: invalid character in column '{col}', headers must be of type 'str' consisting of valid SQL column identifiers")
                     )
