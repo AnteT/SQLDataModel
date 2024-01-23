@@ -3,11 +3,11 @@ import setuptools
 with open("README.md", "r", encoding='utf-8') as fh:
     long_description = fh.read()
 
-str_utils_ext = setuptools.Extension('SQLDataModel.extensions.str_utils',sources=['src/SQLDataModel/extensions/str_utils.c'])
+# str_utils_ext = setuptools.Extension('SQLDataModel.extensions.str_utils',sources=['src/SQLDataModel/extensions/str_utils.c'])
 
 setuptools.setup(
      name='SQLDataModel',  
-     version='0.1.71',
+     version='0.1.72',
      scripts=['src/SQLDataModel/SQLDataModel.py'] ,
      author="Ante Tonkovic-Capin",
      author_email="antetc@icloud.com",
@@ -22,6 +22,5 @@ setuptools.setup(
          "License :: OSI Approved :: MIT License",
          "Operating System :: OS Independent",
      ],
-     ext_modules=[str_utils_ext],
      python_requires = ">=3.9"
  )
