@@ -2511,11 +2511,12 @@ class SQLDataModel:
             except:
                 dtypes = None
         try:
-            data = sql_c.execute(sql_query).fetchall()
+            sql_c.execute(sql_query)
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: '{e}'")
             ) from None
+        data = sql_c.fetchall()
         if (len(data) < 1) or (data is None):
             raise DimensionError(
                 SQLDataModel.ErrorFormat("DimensionError: provided SQL query returned no data, please provide a valid query with sufficient data to construct a model")
