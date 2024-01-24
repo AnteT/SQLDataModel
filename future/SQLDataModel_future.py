@@ -2511,7 +2511,8 @@ class SQLDataModel:
             except:
                 dtypes = None
         try:
-            data = sql_c.execute(sql_query).fetchall()
+            sql_c.execute(sql_query)
+            data = sql_c.fetchall()
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: '{e}'")
