@@ -5,7 +5,7 @@ class HTMLParser(HTMLParser):
         super().__init__(convert_charrefs=convert_charrefs)
         if table_identifier is None:
             table_identifier = 0
-        if not isinstance(table_identifier, str|int):
+        if not isinstance(table_identifier, (str,int)):
             raise TypeError(
                 HTMLParser.ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', argument for `table_identifier` must be one of 'int' or 'str' representing table index location or HTML 'name' or 'id' attribute")
             )

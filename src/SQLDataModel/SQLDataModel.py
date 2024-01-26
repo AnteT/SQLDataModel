@@ -293,7 +293,7 @@ class SQLDataModel:
             data = [tuple(None for _ in range(len(headers)))]
         else:
             had_data = True
-        if not isinstance(data, list|tuple) and had_data:
+        if not isinstance(data, (list,tuple)) and had_data:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list or tuple")
                 )
@@ -308,7 +308,7 @@ class SQLDataModel:
                 raise IndexError(
                     SQLDataModel.ErrorFormat(f"IndexError: data index error, data index provided does not exist for length '{len(data)}' due to '{e}'")
                     ) from None
-            if not isinstance(data[0], list|tuple):
+            if not isinstance(data[0], (list,tuple)):
                 if type(data[0]).__module__ != 'pyodbc': # check for pyodbc.Row which is acceptable
                     raise TypeError(
                         SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data[0]).__name__}' is not a valid type for data rows, which must be of type list or tuple")
@@ -318,7 +318,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: data rows not found, data rows of length '{len(data[0])}' are insufficient to construct a valid model, at least one row is required")
                     )
         if headers is not None:
-            if not isinstance(headers, list|tuple):
+            if not isinstance(headers, (list,tuple)):
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid header types, '{type(headers).__name__}' is not a valid type for headers, please provide a tuple or list type")
                     )
@@ -361,7 +361,7 @@ class SQLDataModel:
         headers = headers[dyn_idx_offset:]
         self.headers = headers
         self.column_count = len(self.headers)
-        self.display_color = ANSIColor(display_color) if isinstance(display_color,str|tuple) else display_color if isinstance(display_color,ANSIColor) else None
+        self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}
@@ -682,7 +682,7 @@ class SQLDataModel:
         print(new_headers)
         ```
         """
-        if not isinstance(column,int|str):
+        if not isinstance(column, (int,str)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid column type '{type(column).__name__}', `column` parameter must be of type 'int' or 'str'")
             )
@@ -831,7 +831,7 @@ class SQLDataModel:
         sdm.set_headers(['First_Name', 'Last_Name', 'Payment'])
         ```
         """
-        if not isinstance(new_headers,list|tuple):
+        if not isinstance(new_headers, (list,tuple)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid header types, type \"{type(new_headers).__name__}\" is not a valid type for headers, please provide a tuple or list type...")
                 )
@@ -839,7 +839,7 @@ class SQLDataModel:
             raise DimensionError(
                 SQLDataModel.ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length \"{len(new_headers)} != {self.column_count}\" column count, please provide correct dimensions...")
                 )
-        if not isinstance(new_headers[0], str|int|float):
+        if not isinstance(new_headers[0], (str,int,float)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid header values, type \"{type(new_headers[0]).__name__}\" is not a valid type for header values, please provide a string type...")
                 )
@@ -943,7 +943,7 @@ class SQLDataModel:
         sdm.set_display_max_rows(None)
         ```
         """
-        if not isinstance(rows, int|None):
+        if not isinstance(rows, (int,None)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f'TypeError: invalid argument type "{type(rows).__name__}", please provide an integer value to set the maximum rows attribute...')
                 )
@@ -1449,9 +1449,9 @@ class SQLDataModel:
             - Generally, do not rely on `SQLDataModel` to do statistics, use `NumPy` or a real library instead
             - Statistics for `date` and `datetime` can be unpredictable if formatting is inconsistent
         """
-        if isinstance(exclude_columns, str|None):
+        if isinstance(exclude_columns, (str,None)):
             exclude_columns = [exclude_columns]
-        if isinstance(exclude_dtypes, str|None):
+        if isinstance(exclude_dtypes, (str,None)):
             exclude_dtypes = [exclude_dtypes]
         desc_cols = [col for col in self.headers if ((col not in exclude_columns) and (self.header_master[col][1] not in exclude_dtypes))]
         has_numeric_dtype = any(map(lambda v: v in ('float','int','date','datetime'), [self.header_master[col][1] for col in desc_cols])) # ('float','int','date','datetime')
@@ -1515,7 +1515,7 @@ class SQLDataModel:
         sample_result2 = sdm2.sample(n_samples=0.2)
         ```
         """
-        if not isinstance(n_samples, float|int):
+        if not isinstance(n_samples, (float,int)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid `n_samples` type '{type(n_samples).__name__}', `n_samples` parameter type must be one of 'int', 'float' as number of rows or proportion of rows, respectively")
             )            
@@ -1878,7 +1878,7 @@ class SQLDataModel:
             if isinstance(first_key_val, dict):
                 headers = list(data.keys())
                 data = [[data[col][val] for col in headers] for val in data.keys()]
-            elif isinstance(first_key_val, list|tuple):
+            elif isinstance(first_key_val, (list,tuple)):
                 headers = [k for k in data.keys()]
                 column_count = len(headers)
                 row_count = len(first_key_val)
@@ -2028,7 +2028,7 @@ class SQLDataModel:
             - If `json_source` is a JSON-like string object that is not an array, it will be wrapped according as an array.
         
         """
-        if not isinstance(json_source, str|list|dict):
+        if not isinstance(json_source, (str,list,dict)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(json_source).__name__}', expected `json_source` to be one of 'str', 'list' or 'dict' representing a JSON file path or JSON-like object")
             )
@@ -3374,7 +3374,7 @@ class SQLDataModel:
         if isinstance(other, SQLDataModel):
             other_data = other.data()
             row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] < other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, int|str|float):
+        if isinstance(other, (int,str,float)):
             row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] < other)
         return (row_idxs)
     
@@ -3438,7 +3438,7 @@ class SQLDataModel:
         if isinstance(other, SQLDataModel):
             other_data = other.data()
             row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] <= other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, int|str|float):
+        if isinstance(other, (int,str,float)):
             row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] <= other)
         return (row_idxs)
     
@@ -3502,7 +3502,7 @@ class SQLDataModel:
         if isinstance(other, SQLDataModel):
             other_data = other.data()
             row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] == other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, int|str|float):
+        if isinstance(other, (int,str,float)):
             row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] == other)
         return (row_idxs)
 
@@ -3568,7 +3568,7 @@ class SQLDataModel:
         if isinstance(other, SQLDataModel):
             other_data = other.data()
             row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] != other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, int|str|float):
+        if isinstance(other, (int,str,float)):
             row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] != other)
         return (row_idxs)
 
@@ -3632,7 +3632,7 @@ class SQLDataModel:
         if isinstance(other, SQLDataModel):
             other_data = other.data()
             row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] > other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, int|str|float):
+        if isinstance(other, (int,str,float)):
             row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] > other)
         return (row_idxs)
 
@@ -3697,7 +3697,7 @@ class SQLDataModel:
         if isinstance(other, SQLDataModel):
             other_data = other.data()
             row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] >= other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, int|str|float|datetime.date):
+        if isinstance(other, (int,str,float,datetime.date)):
             row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] >= other)
         return (row_idxs)
 
@@ -3727,13 +3727,13 @@ class SQLDataModel:
         sdm['Age'] = sdm['Age'] + 7 # it's a cruel world after all
         ```
         """
-        if not isinstance(value, str|int|float|SQLDataModel):
+        if not isinstance(value, (str,int,float,SQLDataModel)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', addition operations can only be performed on types 'str', 'int' or 'float' ")
             )
         if isinstance(value, SQLDataModel):
             value = value.data()
-        if isinstance(value, str|int|float):
+        if isinstance(value, (str,int,float)):
             return self.apply(lambda x: x + value)
 
     def __sub__(self, value:int|float|SQLDataModel) -> SQLDataModel:
@@ -3758,13 +3758,13 @@ class SQLDataModel:
         sdm['Adjusted Numbers'] = sdm['Numbers'] - 2.5
         ```
         """
-        if not isinstance(value, int|float|SQLDataModel):
+        if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int' or 'float' ")
             )
         if isinstance(value, SQLDataModel):
             value = value.data()
-        if isinstance(value, int|float):
+        if isinstance(value, (int,float)):
             return self.apply(lambda x: x - value)
 
     def __mul__(self, value:int|float) -> SQLDataModel:
@@ -3789,11 +3789,11 @@ class SQLDataModel:
         new_sdm['Yearly Cost'] = sdm['Monthly Cost'] * 12
         ```
         """
-        if not isinstance(value, int|float):
+        if not isinstance(value, (int,float)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', multiplication operations can only be performed on types 'int' or 'float' ")
             )
-        if isinstance(value, int|float):
+        if isinstance(value, (int,float)):
             return self.apply(lambda x: x * value)
 
     def __truediv__(self, value:int|float) -> SQLDataModel:
@@ -3819,11 +3819,11 @@ class SQLDataModel:
         sdm['Weekly Amount'] = sdm['Yearly Amount'] / 52
         ```
         """
-        if not isinstance(value, int|float):
+        if not isinstance(value, (int,float)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int' or 'float' ")
             )
-        if isinstance(value, int|float):
+        if isinstance(value, (int,float)):
             return self.apply(lambda x: x / value)
         
     def __pow__(self, value:int|float) -> SQLDataModel:
@@ -3848,11 +3848,11 @@ class SQLDataModel:
         sdm['Numbers Squared'] = sdm['Numbers'] ** 2
         ```
         """
-        if not isinstance(value, int|float):
+        if not isinstance(value, (int,float)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int' or 'float' ")
             )
-        if isinstance(value, int|float):
+        if isinstance(value, (int,float)):
             return self.apply(lambda x: x ** value)        
 
     def __iadd__(self, value) -> SQLDataModel:
@@ -4163,7 +4163,7 @@ class SQLDataModel:
         # first check if target is new column that needs to be created, if so create it and return so long as the target values aren't another sqldatamodel object:
         if isinstance(update_values, SQLDataModel):
             update_values = update_values.data() # normalize data input
-        if not isinstance(update_values, str|int|float|bool|bytes|list|tuple|datetime.date) and (update_values is not None):
+        if not isinstance(update_values, (str,int,float,bool,bytes,list,tuple,datetime.date)) and (update_values is not None):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid values type '{type(update_values).__name__}', update values must be compatible with SQL datatypes such as <'str', 'int', 'float', 'datetime', 'bool', 'bytes'>")
             )
@@ -4481,7 +4481,7 @@ class SQLDataModel:
             - Models must be of compatible dimensions with equal `column_count` or equivalent dimension if `list` or `tuple`
             - Headers are inherited from the model calling the `concat()` method whether done inplace or being returned as new instance.
         """        
-        if not isinstance(other, SQLDataModel|list|tuple):
+        if not isinstance(other, (SQLDataModel,list,tuple)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(other).__name__}', argument for `other` must be of type 'SQLDataModel' to concatenate compatible models")
             )
@@ -4489,12 +4489,12 @@ class SQLDataModel:
             num_cols_other = other.column_count
             num_rows_other = other.row_count
             other = other.data()
-        elif isinstance(other, list|tuple):
+        elif isinstance(other, (list,tuple)):
             if len(other) < 1:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: insufficient data length '{len(other)}', argument `other` must have length >= 1 or contain at least 1 row to concatenate")
                 )
-            if not isinstance(other[0], list|tuple):
+            if not isinstance(other[0], (list,tuple)):
                 other = [other]
             num_cols_other = len(other[0])
             num_rows_other = len(other)
@@ -4696,7 +4696,7 @@ class SQLDataModel:
             - The method supports filling missing values with various scalar types which are then adapted to the columns set dtype.
             - The `strictly_null` parameter controls whether additional values like 'NA', 'NAN', 'n/a', 'na', and empty strings are treated as null.
         """
-        if not isinstance(value,str|int|float|bytes|bool) and value is not None:
+        if not isinstance(value, (str,int,float,bytes,bool)) and value is not None:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(value).__name__}', `value` argument for `fillna()` must be scalar type or one of 'str', 'int', 'bytes', 'bool' or 'float'")
             )
@@ -4778,7 +4778,7 @@ class SQLDataModel:
         Notes:
             - Use `order_by_count=False` to change ordering from count to column arguments.
         """
-        if not isinstance(columns, str|list|tuple):
+        if not isinstance(columns, (str,list,tuple)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(columns).__name__}', arguments for `columns` must be one of 'str', 'list' or 'tuple'")
                 )
@@ -5193,7 +5193,7 @@ class SQLDataModel:
             - Ascending and descending ordering follows this order of operations for multiple columns as well.
         """
         if by is not None:
-            if not isinstance(by, str|list):
+            if not isinstance(by, (str,list)):
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(by).__name__}', `by` argument for `sort()` must be one of 'str', 'list'")
                 )
@@ -5471,7 +5471,7 @@ class SQLDataModel:
         dtypes = 1 if dtypes == "python" else 0
         if columns is None:
             return {col:self.header_master[col][dtypes] for col in self.headers}
-        if not isinstance(columns, str|int|list):
+        if not isinstance(columns, (str,int,list)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(columns).__name__}', `columns` must be one of 'str', 'int' or 'list', use `get_headers()` to view current valid arguments")
             )
@@ -5541,7 +5541,7 @@ class SQLDataModel:
             copies the data from the original column to the temporary column, drops the original column,
             and finally, renames the temporary column to the original column name.
         """
-        if not isinstance(column, str|int):
+        if not isinstance(column, (str,int)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
             )
@@ -5883,7 +5883,7 @@ class SQLDataModel:
             sql_script = create_col_stmt
             self.execute_transaction(sql_script)
             return
-        if isinstance(value, str|int|float|bool):
+        if isinstance(value, (str,int,float,bool)):
             value = f"'{value}'" if isinstance(value,str) else value
             dyn_dtype_default_value = f"""{self.static_py_to_sql_map_dict[type(value).__name__]} not null default {value}""" if value is not None else "TEXT"
             sql_script = f"""{create_col_stmt} {dyn_dtype_default_value};"""
@@ -5901,7 +5901,7 @@ class SQLDataModel:
             sql_script = f"""{create_col_stmt} {dyn_dtype_default_value};"""
             self.execute_transaction(sql_script)
             return                 
-        if isinstance(value, list|tuple):
+        if isinstance(value, (list,tuple)):
             if (len_values := len(value)) != self.row_count:
                 raise DimensionError(
                     SQLDataModel.ErrorFormat(f"DimensionError: invalid dimensions '{len_values} != {self.row_count}', provided values have length '{len_values}' while current row count is '{self.row_count}'")
@@ -6075,7 +6075,7 @@ class SQLDataModel:
             - If no insert values are provided, `None` or SQL 'null' will be inserted to match the current model dimensions.
         """
         if values is not None:
-            if not isinstance(values,list|tuple):
+            if not isinstance(values, (list,tuple)):
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f'TypeError: invalid type provided \"{type(values).__name__}\", insert values must be of type list or tuple...')
                     )
@@ -6151,7 +6151,7 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid row index type '{type(row_index).__name__}', rows must be indexed by type 'int'")
             )
-        if not isinstance(column_index, int|str):
+        if not isinstance(column_index, (int,str)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
             )
@@ -6392,13 +6392,13 @@ class SQLDataModel:
         update_sql_script = None
         rows_to_update = rows_to_update if rows_to_update is not None else tuple(range(self.row_count))
         columns_to_update = columns_to_update if columns_to_update is not None else self.headers
-        if not isinstance(values_to_update, tuple|list):
+        if not isinstance(values_to_update, (tuple,list)):
             values_to_update = (values_to_update,)
             rowwise_update = False
         else:
             rowwise_update = True
         if isinstance(values_to_update, list):
-            if not isinstance(values_to_update[0], tuple|list):
+            if not isinstance(values_to_update[0], (tuple,list)):
                 values_to_update = tuple(values_to_update)
         if isinstance(values_to_update, tuple):
             values_to_update = [values_to_update]
@@ -6414,7 +6414,7 @@ class SQLDataModel:
             update_sql_script = f"""alter table "{self.sql_model}" add column "{new_column}" {new_column_sql_dtype};"""
         if not rowwise_update:
             values_to_update = values_to_update[0][0]
-            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update,str|bytes|datetime.date) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"""'{values_to_update.replace("'","''")}'""" if not isinstance(values_to_update,bytes) else f"""X'{values_to_update.hex()}'"""
+            values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update, (str,bytes,datetime.date)) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"""'{values_to_update.replace("'","''")}'""" if not isinstance(values_to_update,bytes) else f"""X'{values_to_update.hex()}'"""
             col_val_param = ','.join([f""" "{column}" = {values_to_update} """ for column in columns_to_update]) 
             if update_sql_script is None:
                 update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
@@ -6605,7 +6605,7 @@ class SQLDataModel:
                 )
             return (tuple(indicies), self.headers)
         ### columns by str or list of str ###
-        if isinstance(indicies, str|list):
+        if isinstance(indicies, (str,list)):
             col_index = indicies
             if isinstance(indicies, str):
                 col_index = [col_index]
@@ -6630,7 +6630,7 @@ class SQLDataModel:
             )
         row_indicies, col_indicies = indicies
         ### rows first ###
-        if not isinstance(row_indicies, int|tuple|slice):
+        if not isinstance(row_indicies, (int,tuple,slice)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type for row indexing '{type(row_indicies).__name__}', rows must be indexed by type 'int' or 'slice'")
             )
@@ -6682,7 +6682,7 @@ class SQLDataModel:
                     )
                 validated_row_indicies = rows_in_scope
         ### then columns ###
-        if not isinstance(col_indicies, int|slice|tuple|str|list):
+        if not isinstance(col_indicies, (int,slice,tuple,str,list)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing one of 'slice', 'list' or 'str' type is required")
                 )        
@@ -6703,7 +6703,7 @@ class SQLDataModel:
             col_indicies = list(col_indicies)
         elif isinstance(col_indicies, str):
             col_indicies = [col_indicies]
-        if not all(isinstance(col, int|str) for col in col_indicies):
+        if not all(isinstance(col, (int,str)) for col in col_indicies):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies[0].__name__)}', column indexing must be done by 'int' or 'str' types, use `.get_headers()` to view current valid arguments")
             )
@@ -6722,4 +6722,3 @@ class SQLDataModel:
                 )
         validated_column_indicies = col_indicies
         return (validated_row_indicies, validated_column_indicies)
-
