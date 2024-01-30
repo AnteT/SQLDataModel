@@ -62,7 +62,7 @@ class ANSIColor:
         ```
         """
         text_color = (95, 226, 197) if text_color is None else text_color # default teal color
-        if not isinstance(text_color, tuple|str):
+        if not isinstance(text_color, (tuple,str)):
             raise TypeError(
                 ANSIColor.ErrorFormat(f"TypeError: invalid `text_color` type '{type(text_color).__name__}' received, expected value of type 'tuple' or 'str'")
             )
@@ -189,4 +189,3 @@ class ANSIColor:
             - `str`: ANSI color alert string for error messages.
         """        
         return f"""\r\033[1m\033[38;2;247;141;160m{text}\033[0m\033[39m\033[49m"""
-    
