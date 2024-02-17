@@ -1,10 +1,11 @@
 from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json
-from typing import Generator, Callable, Literal, Iterator
-import urllib.request
+from collections.abc import Generator, Callable, Iterator
 from collections import namedtuple
-from pathlib import Path
 from ast import literal_eval
+from typing import Literal
+from pathlib import Path
+import urllib.request
 
 from .exceptions import DimensionError, SQLProgrammingError
 from .ANSIColor import ANSIColor
@@ -204,20 +205,20 @@ class SQLDataModel:
     #### Pretty Printing
     SQLDataModel also pretty prints your table in any color you specify, use `SQLDataModel.set_display_color(t_color)` and provide either a hex value or a tuple of rgb and print the table, example output:
     ```shell
-    ┌───┬─────────────────────┬────────────┬──────────────────────────────────┬─────────────┬────────┬─────────┬────────────┐
-    │   │ full_name           │ date       │ email                            │ country     │    pin │ service │         id │
-    ├───┼─────────────────────┼────────────┼──────────────────────────────────┼─────────────┼────────┼─────────┼────────────┤
-    │ 0 │ Pamela Berg         │ 2024-09-15 │ turpis.nulla.aliquet@aol.com     │ New Zealand │   3010 │    3.02 │  951869685 │
-    │ 1 │ Mason Hoover        │ 2024-01-23 │ ultrices@outlook.com             │ Australia   │   6816 │    5.01 │  351202632 │
-    │ 2 │ Veda Suarez         │ 2023-09-04 │ ipsum.phasellus@yahoo.com        │ Ukraine     │   1175 │    4.65 │  523370578 │
-    │ 3 │ Guinevere Cleveland │ 2024-03-22 │ amet.ornare@hotmail.net          │ New Zealand │   4962 │    3.81 │  253821048 │
-    │ 4 │ Vincent Mccoy       │ 2023-09-16 │ nulla@yahoo.ca                   │ France      │   4446 │    2.95 │  521824160 │
-    │ 5 │ Holmes Kemp         │ 2024-11-13 │ gravida.non@protonmail.couk      │ Germany     │   9396 │    4.61 │  700698503 │
-    │ 6 │ Donna Mays          │ 2023-06-06 │ nulla@hotmail.com                │ Costa Rica  │   8153 │    5.34 │  423818468 │
-    │ 7 │ Rama Galloway       │ 2023-09-22 │ et@protonmail.edu                │ Italy       │   3384 │    3.87 │  254573974 │
-    │ 8 │ Lucas Rodriquez     │ 2024-03-16 │ aliquam.fringilla.curs@yahoo.com │ New Zealand │   3278 │    2.73 │  684654705 │
-    │ 9 │ Hunter Donaldson    │ 2023-06-30 │ dolor.nulla@google.edu           │ Belgium     │   1593 │    4.58 │  171152418 │
-    └───┴─────────────────────┴────────────┴──────────────────────────────────┴─────────────┴────────┴─────────┴────────────┘
+    ┌───┬─────────────────────┬────────────┬─────────────┬────────┬─────────┐
+    │   │ full_name           │ date       │ country     │    pin │ service │
+    ├───┼─────────────────────┼────────────┼─────────────┼────────┼─────────┤
+    │ 0 │ Pamela Berg         │ 2024-09-15 │ New Zealand │   3010 │    3.02 │
+    │ 1 │ Mason Hoover        │ 2024-01-23 │ Australia   │   6816 │    5.01 │
+    │ 2 │ Veda Suarez         │ 2023-09-04 │ Ukraine     │   1175 │    4.65 │
+    │ 3 │ Guinevere Cleveland │ 2024-03-22 │ New Zealand │   4962 │    3.81 │
+    │ 4 │ Vincent Mccoy       │ 2023-09-16 │ France      │   4446 │    2.95 │
+    │ 5 │ Holmes Kemp         │ 2024-11-13 │ Germany     │   9396 │    4.61 │
+    │ 6 │ Donna Mays          │ 2023-06-06 │ Costa Rica  │   8153 │    5.34 │
+    │ 7 │ Rama Galloway       │ 2023-09-22 │ Italy       │   3384 │    3.87 │
+    │ 8 │ Lucas Rodriquez     │ 2024-03-16 │ New Zealand │   3278 │    2.73 │
+    │ 9 │ Hunter Donaldson    │ 2023-06-30 │ Belgium     │   1593 │    4.58 │
+    └───┴─────────────────────┴────────────┴─────────────┴────────┴─────────┘
     ```
 
     ---
@@ -228,7 +229,8 @@ class SQLDataModel:
         - Use `SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=2):
+    
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=2):
         """
         Initializes a new instance of `SQLDataModel`.
 
@@ -286,9 +288,16 @@ class SQLDataModel:
         """
         if data is None:
             if headers is None:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: data not found, an empty model cannot be created, to create a model with zero rows a `headers` argument is required")
-                )
+                if dtypes is None:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: insufficient data, an empty header-less model cannot be created, to create a model with zero rows a `headers` or `dtypes` argument is required")
+                    )
+                else:
+                    if not isinstance(dtypes,dict):
+                        raise TypeError(
+                            SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', `dtypes` must be of type 'dict' with format of `{{'column':'dtype'}}` where 'dtype' must be a string representing a valid python datatype")
+                        )
+                    headers = list(dtypes.keys())
             had_data = False
             data = [tuple(None for _ in range(len(headers)))]
         else:
@@ -366,10 +375,6 @@ class SQLDataModel:
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}
         if dtypes is not None:
-            if not isinstance(dtypes,dict):
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(dtypes).__name__}', `dtypes` must be of type 'dict' with format of `{{'column':'dtype'}}` where 'dtype' must be a valid python datatype")
-                )
             [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
         headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
@@ -4167,6 +4172,19 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid values type '{type(update_values).__name__}', update values must be compatible with SQL datatypes such as <'str', 'int', 'float', 'datetime', 'bool', 'bytes'>")
             )
+        # short circuit remaining operations and proceed to insert row if target_indicies is int and equals current row count
+        if isinstance(target_indicies, int) and target_indicies == self.row_count:
+            try:
+                self.insert_row(update_values)
+                return
+            except TypeError as e:
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"{e}")
+                ) from None                
+            except DimensionError as e:
+                raise DimensionError(
+                    SQLDataModel.ErrorFormat(f"{e}")
+                ) from None
         # normal update values process where target update values is not another SQLDataModel object:
         if isinstance(target_indicies, str) and target_indicies not in self.headers:
             validated_rows, validated_columns = tuple(range(self.row_count)), [target_indicies]
@@ -4175,15 +4193,15 @@ class SQLDataModel:
                 validated_rows, validated_columns = self.validate_indicies(target_indicies)
             except ValueError as e:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
+                    SQLDataModel.ErrorFormat(f"{e}")
                 ) from None
             except TypeError as e:
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
+                    SQLDataModel.ErrorFormat(f"{e}")
                 ) from None
             except IndexError as e:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
+                    SQLDataModel.ErrorFormat(f"{e}")
                 ) from None             
         # convert various row options to be tuple or int
         if isinstance(validated_rows,slice):
@@ -6077,14 +6095,14 @@ class SQLDataModel:
         if values is not None:
             if not isinstance(values, (list,tuple)):
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f'TypeError: invalid type provided \"{type(values).__name__}\", insert values must be of type list or tuple...')
-                    )
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(values).__name__}', insert values must be of type 'list' or 'tuple'")
+                    ) from None
             if isinstance(values,list):
                 values = tuple(values)
             if (len_val := len(values)) != self.column_count:
                 raise DimensionError(
-                    SQLDataModel.ErrorFormat(f'DimensionError: invalid dimensions \"{len_val} != {self.column_count}\", the number of values provided ({len_val}) must match the current column count ({self.column_count})...')
-                    )
+                    SQLDataModel.ErrorFormat(f"DimensionError: invalid dimensions '{len_val} != {self.column_count}', the number of values provided: '{len_val}' must match the current column count '{self.column_count}'")
+                    ) from None
         else:
             values = tuple(None for _ in range(self.column_count))
         insert_cols = ",".join([f'"{col}"' for col in self.headers])
@@ -6568,7 +6586,8 @@ class SQLDataModel:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}'")
                 )
-            if row_index >= self.row_count:
+            # modified to row index > row count to allow new rows to be inserted when row index == current row count
+            if row_index > self.row_count:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}'")
                 )
@@ -6641,7 +6660,7 @@ class SQLDataModel:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '0:{self.row_count}'")
                 )
-            if row_indicies > self.row_count:
+            if row_indicies >= self.row_count:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '0:{self.row_count}'")
                 )
@@ -6656,7 +6675,7 @@ class SQLDataModel:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '0:{self.row_count}'")
                 )
-            if max_row_idx > self.row_count:
+            if max_row_idx >= self.row_count:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '0:{self.row_count}'")
                 )
