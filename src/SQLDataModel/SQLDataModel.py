@@ -948,7 +948,7 @@ class SQLDataModel:
         sdm.set_display_max_rows(None)
         ```
         """
-        if not isinstance(rows, (int,None)):
+        if not isinstance(rows, (int,type(None))):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f'TypeError: invalid argument type "{type(rows).__name__}", please provide an integer value to set the maximum rows attribute...')
                 )
@@ -1454,11 +1454,19 @@ class SQLDataModel:
             - Generally, do not rely on `SQLDataModel` to do statistics, use `NumPy` or a real library instead
             - Statistics for `date` and `datetime` can be unpredictable if formatting is inconsistent
         """
-        if isinstance(exclude_columns, (str,None)):
+        if exclude_columns is None:
+            exclude_columns = []
+        elif isinstance(exclude_columns, (str)):
             exclude_columns = [exclude_columns]
-        if isinstance(exclude_dtypes, (str,None)):
+        if exclude_dtypes is None:
+            exclude_dtypes = []
+        elif isinstance(exclude_dtypes, (str)):
             exclude_dtypes = [exclude_dtypes]
         desc_cols = [col for col in self.headers if ((col not in exclude_columns) and (self.header_master[col][1] not in exclude_dtypes))]
+        if (num_cols :=len(desc_cols)) < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid number of columns '{num_cols}', at least '1' column is required for the `describe()` method")
+            )
         has_numeric_dtype = any(map(lambda v: v in ('float','int','date','datetime'), [self.header_master[col][1] for col in desc_cols])) # ('float','int','date','datetime')
         headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in desc_cols]
         headers_select = """ "'metric'" as "metric",""" + ",".join(headers_select_literal)

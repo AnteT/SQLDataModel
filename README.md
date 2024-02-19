@@ -16,7 +16,7 @@ for row in my_table.iter_rows():
 my_table.to_sql("new_table", psycopg2.Connection)
 ```
 
-Made for those times when you need to move data around but the full pandas, numpy, sqlalchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like pretty printing your table, at  <span style="font-size: 10pt;">1/1000</span> the size, 0.03MB vs 30MB
+Made for those times when you just want to use raw SQL on your dataframe, or need to move data around but the full Pandas, Numpy, SQLAlchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like pretty printing your table, at _1/1000_ the size, 0.03MB vs 30MB
 
 ---
 
@@ -27,6 +27,32 @@ Use the package manager [pip](https://pip.pypa.io/en/stable/) to install SQLData
 $ pip install SQLDataModel
 ```
 Then import the main class `SQLDataModel` into your local project, see usage details below.
+
+---
+
+### Quick Example
+SQLDataModel can be created from any number of [sources](#data-sources), as a quick demo lets create one using a Wikipedia page:
+
+```python
+>>> from SQLDataModel import SQLDataModel
+>>> 
+>>> url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
+>>> 
+>>> sdm = SQLDataModel.from_html(url, table_identifier=94)   
+>>> 
+>>> sdm[:4, ['R', 'Team', 'W', 'Pts.']]
+┌──────┬─────────────┬──────┬──────┐
+│ R    │ Team        │ W    │ Pts. │
+├──────┼─────────────┼──────┼──────┤
+│ 1    │ France      │ 6    │ 19   │
+│ 2    │ Brazil      │ 4    │ 13   │
+│ 3    │ Croatia     │ 5    │ 15   │
+│ 4    │ Netherlands │ 3    │ 12   │
+└──────┴─────────────┴──────┴──────┘
+[4 rows x 4 columns]
+```
+
+SQLDataModel provides a quick and easy way to import, view, transform and export your data in multiple [formats](#data-sources) and sources, providing the full power of executing raw SQL against your model in the process. 
 
 ---
 
@@ -94,7 +120,7 @@ SQLDataModel supports various data formats and sources, including:
 - Python objects
 - Pickle files
 
-Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `sdm.to_parquet()` or its class method inverse `SQLDataModel.from_parquet()`, the parquet package `pyarrow` is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
+Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
 
 ---
 
@@ -113,4 +139,4 @@ Please make sure to update tests as appropriate.
 
 
 Thank you!  
-_- Ante Tonkovic-Capin_
+Ante Tonkovic-Capin
