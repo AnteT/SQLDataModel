@@ -994,7 +994,17 @@ class SQLDataModel:
         Parameters:
             - `width` (int): The minimum width for each column.
 
+        Returns:
+            - `None`: Sets the `min_column_width` property.
+
+        Note:
+            - If `min_column_width` is set to a value below the current `max_column_width` property, the maximum width will override the minimum width.
+            - The minimum required width is `2`, when `min_column_width < 2`, `2` will be used regardless of the `width` provided.
+
+        ---
+
         Example:
+
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -1008,7 +1018,7 @@ class SQLDataModel:
         print(sdm.get_min_column_width) # 8
         ```
         """
-        self.min_column_width = width
+        self.min_column_width = width if width >= 2 else 2
 
     def get_max_column_width(self) -> int:
         """
@@ -1040,7 +1050,17 @@ class SQLDataModel:
         Parameters:
             - `width` (int): The maximum width for each column.
 
+        Returns:
+            - `None`: Sets the `max_column_width` property.
+
+        Note:
+            - If `max_column_width` is set to a value below the current `min_column_width` property, the maximum width will override the minimum width.
+            - The minimum required width is `2`, when `max_column_width < 2`, `2` will be used regardless of the `width` provided.
+
+        ---
+
         Example:
+
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -1051,7 +1071,7 @@ class SQLDataModel:
         sdm.set_max_column_width(20)
         ```
         """
-        self.max_column_width = width
+        self.max_column_width = width if width >= 2 else 2
 
     def get_column_alignment(self) -> str:
         """
@@ -3305,6 +3325,7 @@ class SQLDataModel:
             )
         min_column_width = self.min_column_width if min_column_width is None else min_column_width
         max_column_width = self.max_column_width if max_column_width is None else max_column_width
+        max_column_width = max_column_width if max_column_width >= 2 else 2 # minimum required width
         column_alignment = self.column_alignment if column_alignment is None else column_alignment
         column_alignment = None if column_alignment == 'dynamic' else '<' if column_alignment == 'left' else '^' if column_alignment == 'center' else '>'
         display_max_rows = self.row_count
