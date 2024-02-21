@@ -233,7 +233,7 @@ class SQLDataModel:
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
     
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:str=None, display_color:str=None, display_index:bool=True, display_float_precision:int=2):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2):
         """
         Initializes a new instance of `SQLDataModel`.
 
@@ -244,7 +244,7 @@ class SQLDataModel:
             - `display_max_rows` (int): The maximum number of rows to display. If not provided, all rows will be displayed.
             - `min_column_width` (int): The minimum width for each column. Default is 4.
             - `max_column_width` (int): The maximum width for each column. Default is 32.
-            - `column_alignment` (str): The alignment for columns ('left', 'center', 'right'). Default is None.
+            - `column_alignment` (str): The alignment for columns ('dynamic', 'left', 'center', 'right'). Default is 'dynamic'.
             - `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
             - `display_index` (bool): Whether to display row indices. Default is True.
             - `display_float_precision` (int): The number of decimal places to display for float values. Default is 2.
@@ -364,7 +364,7 @@ class SQLDataModel:
         self.display_max_rows = display_max_rows
         self.min_column_width = min_column_width
         self.max_column_width = max_column_width
-        self.column_alignment = column_alignment
+        self.column_alignment = column_alignment # 'dynamic','left','center','right'
         self.display_index = display_index
         self.display_float_precision = display_float_precision
         self.row_count = len(data) if had_data else 0
@@ -1055,12 +1055,15 @@ class SQLDataModel:
 
     def get_column_alignment(self) -> str:
         """
-        Returns the current `column_alignment` property value, `None` by default.
+        Returns the current `column_alignment` property value, `dynamic` by default.
 
         Returns:
             - `str`: The current value of the `column_alignment` property.
 
+        ---
+
         Example:
+
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -1070,29 +1073,34 @@ class SQLDataModel:
         # Get the current alignment value
         alignment = sdm.get_column_alignment()
 
-        # Output
-        print(alignment)  # None
+        # Outputs 'dynamic'
+        print(alignment)
         ```
+
+        ---
+
+        Related:
+            - :meth:`~SQLDataModel.SQLDataModel.set_column_alignment()`
+        
         """
         return self.column_alignment
     
-    def set_column_alignment(self, alignment:Literal['<', '^', '>']=None) -> None:
+    def set_column_alignment(self, alignment:Literal['dynamic', 'left', 'center', 'right']='dynamic') -> None:
         """
-        Set `column_alignment` as the default alignment behavior when `repr` or `print` is called.
+        Sets the default alignment behavior for `SQLDataModel` when `repr` or `print` is called, modifies `column_alignment` attribute.
+        Default behavior set to `'dynamic'`, which right-aligns numeric data types, left-aligns all other types, with headers matching value alignment.
         
-        Options:
-            - `column_alignment = None`: Default behavior, dynamically aligns columns based on value types.
-            - `column_alignment = '<'`: Left-align all column values.
-            - `column_alignment = '^'`: Center-align all column values.
-            - `column_alignment = '>'`: Right-align all column values.
-        
-        Default behavior aligns strings left, integers & floats right, with headers matching value alignment.
-
         Parameters:
-            - `alignment` (str | None): The alignment setting.
-
+            - `alignment` (str): The column alignment setting to use.
+                - `'dynamic'`: Default behavior, dynamically aligns columns based on column data types.
+                - `'left'`: Left-align all column values.
+                - `'center'`: Center-align all column values.
+                - `'right'`: Right-align all column values.
+        
         Raises:
-            - `TypeError`: If the provided alignment is not a valid f-string alignment formatter.
+            - `TypeError`: If the argument for alignment is not of type 'str'.
+            - `ValueError`: If the provided alignment is not one of 'dynamic', 'left', 'center', 'right'.
+
         ---
 
         Example:
@@ -1104,7 +1112,7 @@ class SQLDataModel:
         sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
         # Set to right-align
-        sdm.set_column_alignment('>')
+        sdm.set_column_alignment('right')
 
         # Output
         print(sdm)
@@ -1121,7 +1129,7 @@ class SQLDataModel:
         ```
         ```python
         # Set to left-align
-        sdm.set_column_alignment('<')
+        sdm.set_column_alignment('left')
 
         # Output
         print(sdm)
@@ -1136,13 +1144,27 @@ class SQLDataModel:
         │ 3 │ pat    │ douglas │  42    │  11.50  │
         └───┴────────┴─────────┴────────┴─────────┘        
         ```
+
+        ---
+
+        Notes:
+            - The options for 'left' and 'right' mirror the '<' and '>' f-string formatters, respectively.
+            - When using 'center', if the column contents cannot be perfectly centralized, the left side will be favored.
+            - Use 'dynamic' to return to default column alignment, which is right-aligned for numeric types and left-aligned for others.
+
+        ---
+
+        Related:
+            - :meth:`~SQLDataModel.SQLDataModel.get_column_alignment()`
+
         """
-        if alignment is None:
-            self.column_alignment = alignment
-            return
-        if (not isinstance(alignment, str)) or (alignment not in ('<', '^', '>')):
+        if not isinstance(alignment, str):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f'TypeError: invalid argument "{alignment}", please provide a valid f-string alignment formatter or set `alignment=None` to use default behaviour...')
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(alignment).__name__}', expected type for `alignment` to be type 'str', setting the alignment style to use")
+            )
+        if alignment not in ('dynamic', 'left', 'center', 'right'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{alignment}', argument for `alignment` must be one of 'dynamic', 'left', 'center', 'right' representing the column alignment setting, use 'dynamic' for default behaviour")
                 )
         self.column_alignment = alignment
         return
@@ -3160,16 +3182,20 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
         return [tuple([x[0] for x in res.description]),*res.fetchall()] if include_headers else res.fetchall()
     
-    def to_markdown(self, filename:str=None, include_index:bool=False, min_column_width:int=None, max_column_width:int=None, column_alignment:Literal['<', '^', '>']=None) -> str|None:
+    def to_markdown(self, filename:str=None, include_index:bool=False, min_column_width:int=None, max_column_width:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None) -> str|None:
         """
         Returns the current `SQLDataModel` as a markdown table literal if `filename` is None, otherwise writes the table to the provided file as markdown.
 
         Parameters:
             - `filename` (str, optional): The name of the file to write the Markdown content. If not provided, the Markdown content is returned as a string. Default is None.
             - `include_index` (bool, optional): Whether to include the index column in the Markdown output. Default is False.
-            - `min_column_width` (int, optional): The minimum column width for table cells. Default is current value set on attribute `self.min_column_width`.
-            - `max_column_width` (int, optional): The maximum column width for table cells. Default is current value set on attribute `self.max_column_width`.
-            - `column_alignment` (Literal['<', '^', '>'], optional): The alignment for table columns. Options are '<' (left-align), '^' (center-align), and '>' (right-align). Default is current value set on attribute `self.column_alignment`.
+            - `min_column_width` (int, optional): The minimum column width for table cells. Default is current value set on property `self.min_column_width`.
+            - `max_column_width` (int, optional): The maximum column width for table cells. Default is current value set on property `self.max_column_width`.
+            - `column_alignment` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is current value set on property `self.column_alignment`.
+                - `'dynamic'`: dynamically aligns column content, right for numeric types and left for remaining types.
+                - `'left'`: left-aligns all column content.
+                - `'center'`: center-aligns all column content preferring left on uneven splits.
+                - `'right'`: right-aligns all column content.
 
         Returns:
             - If `filename` is None, returns the Markdown table as a string.
@@ -3177,15 +3203,15 @@ class SQLDataModel:
 
         Raises:
             - `TypeError`: If the `filename` argument is not of type 'str', `include_index` argument is not of type 'bool', `min_column_width` or `max_column_width` argument is not of type 'int'.
-            - `ValueError`: If the `column_alignment` argument is provided and is not one of '<', '^', or '>'.
+            - `ValueError`: If the `column_alignment` argument is provided and is not one of 'dynamic', 'left', 'center', or 'right'.
             - `Exception`: If there is an OS related error encountered when opening or writing to the provided `filename`.
 
         Notes:
             - Markdown table alignment will follow the `SQLDataModel` instance alignment, set by `self.set_column_alignment()`:
-                - If `self.column_alignment = None`, table will be dynamically aligned with numeric columns right-aligned and all other types left-aligned
-                - If `self.column_alignment = '<'`, all columns will be left-aligned.
-                - If `self.column_alignment = '^'`, all columns will be center-aligned, favoring the left side when an even-split is not possible.
-                - If `self.column_alignment = '>'`, all columns will be right-aligned.
+                - If `self.column_alignment = 'dynamic'`, table will be dynamically aligned with numeric columns right-aligned and all other types left-aligned
+                - If `self.column_alignment = 'left'`, all columns will be left-aligned.
+                - If `self.column_alignment = 'center'`, all columns will be center-aligned, favoring the left side when an even-split is not possible.
+                - If `self.column_alignment = 'right'`, all columns will be right-aligned.
         ---
 
         #### Example 1: Returning Markdown Literal
@@ -3239,7 +3265,7 @@ class SQLDataModel:
         sdm = SQLDataModel(data=data, headers=headers)
 
         # Write the output to the file, center-aligning all columns
-        markdown_table = sdm.to_markdown(filename='Table.MD', column_alignment='^')        
+        markdown_table = sdm.to_markdown(filename='Table.MD', column_alignment='center')        
         ```
         
         Markdown file table content be rendered as:
@@ -3273,13 +3299,14 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(max_column_width).__name__}', expected `max_column_width` to be of type 'int' representing maximum column width for table cells")
             )   
-        if (column_alignment is not None) and (column_alignment not in ('<', '^', '>')):
+        if (column_alignment is not None) and (column_alignment not in ('dynamic', 'left', 'center', 'right')):
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of '<', '^', '>' representing column alignment for markdown output")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of 'dynamic', 'left', 'center', 'right' representing column alignment for markdown output")
             )
         min_column_width = self.min_column_width if min_column_width is None else min_column_width
         max_column_width = self.max_column_width if max_column_width is None else max_column_width
         column_alignment = self.column_alignment if column_alignment is None else column_alignment
+        column_alignment = None if column_alignment == 'dynamic' else '<' if column_alignment == 'left' else '^' if column_alignment == 'center' else '>'
         display_max_rows = self.row_count
         vertical_truncation_required = False
         max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
@@ -3625,15 +3652,48 @@ class SQLDataModel:
 
         Returns:
             - `None`
+
         ---
 
         Example:
         ```python
         from SQLDataModel import SQLDataModel
 
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Michael', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data=data, headers=headers)
+    
         # Write the model to text file
         sdm.to_text("output.txt", include_ts=True)
+
+        # File content generated:
         ```
+        
+        ```shell
+        February 21 2024 09:13:53 status:
+        ┌─────────┬──────┬─────────┐
+        │ Name    │  Age │  Height │
+        ├─────────┼──────┼─────────┤
+        │ John    │   30 │  175.30 │
+        │ Alice   │   28 │  162.00 │
+        │ Michael │   35 │  185.80 │
+        └─────────┴──────┴─────────┘
+        [3 rows x 3 columns]
+        ```
+
+        ---
+        
+        Notes:
+            - Text written to provided filename will reflect all properties and settings on the instance calling the method.
+            - Change the instance properties to adjust minimum and maximum column widths and how table truncation is decided.
+
         """
         contents = f"{datetime.datetime.now().strftime('%B %d %Y %H:%M:%S')} status:\n" + self.__repr__() if include_ts else self.__repr__()
         with open(filename, "w", encoding='utf-8') as file:
@@ -4715,6 +4775,7 @@ class SQLDataModel:
         check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
         check_width_bottom = (self.row_count-1) - check_width_top
         display_index = self.display_index
+        column_alignment = None if self.column_alignment == 'dynamic' else '<' if self.column_alignment == 'left' else '^' if self.column_alignment == 'center' else '>'
         display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         # header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
@@ -4754,7 +4815,7 @@ class SQLDataModel:
             table_dynamic_newline = """\n"""
         vconcat_column_separator = """|| ' │ ' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if display_index else ""
-        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=self.column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
         vertical_sep_chars = '⠒⠂' # '⠐⠒⠂'
         vertical_sep_fmt_str = vconcat_column_separator.join([f"""printf("%!{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
         if vertical_truncation_required:
@@ -4772,10 +4833,10 @@ class SQLDataModel:
         else:
             fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
-        if self.column_alignment is None:
+        if column_alignment is None: # dynamic alignment
             formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
-        else:
-            formatted_headers = [(f"""{col:{self.column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
+        else: # left, center, right alignment
+            formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
         table_cross_bar = """┌─""" + """─┬─""".join(["""─""" * header_length_dict[col] for col in display_headers]) + """─┐""" + table_bare_newline
         table_repr = "".join([table_repr, table_cross_bar])
         table_repr = "".join([table_repr, table_left_edge + """ │ """.join(formatted_headers) + table_right_edge + table_dynamic_newline])
