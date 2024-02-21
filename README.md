@@ -114,13 +114,14 @@ SQLDataModel supports various data formats and sources, including:
 - SQL database connections (PostgreSQL, SQLite, Oracle DB, SQL Server, TeraData)
 - CSV or delimited text files
 - JSON files or objects
+- Markdown files or formatted strings
 - Numpy arrays
 - Pandas dataframes
 - Parquet files
 - Python objects
 - Pickle files
 
-Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
+Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
 
 ---
 

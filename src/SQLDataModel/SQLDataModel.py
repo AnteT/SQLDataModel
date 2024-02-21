@@ -160,6 +160,7 @@ class SQLDataModel:
     sdm.to_csv("output.csv")
     sdm.to_html("output.html")
     sdm.to_json("output.json")
+    sdm.to_markdown("output.md")
     sdm.to_parquet("output.parquet")
     sdm.to_pickle("output.sdm")
     sdm.to_text("output.txt")
@@ -170,6 +171,7 @@ class SQLDataModel:
     sdm = SQLDataModel.from_dict(py_dict)
     sdm = SQLDataModel.from_html("output.html")
     sdm = SQLDataModel.from_json("output.json")
+    sdm = SQLDataModel.from_markdown("output.md")
     sdm = SQLDataModel.from_numpy(np_arr)
     sdm = SQLDataModel.from_pandas(pd_df)
     sdm = SQLDataModel.from_parquet("output.parquet")
@@ -184,6 +186,7 @@ class SQLDataModel:
         - CSV: extract from and and write to comma separated value files.
         - HTML: extract from the web, .html files, or from raw hmtl strings and write to .html files.
         - JSON: extract from .json files, JSON-like objects, and write to .json files or return JSON-like objects.
+        - Markdown: extract from .MD files, Markdown formatted string literals, and write to .MD files or return Markdown-formatted strings.
         - numpy: convert to and from `numpy.ndarray` objects, `numpy` package required or `ModuleNotFound` is raised.
         - pandas: convert to and from `pandas.DataFrame` objects, `pandas` package required or `ModuleNotFound` is raised.
         - parquet: extract from .parquet files and write to .parquet files, `pyarrow` package required or `ModuleNotFound` is raised.
@@ -504,18 +507,21 @@ class SQLDataModel:
         else:
             if alignment in ("<", ">"):
                 column = f'"{column}"' if dtype not in "bytes" else f"""'b'''||"{column}"||''''"""
-                numeric_discriminator = """ """ if dtype in ("int","float") else """"""
-                float_int_discriminator = f""".{float_precision}f""" if dtype == 'float' else """d""" if dtype == 'int' else """s"""
+                # numeric_discriminator = """ """ if dtype in ("int","float") else """"""
+                # float_int_discriminator = f""".{float_precision}f""" if dtype == 'float' else """d""" if dtype == 'int' else """s"""
+                numeric_discriminator = """ """ if dtype == 'float' else """"""
+                float_int_discriminator = f""".{float_precision}f""" if dtype == 'float' else """s"""
                 printf_alignment = "-" if alignment == "<" else ""
                 select_item_fmt = f"""CASE WHEN {column} IS NULL THEN printf('%{max_pad_width}s','') 
-                WHEN length(printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',{column})) <= {max_pad_width} THEN
-                printf('%.{max_pad_width}s', printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',{column})) 
-                ELSE substr(printf('%{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',{column}),1,({max_pad_width})-2)||'⠤⠄'END """                
+                WHEN length(printf('%!{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',{column})) <= {max_pad_width} THEN
+                printf('%!.{max_pad_width}s', printf('%!{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',{column})) 
+                ELSE substr(printf('%!{numeric_discriminator}{printf_alignment}{max_pad_width}{float_int_discriminator}',{column}),1,({max_pad_width})-2)||'⠤⠄'END """                
             else:
-                float_int_discriminator = f"""printf('% .{float_precision}f',"{column}")""" if dtype == 'float' else f"""printf('% d',"{column}")""" if dtype == 'int' else f"""printf('%s',"{column}")""" if dtype != 'bytes' else f"""printf('b''%!s''',"{column}")"""
+                # float_int_discriminator = f"""printf('% .{float_precision}f',"{column}")""" if dtype == 'float' else f"""printf('% d',"{column}")""" if dtype == 'int' else f"""printf('%s',"{column}")""" if dtype != 'bytes' else f"""printf('b''%!s''',"{column}")"""
+                float_int_discriminator = f"""printf('% .{float_precision}f',"{column}")""" if dtype == 'float' else f"""printf('%!s',"{column}")""" if dtype != 'bytes' else f"""printf('b''%!s''',"{column}")"""
                 select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s','')
                 WHEN length({float_int_discriminator}) <= {max_pad_width} THEN
-                printf("%-{max_pad_width}.{max_pad_width}s", /* change minus operator before max_pad_width to favor right alignment when pad width is odd number, right now set to favor left side */
+                printf("%!-{max_pad_width}.{max_pad_width}s", /* change minus operator before max_pad_width to favor right alignment when pad width is odd number, right now set to favor left side */
                 printf("%*s%s%*s", (({max_pad_width}-length({float_int_discriminator}))/2), "", {float_int_discriminator}, (({max_pad_width}-length({float_int_discriminator}))/2), ""))
                 ELSE substr({float_int_discriminator},1,({max_pad_width})-2)||'⠤⠄' END """                               
         return select_item_fmt 
@@ -2229,6 +2235,195 @@ class SQLDataModel:
         return cls(data=data, headers=headers)
 
     @classmethod
+    def from_markdown(cls, markdown_source: str, table_identifier:int=1, **kwargs) -> SQLDataModel:
+        """
+        Creates a new `SQLDataModel` instance from the provided Markdown source file or raw content.
+        
+        If `markdown_source` is a valid system path, the markdown file will be parsed. 
+        Otherwise, the provided string will be parsed as raw markdown.
+
+        Parameters:
+            - `markdown_source` (str): The Markdown source file path or raw content.
+            - `table_identifier` (int, optional): The index position of the markdown table to extract. Default is 1.
+            - `**kwargs`: Additional keyword arguments to be passed to the `SQLDataModel` constructor.
+
+        Returns:
+            - `SQLDataModel`: The SQLDataModel instance created from the parsed markdown table.
+
+        Raises:
+            - `TypeError`: If the `markdown_source` argument is not of type 'str', or if the `table_identifier` argument is not of type 'int'.
+            - `ValueError`: If the `table_identifier` argument is less than 1, or if no tables are found in the markdown source.
+            - `IndexError`: If the `table_identifier` is greater than the number of tables found in the markdown source.
+
+        Note:
+            - Markdown tables are identified based on the presence of pipe characters (`|`) defining table cells.
+            - The `table_identifier` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
+            - Escaped pipe characters (`\\|`) within the markdown are replaced with the HTML entity reference '&vert;' for proper parsing.
+            - The provided `kwargs` are passed to the `SQLDataModel` constructor for additional parameters to the instance returned.
+
+        ---
+
+        Example with raw markdown content:
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Raw markdown literal
+        markdown_content = '''
+        | Item          | Price | # In stock |
+        |---------------|-------|------------|
+        | Juicy Apples  | 1.99  | 37         |
+        | Bananas       | 1.29  | 52         |
+        | Pineapple     | 3.15  | 14         |
+        '''
+
+        # Create the model from the markdown
+        sdm = SQLDataModel.from_markdown(markdown_content)
+
+        # View result
+        print(sdm)
+
+        ```
+        ```shell
+        ┌──────────────┬───────┬────────────┐
+        │ Item         │ Price │ # In stock │
+        ├──────────────┼───────┼────────────┤
+        │ Juicy Apples │ 1.99  │ 37         │
+        │ Bananas      │ 1.29  │ 52         │
+        │ Pineapple    │ 3.15  │ 14         │
+        └──────────────┴───────┴────────────┘
+        [3 rows x 3 columns]
+        ```
+        
+        ---
+
+        Example with markdown file:
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Load markdown content from file
+        markdown_file_path = 'path/to/markdown_file.md'
+
+        # Create the model using the path
+        sdm = SQLDataModel.from_markdown(markdown_file_path)
+        ```
+        
+        ---
+
+        Example specifying table identifier:
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Raw markdown literal with multiple tables
+        markdown_content = '''
+        ### Markdown with a Table
+
+        | Header A | Header B |
+        |----------|----------|
+        | Value A1 | Value B1 |
+        | Value A2 | Value B2 |
+
+        ### Then another Table
+
+        | Header X | Header Y |
+        |----------|----------|
+        | Value X1 | Value Y1 |
+        | Value X2 | Value Y2 |
+
+        '''
+        # Create the model from the 2nd table
+        sdm = SQLDataModel.from_markdown(markdown_content, table_identifier=2)
+
+        # View output
+        print(sdm)
+
+        ```
+        ```shell
+        ┌──────────┬──────────┐
+        │ Header X │ Header Y │
+        ├──────────┼──────────┤
+        │ Value X1 │ Value Y1 │
+        │ Value X2 │ Value Y2 │
+        └──────────┴──────────┘
+        [2 rows x 2 columns]
+        ```
+
+        ---
+
+        Table indicies:    
+            - In the last example, `sdm` will contain the data from the second table found in the markdown content.
+            - Tables are indexed starting from index 1 at the top of the markdown content, incremented as they are found.
+            - Markdown parsing stops after the table specified at `table_identifier` is found without parsing the remaining content.
+            
+        """
+        if not isinstance(markdown_source, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(markdown_source).__name__}', expected `markdown_source` to be of type 'str', representing a markdown file path or markdown string literal")
+            )
+        if not isinstance(table_identifier, int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', expected `table_identifier` to be of type 'int' representing the index position of the markdown table")
+            ) 
+        if table_identifier < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_identifier}', argument for `table_identifier` must be an integer index for the table beginning at index '1' ")
+            )
+        if os.path.exists(markdown_source):
+            try:
+                with open(markdown_source, 'r') as f:
+                    markdown_source = f.read()
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `markdown_source`")
+                ) from None  
+        table = None
+        in_table = False
+        prev_line = None
+        found_table = False
+        tables_found = 0
+        table_column_count = -1
+        pattern1, pattern2 = r'\|-*\|', r'-+\|-+\|-+'
+        markdown_source = markdown_source.replace('\\|','&vert;') # replace escaped pipes with wrapped unicode representation
+        for md_line in markdown_source.splitlines():
+            if in_table:
+                row = [cell.strip() for cell in md_line.strip().strip('|').split('|')]
+                if len(row) == table_column_count:
+                    table.append(row)
+                else:
+                    tables_found += 1
+                    if tables_found == table_identifier:
+                        found_table = True
+                        break
+                    table = None
+                    in_table = False
+            if not in_table:
+                if re.search(pattern1,md_line.replace(':','')) or re.search(pattern2,md_line.replace(':','')):
+                    in_table = True
+                    table_column_count = len(md_line.strip().strip('|').split('|'))
+                    headers = [cell.strip() for cell in prev_line.strip().strip('|').split('|')]
+                    table = [headers]
+            prev_line = md_line
+        # Check if last table ended on last line of content 
+        if in_table:
+            tables_found += 1
+            if tables_found == table_identifier:
+                found_table = True            
+        if not found_table:
+            if (tables_found > 0) and (table_identifier > tables_found):
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: found '{tables_found}' tables in `markdown_source` at positions '1..{tables_found}', however none were found at provided `table_identifier` index '{table_identifier}'")
+                    )
+            else:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat("ValueError: no tables found in `markdown_source`, confirm provided target is a valid markdown file or literal with table elements")
+                    )
+        if len(table) == 1:
+            return cls(headers=table[0], **kwargs)
+        return cls(data=table[1:],headers=table[0], **kwargs)
+
+    @classmethod
     def from_numpy(cls, array, headers:list[str]=None, **kwargs) -> SQLDataModel:
         """
         Returns a `SQLDataModel` object created from the provided numpy `array`.
@@ -2749,6 +2944,7 @@ class SQLDataModel:
         Raises:
             - `TypeError`: If `filename` is not a valid string when specified or if `style_params` is not a dictionary when specified.
             - `OSError`: If encountered while trying to open and write the HTML to the file.
+
         ---
 
         Example:
@@ -2841,6 +3037,8 @@ class SQLDataModel:
             - `TypeError`: If `filename` is not of type 'str'.
             - `Exception`: If there is an OS related error encountered when opening or writing to the provided `filename`.
 
+        ---
+
         Example:
 
         ```python
@@ -2895,6 +3093,7 @@ class SQLDataModel:
         ,{'id': 5, 'color': 'yellow', 'value': '#ff0', 'notes': None}
         ,{'id': 5, 'color': 'black', 'value': '#000', 'notes': None}]
         ```
+        
         ---
 
         Notes:
@@ -2961,6 +3160,169 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
         return [tuple([x[0] for x in res.description]),*res.fetchall()] if include_headers else res.fetchall()
     
+    def to_markdown(self, filename:str=None, include_index:bool=False, min_column_width:int=None, max_column_width:int=None, column_alignment:Literal['<', '^', '>']=None) -> str|None:
+        """
+        Returns the current `SQLDataModel` as a markdown table literal if `filename` is None, otherwise writes the table to the provided file as markdown.
+
+        Parameters:
+            - `filename` (str, optional): The name of the file to write the Markdown content. If not provided, the Markdown content is returned as a string. Default is None.
+            - `include_index` (bool, optional): Whether to include the index column in the Markdown output. Default is False.
+            - `min_column_width` (int, optional): The minimum column width for table cells. Default is current value set on attribute `self.min_column_width`.
+            - `max_column_width` (int, optional): The maximum column width for table cells. Default is current value set on attribute `self.max_column_width`.
+            - `column_alignment` (Literal['<', '^', '>'], optional): The alignment for table columns. Options are '<' (left-align), '^' (center-align), and '>' (right-align). Default is current value set on attribute `self.column_alignment`.
+
+        Returns:
+            - If `filename` is None, returns the Markdown table as a string.
+            - If `filename` is provided, writes the Markdown table to the specified file and returns None.
+
+        Raises:
+            - `TypeError`: If the `filename` argument is not of type 'str', `include_index` argument is not of type 'bool', `min_column_width` or `max_column_width` argument is not of type 'int'.
+            - `ValueError`: If the `column_alignment` argument is provided and is not one of '<', '^', or '>'.
+            - `Exception`: If there is an OS related error encountered when opening or writing to the provided `filename`.
+
+        Notes:
+            - Markdown table alignment will follow the `SQLDataModel` instance alignment, set by `self.set_column_alignment()`:
+                - If `self.column_alignment = None`, table will be dynamically aligned with numeric columns right-aligned and all other types left-aligned
+                - If `self.column_alignment = '<'`, all columns will be left-aligned.
+                - If `self.column_alignment = '^'`, all columns will be center-aligned, favoring the left side when an even-split is not possible.
+                - If `self.column_alignment = '>'`, all columns will be right-aligned.
+        ---
+
+        #### Example 1: Returning Markdown Literal
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Michael', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data=data, headers=headers)
+
+        # Generate markdown table literal
+        markdown_table = sdm.to_markdown()
+
+        # View markdown output
+        print(markdown_table)
+
+        ```
+        ```shell
+
+        | Name    |  Age |  Height |
+        |:--------|-----:|--------:|
+        | John    |   30 |  175.30 |
+        | Alice   |   28 |  162.00 |
+        | Michael |   35 |  185.80 |
+        ```
+        
+        ---
+        
+        #### Example 2: Write the contents to a Markdown File
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Michael', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data=data, headers=headers)
+
+        # Write the output to the file, center-aligning all columns
+        markdown_table = sdm.to_markdown(filename='Table.MD', column_alignment='^')        
+        ```
+        
+        Markdown file table content be rendered as:
+
+        | Name    |  Age |  Height |
+        |:--------|-----:|--------:|
+        | John    |   30 |  175.30 |
+        | Alice   |   28 |  162.00 |
+        | Michael |   35 |  185.80 |
+
+        ---
+
+        Note:
+            - All markdown output will contain the alignment characters ':' as determined by the `column_alignment` attribute or parameter.
+            - Any exception encountered during file read or writing operations is caught and reraised, see related `SQLDataModel.from_markdown()`.
+            
+        """
+        if not isinstance(filename, str) and filename is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', expected `filename` to be of type 'str' representing a valid file path to write markdown")
+            )
+        if not isinstance(include_index, bool):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(include_index).__name__}', expected `include_index` to be of type 'bool' representing whether index should be included in markdown output")
+            )
+        if (not isinstance(min_column_width, int) and (min_column_width is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(min_column_width).__name__}', expected `min_column_width` to be of type 'int' representing minimum column width for table cells")
+            )        
+        if (not isinstance(max_column_width, int) and (max_column_width is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(max_column_width).__name__}', expected `max_column_width` to be of type 'int' representing maximum column width for table cells")
+            )   
+        if (column_alignment is not None) and (column_alignment not in ('<', '^', '>')):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of '<', '^', '>' representing column alignment for markdown output")
+            )
+        min_column_width = self.min_column_width if min_column_width is None else min_column_width
+        max_column_width = self.max_column_width if max_column_width is None else max_column_width
+        column_alignment = self.column_alignment if column_alignment is None else column_alignment
+        display_max_rows = self.row_count
+        vertical_truncation_required = False
+        max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
+        check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
+        check_width_bottom = (self.row_count-1) - check_width_top
+        display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
+        header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
+        header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if include_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
+        headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
+        headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
+        length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
+        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}
+        md_repr = """""" # big things...
+        table_left_edge = """| """
+        table_right_edge = """ |"""
+        table_bare_newline = """\n"""
+        table_dynamic_newline = """\n"""
+        vconcat_column_separator = """|| ' | ' ||"""
+        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if include_index else ""
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' |{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
+        formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
+        if column_alignment is None:
+            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
+            md_repr_cross = "".join(("""|""","""|""".join([f"""{'-' if header_py_dtype_dict[col] in ('int','float') else ':'}{'-'*header_length_dict[col]}{':' if header_py_dtype_dict[col] in ('int','float') else '-'}""" for col in display_headers]),f"""|{table_bare_newline}"""))
+        else:
+            formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
+            md_repr_cross = "".join(("""|""","""|""".join([f"""{':' if column_alignment in ('^','<') else '-'}{'-'*header_length_dict[col]}{':' if column_alignment in ('^','>') else '-'}""" for col in display_headers]),f"""|{table_bare_newline}"""))
+        md_repr = "".join([md_repr, table_left_edge + """ | """.join(formatted_headers) + table_right_edge + table_dynamic_newline])
+        md_repr = "".join([md_repr, md_repr_cross])
+        md_repr = "".join([md_repr,*[row[0] for row in formatted_response]])
+        if filename is not None:
+            try:
+                with open(filename, "w", encoding='utf-8') as f:
+                    f.write(md_repr)
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write markdown")
+                ) from None
+        else:
+            return md_repr   
+
     def to_numpy(self, include_index:bool=False, include_headers:bool=False) -> _np.ndarray:
         """
         Converts `SQLDataModel` to a NumPy `ndarray` object of shape (rows, columns).
@@ -2976,6 +3338,7 @@ class SQLDataModel:
         ---
         
         Example:
+
         ```python
         import numpy
         from SQLDataModel import SQLDataModel
@@ -4354,6 +4717,7 @@ class SQLDataModel:
         display_index = self.display_index
         display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
+        # header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
         headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{self.min_column_width}),{self.max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
