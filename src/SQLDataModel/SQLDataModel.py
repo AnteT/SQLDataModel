@@ -510,7 +510,6 @@ class SQLDataModel:
                 if dtype == 'float':
                     select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{dyn_left_right}{max_pad_width}s', '') ELSE printf('%{dyn_left_right}.{max_pad_width}s', printf('%{dyn_left_right}{max_pad_width}.{float_precision}f',"{column}")) END""" # does the most precision then treats as string to trim
                 elif dtype == 'bytes':
-                    # select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}",1,({max_pad_width})-3)||'''⠤⠄' END) """
                     select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}"||'''',1,{max_pad_width}-2)||'⠤⠄' END) """
                 elif dtype == 'index':
                     select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
@@ -521,13 +520,21 @@ class SQLDataModel:
                 if dtype == 'index':
                     select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
                 else:
-                    col_discriminator = f"""printf('%.{float_precision}f',"{column}")""" if dtype == 'float' else f"""printf('%!s',"{column}")""" if dtype != 'bytes' else f"""printf('b''%!s''',"{column}")"""
-                    select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s','')
-                    WHEN length({col_discriminator}) <= {max_pad_width} THEN
-                    printf("%!-{max_pad_width}.{max_pad_width}s", /* change minus operator before max_pad_width to favor right alignment when pad width is odd number, right now set to favor left side */
-                    printf("%*s%s%*s", (({max_pad_width}-length({col_discriminator}))/2), "", {col_discriminator}, (({max_pad_width}-length({col_discriminator}))/2), ""))
-                    ELSE substr({col_discriminator},1,({max_pad_width})-2)||'⠤⠄' END """          
-        return select_item_fmt 
+                    # Negative numbers favor right side, positive the left when no even split is possible
+                    ON_UNEVEN_SPLIT_INT = 1 # break left
+                    ON_UNEVEN_SPLIT_FLOAT = 1 # break left
+                    ON_UNEVEN_SPLIT_REMAINING = 1 # break left
+                    if dtype == 'float':
+                        # col_discriminator = f"""(CASE WHEN LENGTH(printf('%.{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_FLOAT} /* [Favor left (-) or right (+) on uneven split] */ - length(printf('%.{float_precision}f',"{column}")))/2),printf('%.{float_precision}f',"{column}")) ELSE SUBSTR(printf('%.{float_precision}f',"{column}"),1,{max_pad_width}-2) || '⠤⠄' END)"""
+                        col_discriminator = f"""(CASE WHEN LENGTH(printf('%.{float_precision}f',"{column}")) <= {max_pad_width} THEN (printf('%*.{float_precision}f',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_FLOAT} /* [Favor left (-) or right (+) on uneven split] */ -length(printf('%.{float_precision}f',"{column}")))/2),"{column}")) ELSE SUBSTR(printf('%.{float_precision}f',"{column}"),1,{max_pad_width}-2) || '⠤⠄' END)"""
+                    elif dtype == 'int':
+                        col_discriminator = f"""(CASE WHEN LENGTH("{column}") <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_INT} /* [Favor left (-) or right (+) on uneven split] */ -length("{column}"))/2),"{column}") ELSE SUBSTR(printf('%!s',"{column}"),1,{max_pad_width}-2)||'⠤⠄' END)"""                        
+                    elif dtype == 'bytes':
+                        col_discriminator = f"""(CASE WHEN LENGTH("{column}")+3 <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}-length("{column}"))/2),('b'''||"{column}"||'''')) ELSE SUBSTR('b'''||"{column}"||'''',1,{max_pad_width}-2)||'⠤⠄' END)"""
+                    else:
+                        col_discriminator = f"""(CASE WHEN LENGTH("{column}") <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_REMAINING} /* [Favor left (-) or right (+) on uneven split] */ -length("{column}"))/2),"{column}") ELSE SUBSTR(printf('%!s',"{column}"),1,{max_pad_width}-2)||'⠤⠄' END)"""
+                    select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s',"") ELSE printf('%!-{max_pad_width}.{max_pad_width}s',{col_discriminator}) END"""
+        return select_item_fmt
 
     @staticmethod
     def alias_duplicates(headers:list) -> Generator:
