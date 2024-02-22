@@ -498,7 +498,7 @@ class SQLDataModel:
             elif dtype == 'int':
                 select_item_fmt = f"""printf('% {max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
             elif dtype == 'bytes':
-                select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}",1,({max_pad_width})-3)||'''⠤⠄' END) """
+                select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
             elif dtype == 'index':
                 select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
             else:
