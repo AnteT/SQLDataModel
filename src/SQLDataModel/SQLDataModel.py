@@ -160,6 +160,7 @@ class SQLDataModel:
     sdm.to_csv("output.csv")
     sdm.to_html("output.html")
     sdm.to_json("output.json")
+    sdm.to_latex("output.tex")
     sdm.to_markdown("output.md")
     sdm.to_parquet("output.parquet")
     sdm.to_pickle("output.sdm")
@@ -171,6 +172,7 @@ class SQLDataModel:
     sdm = SQLDataModel.from_dict(py_dict)
     sdm = SQLDataModel.from_html("output.html")
     sdm = SQLDataModel.from_json("output.json")
+    sdm = SQLDataModel.from_latex("output.tex")
     sdm = SQLDataModel.from_markdown("output.md")
     sdm = SQLDataModel.from_numpy(np_arr)
     sdm = SQLDataModel.from_pandas(pd_df)
@@ -186,6 +188,7 @@ class SQLDataModel:
         - CSV: extract from and and write to comma separated value files.
         - HTML: extract from the web, .html files, or from raw hmtl strings and write to .html files.
         - JSON: extract from .json files, JSON-like objects, and write to .json files or return JSON-like objects.
+        - LaTeX: extract from .tex files, LaTeX formatted string literals, and write to .tex files or return LaTeX-formatted strings.
         - Markdown: extract from .MD files, Markdown formatted string literals, and write to .MD files or return Markdown-formatted strings.
         - numpy: convert to and from `numpy.ndarray` objects, `numpy` package required or `ModuleNotFound` is raised.
         - pandas: convert to and from `pandas.DataFrame` objects, `pandas` package required or `ModuleNotFound` is raised.
@@ -526,7 +529,6 @@ class SQLDataModel:
                     ON_UNEVEN_SPLIT_BYTES = 0 # break arbitrarily
                     ON_UNEVEN_SPLIT_REMAINING = 1 # break left
                     if dtype == 'float':
-                        # col_discriminator = f"""(CASE WHEN LENGTH(printf('%.{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_FLOAT} /* [Favor left (-) or right (+) on uneven split] */ - length(printf('%.{float_precision}f',"{column}")))/2),printf('%.{float_precision}f',"{column}")) ELSE SUBSTR(printf('%.{float_precision}f',"{column}"),1,{max_pad_width}-2) || '⠤⠄' END)"""
                         col_discriminator = f"""(CASE WHEN LENGTH(printf('%.{float_precision}f',"{column}")) <= {max_pad_width} THEN (printf('%*.{float_precision}f',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_FLOAT} /* [Favor left (-) or right (+) on uneven split] */ - length(printf('%.{float_precision}f',"{column}")))/2),"{column}")) ELSE SUBSTR(printf('%.{float_precision}f',"{column}"),1,{max_pad_width}-2) || '⠤⠄' END)"""
                     elif dtype == 'int':
                         col_discriminator = f"""(CASE WHEN LENGTH("{column}") <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_INT} /* [Favor left (-) or right (+) on uneven split] */ - length("{column}"))/2),"{column}") ELSE SUBSTR(printf('%!s',"{column}"),1,{max_pad_width}-2)||'⠤⠄' END)"""                        
@@ -2291,6 +2293,183 @@ class SQLDataModel:
         return cls(data=data, headers=headers)
 
     @classmethod
+    def from_latex(cls, latex_source:str, table_identifier:int=1, encoding:str='utf-8', **kwargs) -> SQLDataModel:
+        """
+        Creates a new `SQLDataModel` instance from the provided LaTeX file or raw literal.
+        
+        Parameters:
+            - `latex_source` (str): The LaTeX source containing one or more LaTeX tables.
+                - If `latex_source` is a valid system filepath, source will be treated as a `.tex` file and parsed.
+                - If `latex_source` is not a valid filepath, source will be parsed as raw LaTeX literal.
+            - `table_identifier` (int, optional): The index position of the LaTeX table to extract. Default is 1.
+            - `encoding` (str, optional): The file encoding to use if source is a LaTex filepath. Default is 'utf-8';.
+            - `**kwargs`: Additional keyword arguments to be passed to the `SQLDataModel` constructor.
+
+        Returns:
+            - `SQLDataModel`: The `SQLDataModel` instance created from the parsed LaTeX table.            
+
+        Raises:
+            - `TypeError`: If the `latex_source` argument is not of type 'str', or if the `table_identifier` argument is not of type 'int'.
+            - `ValueError`: If the `table_identifier` argument is less than 1, or if no tables are found in the LaTeX source.
+            - `IndexError`: If the `table_identifier` is greater than the number of tables found in the LaTeX source.
+
+        Note:
+            - LaTeX tables are identified based on the presence of tabular environments: `\\begin{tabular}...\\end{tabular}`.
+            - The `table_identifier` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
+            - The provided `kwargs` are passed to the `SQLDataModel` constructor for additional parameters to the instance returned.
+
+        ---
+
+        #### Example with raw LaTeX content:
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Raw LaTeX literal
+        latex_content = '''
+        \\begin{tabular}{|l|r|r|}
+        \\hline
+            {Name} & {Age} & {Height} \\\\
+        \\hline
+            John    &   30 &  175.30 \\\\
+            Alice   &   28 &  162.00 \\\\
+            Michael &   35 &  185.80 \\\\
+        \\hline
+        \\end{tabular}
+        '''
+
+        # Create the model from the LaTeX
+        sdm = SQLDataModel.from_latex(latex_content)
+
+        # View result
+        print(sdm)
+
+        ```
+        ```shell
+        ┌─────────┬──────┬─────────┐
+        │ Name    │  Age │  Height │
+        ├─────────┼──────┼─────────┤
+        │ John    │   30 │  175.30 │
+        │ Alice   │   28 │  162.00 │
+        │ Michael │   35 │  185.80 │
+        └─────────┴──────┴─────────┘
+        [3 rows x 3 columns]
+        ```
+        
+        ---
+
+        #### Example with LaTeX file:
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Load LaTeX content from file
+        latex_file = 'path/to/latex/file.tex'
+
+        # Create the model using the path
+        sdm = SQLDataModel.from_latex(latex_file)
+        ```
+        
+        ---
+
+        #### Example specifying table identifier:
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Raw LaTeX literal with multiple tables
+        latex_content = '''
+        %% LaTeX with a Table
+
+        \\begin{tabular}{|l|l|}
+        \\hline
+            {Header A} & {Header B} \\\\
+        \\hline
+            Value A1 & Value B1 \\\\
+            Value A2 & Value B2 \\\\
+        \\hline
+        \\end{tabular}
+
+        %% Then another Table
+
+        \\begin{tabular}{|l|l|}
+        \\hline
+            {Header X} & {Header Y} \\\\
+        \\hline
+            Value X1 & Value Y1 \\\\
+            Value X2 & Value Y2 \\\\
+        \\hline
+        \\end{tabular}
+        '''
+
+        # Create the model from the 2nd table
+        sdm = SQLDataModel.from_latex(latex_content, table_identifier=2)
+
+        # View output
+        print(sdm)
+
+        ```
+        ```shell
+        ┌──────────┬──────────┐
+        │ Header X │ Header Y │
+        ├──────────┼──────────┤
+        │ Value X1 │ Value Y1 │
+        │ Value X2 │ Value Y2 │
+        └──────────┴──────────┘
+        [2 rows x 2 columns]
+        ```
+
+        ---
+
+        Table indicies:    
+            - In the last example, `sdm` will contain the data from the second table found in the LaTeX content.
+            - Tables are indexed starting from index 1 at the top of the LaTeX content, incremented as they are found.
+            - LaTeX parsing stops after the table specified at `table_identifier` is found without parsing the remaining content.            
+
+        """
+        if not isinstance(latex_source, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(latex_source).__name__}', expected `latex_source` to be of type 'str', representing a LaTeX filepath or LaTeX formatted string literal")
+            )
+        if not isinstance(table_identifier, int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', expected `table_identifier` to be of type 'int' representing the index position of the LaTeX table")
+            ) 
+        if table_identifier < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_identifier}', argument for `table_identifier` must be an integer index for the table beginning at index '1' ")
+            )
+        if os.path.exists(latex_source):
+            try:
+                with open(latex_source, 'r', encoding=encoding) as f:
+                    latex_source = f.read()
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `latex_source`")
+                ) from None          
+        tables = re.findall(r'\\begin{tabular}.*?\\end{tabular}', latex_source, re.DOTALL)
+        if not tables:
+            raise ValueError(
+                SQLDataModel.ErrorFormat("ValueError: no LaTeX tables found in `latex_source`, confirm correct filepath or that provided content contains valid tabular data")
+            )
+        if table_identifier > len(tables):
+            raise IndexError(
+                SQLDataModel.ErrorFormat(f"IndexError: found '{len(tables)}' LaTeX tables in `latex_source`, however none were found at provided `table_identifier` index '{table_identifier}'")
+            )
+        target_table = tables[table_identifier - 1]
+        target_table = target_table.replace(r'\\','')
+        table = []
+        for line in target_table.split('\n'):
+            line = line.strip()
+            if line.startswith(r'\hline') or line.startswith(r'\begin') or line.startswith(r'\end'):
+                continue
+            row = [cell.strip().replace('{','').replace('}','') for cell in line.split('&')]
+            table.append(row)
+        if len(table) == 1:
+            return cls(headers=table[0], **kwargs)
+        return cls(data=table[1:], headers=table[0], **kwargs)
+
+    @classmethod
     def from_markdown(cls, markdown_source: str, table_identifier:int=1, **kwargs) -> SQLDataModel:
         """
         Creates a new `SQLDataModel` instance from the provided Markdown source file or raw content.
@@ -3174,6 +3353,210 @@ class SQLDataModel:
                 ) from None
         else:
             return json_data
+
+    def to_latex(self, filename:str=None, include_index:bool=False, bold_headers:bool=False, min_column_width:int=None, max_column_width:int=None, format_output_as:Literal['table', 'document']='table', column_alignment:Literal['left', 'center', 'right', 'dynamic']=None) -> str | None:
+        """
+        Returns the current `SQLDataModel` as a LaTeX table string if `filename` is None, otherwise writes the table to the provided file as a LaTeX document.
+
+        Parameters:
+            - `filename` (str, optional): The name of the file to write the LaTeX content. If not provided, the LaTeX content is returned as a string. Default is None.
+            - `include_index` (bool, optional): Whether to include the index column in the LaTeX output. Default is False.
+            - `bold_headers` (bool, optional): Whether the headers should be bolded in the LaTeX table. Default is False.
+            - `min_column_width` (int, optional): The minimum column width for table cells. Default is current value set on attribute `self.min_column_width`.
+            - `max_column_width` (int, optional): The maximum column width for table cells. Default is current value set on attribute `self.max_column_width`.
+            - `format_output_as` (Literal['table', 'document']), optional): Whether the output should be formatted as a LaTeX table or as a standalone document. Default is 'table'.
+            - `column_alignment` (Literal['left', 'center', 'right', 'dynamic'], optional): The alignment for table columns. Default is current value set on attribute `self.column_alignment`.
+
+        Returns:
+            - `str`: If `filename` is None, returns the LaTeX table as a string.
+            - `None`: If `filename` is provided, writes the LaTeX table to the specified file and returns None.
+
+        Raises:
+            - `TypeError`: If the `filename` argument is not of type 'str', `include_index` argument is not of type 'bool', `min_column_width` or `max_column_width` argument is not of type 'int'.
+            - `ValueError`: If `format_output_as` is not one of 'table', 'document', or `column_alignment` provided and is not one of 'left', 'center', 'right', 'dynamic'.
+            - `Exception`: If there is an OS related error encountered when opening or writing to the provided `filename`.
+
+        Notes:
+            - LaTeX output format that is generated can be set by `format_output_as` which provides one of two formats:
+                - `'table'`: Output formatted as insertable table, beginning and ending with LaTeX `\\begin{table}` and `\\end{table}` respectively.
+                - `'document'`: Output formatted as standalone document, beginning and ending with LaTeX `\\begin{document}` and `\\end{document}` respectively.
+            - LaTeX table alignment will follow the `SQLDataModel` instance alignment, set by `self.set_column_alignment()`:
+                - `'dynamic'`: Dynamically aligns column content, right for numeric types and left for remaining types.
+                - `'left'`: Left-aligns all column content, equivalent to LaTeX column format: `|l|`.
+                - `'center'`: Center-aligns all column content preferring left on uneven splits, equivalent to LaTeX column format: `|c|`.
+                - `'right'`: Right-aligns all column content, equivalent to LaTeX column format: `|r|`.
+            - The LaTeX rows generated will use `dynamic` alignment regardless of `column_alignment` provided, this will not affect the rendered alignment but will maintain consistent format without affecting the actual alignment rendered by LaTeX.
+
+        ---
+
+        #### Example 1: Returning LaTeX Literal
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Michael', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data=data, headers=headers)
+
+        # Generate LaTeX table literal
+        latex_output = sdm.to_latex()
+
+        # View LaTeX output
+        print(latex_output)
+
+        ```
+        ```shell
+        
+        \\begin{tabular}{|l|r|r|}
+        \\hline
+            {Name} & {Age} & {Height} \\
+        \\hline
+            John    &   30 &  175.30 \\
+            Alice   &   28 &  162.00 \\
+            Michael &   35 &  185.80 \\
+        \\hline
+        \\end{tabular}
+        ```
+
+        ---
+
+        #### Example 2: Write the contents to a LaTeX File
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Michael', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data=data, headers=headers)
+
+        # Write the output to the file, formatting the output as a proper LaTeX document
+        latex_table = sdm.to_latex(filename='Table.tex', format_output_as='document')      
+
+        # File `Table.tex` generated as a standalone document containing table:
+        ```
+        `Table.tex`:
+        ```latex
+        \\documentclass{article}
+        \\begin{document}
+        \\begin{table}[h]
+        \\centering
+        \\begin{tabular}{|l|r|r|}
+        \\hline
+            {Name} & {Age} & {Height} \\
+        \\hline
+            John    &   30 &  175.30 \\
+            Alice   &   28 &  162.00 \\
+            Michael &   35 &  185.80 \\
+        \\hline
+        \\end{tabular}
+        \\end{table}
+        \\end{document}
+        ```
+
+        ---
+
+        Note:
+            - A `\\centering` command is included in the LaTeX output by default regardless of alignments specified.
+            - LaTeX headers and rows are indented by four spaces to keep with conventional table syntax and to distinguish the table data from commands.
+
+        """
+        if not isinstance(filename, str) and filename is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', expected `filename` to be of type 'str' representing a valid file path to write LaTeX")
+            )
+        if not isinstance(include_index, bool):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(include_index).__name__}', expected `include_index` to be of type 'bool' representing whether index should be included in LaTeX output")
+            )
+        if (not isinstance(min_column_width, int) and (min_column_width is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(min_column_width).__name__}', expected `min_column_width` to be of type 'int' representing minimum column width for table cells")
+            )        
+        if (not isinstance(max_column_width, int) and (max_column_width is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(max_column_width).__name__}', expected `max_column_width` to be of type 'int' representing maximum column width for table cells")
+            )   
+        if format_output_as not in ('table', 'document'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{format_output_as}', expected `format_output_as` to be either 'table' or 'document' representing format for LaTeX output")
+            )        
+        if (column_alignment is not None) and (column_alignment not in ('left', 'center', 'right', 'dynamic')):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', expected `column_alignment` to be one of 'left', 'center', 'right', 'dynamic' representing column alignment for LaTeX output")
+            )
+        min_column_width = self.min_column_width if min_column_width is None else min_column_width
+        max_column_width = self.max_column_width if max_column_width is None else max_column_width
+        column_alignment = self.column_alignment if column_alignment is None else column_alignment
+        display_max_rows = self.row_count
+        latex_bold = """\\textbf""" if bold_headers else """"""
+        vertical_truncation_required = False
+        max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
+        check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
+        check_width_bottom = (self.row_count-1) - check_width_top
+        display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
+        header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
+        header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if include_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
+        headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
+        headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
+        length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
+        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}
+        latex_repr = """""" # big things...
+        latex_column_marker = """|"""
+        table_bare_newline = """\n"""
+        table_hline = """\\hline"""
+        latex_begin_document_format = """\\documentclass{article}\n\\begin{document}"""
+        latex_end_document_format = """\\end{document}"""
+        latex_begin_table_format = """\\begin{table}[h]\n\\centering"""
+        latex_end_table_format = """\\end{table}"""
+        if column_alignment != 'dynamic':
+            latex_align_char = column_alignment[:1]
+            latex_column_template = latex_column_marker.join([latex_align_char for _ in display_headers])
+        else:
+            latex_column_template = latex_column_marker.join(['r' if header_py_dtype_dict[col] in ('int','float') else 'l' for col in display_headers])
+        latex_begin_tabular_format = f"""\\begin{{tabular}}{{{latex_column_marker}{latex_column_template}{latex_column_marker}}}{table_bare_newline}{table_hline}"""
+        table_left_edge = """    """
+        table_right_edge = """ \\\\"""
+        vconcat_column_separator = """|| ' & ' ||"""
+        latex_end_tabular = """\\end{tabular}"""
+        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if include_index else ""
+        # NOTE: LaTeX table output set to dynamic alignment on this line regardless of column_alignment argument passed, this provides better formatted output and the alignment is changed when rendered by LaTeX to the values provided in the tabular declaration, which are influenced by the column_alignment argument provided
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=None)}""" for col in display_headers if col != self.sql_idx])
+        fetch_fmt_stmt = f"""select '{table_left_edge}'||{fetch_idx}{header_fmt_str}||'{table_right_edge}{table_bare_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
+        formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
+        formatted_headers = ' & '.join([f"""{latex_bold}{{{col}}}""" if len(col) <= header_length_dict[col] else f"""{latex_bold}{{{col[:(header_length_dict[col]-2)]}⠤⠄}}""" if col != self.sql_idx else f"""{latex_bold}{{idx}}""" for col in display_headers])
+        latex_repr = "".join([latex_repr, latex_begin_tabular_format, table_bare_newline])
+        latex_repr = "".join([latex_repr, table_left_edge, formatted_headers, table_right_edge, table_bare_newline])
+        latex_repr = "".join([latex_repr, table_hline, table_bare_newline])
+        latex_repr = "".join([latex_repr,*[row[0] for row in formatted_response]])
+        latex_repr = "".join([latex_repr, table_hline, table_bare_newline, latex_end_tabular])
+        latex_repr = f"""{latex_begin_table_format}\n{latex_repr}\n{latex_end_table_format}"""
+        if format_output_as == 'document':
+            latex_repr = f"""{latex_begin_document_format}\n{latex_repr}\n{latex_end_document_format}"""
+        if filename is not None:
+            try:
+                with open(filename, "w", encoding='utf-8') as f:
+                    f.write(latex_repr)
+            except Exception as e:
+                raise Exception(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write LaTeX")
+                ) from None
+        else:
+            return latex_repr 
 
     def to_list(self, include_index:bool=True, include_headers:bool=False) -> list[tuple]:
         """
@@ -4810,7 +5193,7 @@ class SQLDataModel:
         check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
         check_width_bottom = (self.row_count-1) - check_width_top
         display_index = self.display_index
-        column_alignment = None if self.column_alignment == 'dynamic' else '<' if self.column_alignment == 'left' else '^' if self.column_alignment == 'center' else '>'
+        column_alignment = None if self.column_alignment == 'dynamic' else '<' if self.column_alignment == 'left' else '^' if self.column_alignment == 'center' else '>' if self.column_alignment == 'right' else None
         display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         # header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}

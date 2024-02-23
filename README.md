@@ -114,6 +114,7 @@ SQLDataModel supports various data formats and sources, including:
 - SQL database connections (PostgreSQL, SQLite, Oracle DB, SQL Server, TeraData)
 - CSV or delimited text files
 - JSON files or objects
+- LaTeX files or formatted strings
 - Markdown files or formatted strings
 - Numpy arrays
 - Pandas dataframes
