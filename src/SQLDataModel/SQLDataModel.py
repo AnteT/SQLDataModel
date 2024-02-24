@@ -1838,35 +1838,116 @@ class SQLDataModel:
         return cls([[fill_value for _ in range(n_cols)] for _ in range(n_rows)])
         
     @classmethod
-    def from_csv(cls, csv_file:str, encoding:str="Latin1", delimeter:str=',', quotechar:str='"', headers:list[str] = None, **kwargs) -> SQLDataModel:
+    def from_csv(cls, csv_source:str, encoding:str = "Latin1", delimiters:str = ', \t;|:', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
         """
-        Returns a new `SQLDataModel` from the provided CSV file.
+        Returns a new `SQLDataModel` generated from the provided CSV source, which can be either a file path or a raw delimited string.
 
         Parameters:
-            - `csv_file` (str): The path to the CSV file.
-            - `encoding` (str, optional): The encoding used to decode the CSV file. Default is 'Latin1'.
-            - `delimiter` (str, optional): The delimiter used in the CSV file. Default is ','.
+            - `csv_source` (str): The path to the CSV file or a raw delimited string.
+            - `encoding` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
+            - `delimiters` (str, optional): Possible delimiters. Default is ` `, `\\t`, `;`, `|`, `:` or `,` (space, tab, semicolon, pipe, colon or comma).
             - `quotechar` (str, optional): The character used for quoting fields. Default is '"'.
-            - `headers` (list[str], optional): List of column headers. If None, the first row of the CSV file is assumed to contain headers.
-            - `*args`, `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
+            - `headers` (List[str], optional): List of column headers. If None, the first row of the CSV source is assumed to contain headers.
+            - `**kwargs`: Additional keyword arguments to be passed to the SQLDataModel constructor.
 
         Returns:
-            `SQLDataModel`: The SQLDataModel object created from the provided CSV file.
+            `SQLDataModel`: The SQLDataModel object created from the provided CSV source.
 
-        Example:
+        Raises:
+            - `ValueError`: If no delimiter is found in `csv_source` or if parsing with delimiter does not yield valid tabular data.
+            - `Exception`: If an error occurs while attempting to read from or process the provided CSV source.
+
+        ---
+
+        Examples:
+
+        #### From CSV File
         ```python
         from SQLDataModel import SQLDataModel
 
-        # CSV file to import
-        csvfile = "/user/home/example.csv"
+        # CSV file path or raw CSV string
+        csv_source = "/path/to/data.csv"
 
-        # Create the model using  the file
-        sdm = SQLDataModel.from_csv(csvfile, headers=['ID', 'Name', 'Value'])
+        # Create the model using the CSV file, providing custom headers
+        sdm = SQLDataModel.from_csv(csv_source, headers=['ID', 'Name', 'Value'])
         ```
+        
+        ---
+
+        #### From Delimited Source
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Space delimited data
+        data = '''
+        A B C
+        1a 1b 1c
+        2a 2b 2c
+        3a 3b 3c
+        '''
+
+        # Create the model
+        sdm = SQLDataModel.from_csv(data)
+
+        # View result
+        print(sdm)
+
+        ```
+        ```shell
+        ┌──────┬──────┬──────┐
+        │ A    │ B    │ C    │
+        ├──────┼──────┼──────┤
+        │ 1a   │ 1b   │ 1c   │
+        │ 2a   │ 2b   │ 2c   │
+        │ 3a   │ 3b   │ 3c   │
+        └──────┴──────┴──────┘
+        [3 rows x 3 columns]
+        ```
+
+        ---
+
+        Note:
+            - If `csv_source` is delimited by characters other than those specified, provide the delimiter to `delimiters`.
+            - If `headers` are provided, the first row parsed from source will be the first row in the table and not discarded.
+            - This method is called by `SQLDataModel.from_text()` when source data appears to be delimited instead of SQLDataModel's `__repr__()`
+
         """
-        with open(csv_file, encoding=encoding) as csvfile:
-            tmp_all_rows = tuple(list(row) for row in csv.reader(csvfile,delimiter=delimeter,quotechar=quotechar))
-        return cls(tmp_all_rows[1:],tmp_all_rows[0] if headers is None else headers, **kwargs)   
+        if os.path.exists(csv_source):
+            try:
+                with open(csv_source, encoding=encoding) as csvfile:
+                    dialect = csv.Sniffer().sniff(csvfile.read(1024), delimiters=delimiters)
+                    csvfile.seek(0)
+                    delimiter = dialect.delimiter
+                    tmp_all_rows = list(csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar))
+            except Exception as e:
+                raise Exception(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `csv_source`")
+                ) from None
+        else:
+            csv_source = csv_source.strip()
+            try:
+                dialect = csv.Sniffer().sniff(csv_source, delimiters=delimiters)
+                delimiter = dialect.delimiter
+                if delimiter is None:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: delimiter not found, ensure `csv_source` contains tabular data delimited by one of ` `, `\t`, `;`, `|`, `:` or `,`" )
+                    )
+                tmp_all_rows = list(csv.reader(csv_source.splitlines(), delimiter=delimiter, quotechar=quotechar))
+            except ValueError as e:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
+                ) from None
+            except Exception as e:
+                raise Exception(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse the provided raw CSV string")
+                ) from None
+        if not tmp_all_rows:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: no delimited tabular data found in provided `csv_source`, ensure content contains delimited tabular data")
+            )
+        if headers is None:
+            headers = tmp_all_rows.pop(0)
+        return cls(data=tmp_all_rows, headers=headers, **kwargs)
     
     @classmethod
     def from_data(cls, data:list[list], headers:list[str]=None, **kwargs) -> SQLDataModel:
@@ -2966,6 +3047,107 @@ class SQLDataModel:
             )
         headers = [x[0] for x in sql_c.description]
         return cls(data=data, headers=headers, dtypes=dtypes, **kwargs)
+
+    @classmethod
+    def from_text(cls, text_source:str, table_identifier:int=1, encoding:str='utf-8', headers:list[str]=None, **kwargs) -> SQLDataModel:
+        """
+        Returns a new `SQLDataModel` generated from the provided `text_source`, either as a file if the path exists, or from a raw string literal if the path does not exist.
+
+        Parameters:
+            - `text_source` (str): The path to the tabular data file or a raw string literal containing tabular data.
+            - `table_identifier` (int, optional): The index position of the target table within the text source. Default is 1.
+            - `encoding` (str, optional): The encoding used to decode the text source if it is a file. Default is 'utf-8'.
+            - `headers` (list, optional): The headers to use for the provided data. Default is to use the first row.
+            - `**kwargs`: Additional keyword arguments to be passed to the SQLDataModel constructor.
+
+        Returns:
+            - `SQLDataModel`: The SQLDataModel object created from the provided tabular data.
+
+        Raises:
+            - `TypeError`: If `text_source` is not a string or `table_identifier` is not an integer.
+            - `ValueError`: If no tabular data is found in `text_source`, if parsing fails to extract valid tabular data, or if the provided `table_identifier` is out of range.
+            - `IndexError`: If the provided `table_identifier` exceeds the number of tables found in `text_source`.
+            - `Exception`: If an error occurs while attempting to read from or process the provided `text_source`.
+
+        ---
+
+        Examples:
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Text source containing tabular data
+        text_source = "/path/to/tabular_data.txt"
+
+        # Create the model using the text source
+        sdm = SQLDataModel.from_text(text_source, table_identifier=2)
+        ```
+
+        ---
+
+        Note:
+            - This method is made for parsing `SQLDataModel` formatted text, such as the kind generated with `print(sdm)` or the output created by the inverse method `to_text()`
+            - For parsing other delimited tabular data, this method calls the related `SQLDataModel.from_csv()` method, which parses tabular data constructed with common delimiters.
+
+        """
+        if not isinstance(text_source, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(text_source).__name__}', expected `text_source` to be of type 'str', representing a tabular data filepath or tabular string literal")
+            )
+        if not isinstance(table_identifier, int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', expected `table_identifier` to be of type 'int' representing the index position of the target table")
+            ) 
+        if table_identifier < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_identifier}', argument for `table_identifier` must be an integer index for the table beginning at index '1' ")
+            )
+        if os.path.exists(text_source):
+            try:
+                with open(text_source, 'r', encoding=encoding) as f:
+                    text_source = f.read()
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `text_source`")
+                ) from None                  
+        tables = re.findall(r'┌.*?┘', text_source, re.DOTALL)
+        if not tables:
+            try:
+                return SQLDataModel.from_csv(text_source,headers=headers)
+            except Exception:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat("ValueError: no tabular data found in `text_source`, confirm correct filepath or that provided content contains valid tabular data")
+                )
+        if table_identifier > len(tables):
+            raise IndexError(
+                SQLDataModel.ErrorFormat(f"IndexError: found '{len(tables)}' tables in `text_source`, however none were found at provided `table_identifier` index '{table_identifier}'")
+            )
+        target_table = tables[table_identifier - 1]
+        if '│' in target_table:
+            delimiter = '│'
+        else:
+            try:
+                delimiter = csv.Sniffer().sniff(text_source).delimiter
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse delimiter from `text_source`")
+                ) from None 
+        table = []
+        for row in target_table.strip().split('\n'):
+            if delimiter in row:
+                row = [cell.strip() for cell in row.strip().strip(delimiter).strip().split(delimiter)]
+                table.append(row)
+        if len(table) < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: failed to parse tabular data from provided `text_source`, confirm target contains valid delimiters in a tabular format")
+            )
+        if not table[0][0]: # does not have sdm index, keep all elements
+            table = [x[1:] for x in table]
+        if len(table) == 1:
+            return cls(headers=table[0], **kwargs)
+        if headers is None:
+            headers = table.pop(0)        
+        return cls(data=table, headers=headers, **kwargs)
 
     @classmethod
     def get_supported_sql_connections(cls) -> tuple:
