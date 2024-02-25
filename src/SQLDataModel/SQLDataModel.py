@@ -2056,7 +2056,7 @@ class SQLDataModel:
         Parameters:
             - `json_source` (str | list | dict): The JSON source. If a string, it can represent a file path or a JSON-like object.
             - `encoding` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
-            - `**kwargs`: Additional keyword arguments to pass to the file reading operation.
+            - `**kwargs`: Additional keyword arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
             - `SQLDataModel`: A new SQLDataModel instance created from the JSON source.
@@ -2065,9 +2065,11 @@ class SQLDataModel:
             - `TypeError`: If the `json_source` argument is not of type 'str', 'list', or 'dict'.
             - `OSError`: If related exception occurs when trying to open and read from `json_source` as file path.
 
+        Examples:
+
         ---
 
-        Example 1: From JSON String
+        #### Example 1: From JSON String Literal
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2110,7 +2112,7 @@ class SQLDataModel:
 
         ---
 
-        Example 2: From JSON-like Object
+        #### Example 2: From JSON-like Object
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2149,7 +2151,7 @@ class SQLDataModel:
 
         ---
 
-        Example 3: From JSON file
+        #### Example 3: From JSON file
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2193,7 +2195,7 @@ class SQLDataModel:
         if isinstance(json_source, str):
             if os.path.exists(json_source):
                 try:
-                    with open(json_source, 'r', encoding=encoding, **kwargs) as f:
+                    with open(json_source, 'r', encoding=encoding) as f:
                         json_source = f.read()
                 except Exception as e:
                     raise Exception (
@@ -2201,7 +2203,7 @@ class SQLDataModel:
                     ) from None    
             json_source = json.loads(json_source)
         data_dict = SQLDataModel.flatten_json(json_source)
-        return cls.from_dict(data_dict)
+        return cls.from_dict(data_dict, **kwargs)
 
     @classmethod
     def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, **kwargs) -> SQLDataModel:
@@ -2232,9 +2234,11 @@ class SQLDataModel:
             - `ValueError`: If no <table> elements are found or if the targeted `table_identifier` is not found.
             - `OSError`: Related exceptions that may be raised when `html_source` is considered a file path.
 
+        Examples:
+
         ---
 
-        From URL Example:
+        #### Example 1: From Website URL:
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2266,7 +2270,7 @@ class SQLDataModel:
 
         ---
 
-        From Local File Example: 
+        #### Example 2: From Local File 
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2295,7 +2299,7 @@ class SQLDataModel:
         
         ---
 
-        From Raw HTML Example:
+        #### Example 3: From Raw HTML
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2754,17 +2758,56 @@ class SQLDataModel:
 
         Raises:
             - `ModuleNotFoundError`: If the required package `numpy` is not found.
+            - `TypeError`: If `array` argument is not of type 'numpy.ndarray'.
+            - `DimensionError`: If `array.ndim != 2` representing a (row, column) tabular array.
 
-        Example:
+        Examples:
+
+        ---
+
         ```python
         import numpy as np
-        sdm_obj = SQLDataModel.from_numpy(np.array([[1, 'a'], [2, 'b'], [3, 'c']]), headers=['Number', 'Letter'])
+        from SQLDataModel import SQLDataModel
+
+        # Sample array
+        arr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+        # Create the model with custom headers
+        sdm = SQLDataModel.from_numpy(arr, headers=['Col A', 'Col B', 'Col C])
+
+        # View output
+        print(sdm)
         ```
+        ```shell
+        ┌───────┬───────┬───────┐
+        │ Col A │ Col B │ Col C │
+        ├───────┼───────┼───────┤
+        │     1 │     2 │     3 │
+        │     4 │     5 │     6 │
+        │     7 │     8 │     9 │
+        └───────┴───────┴───────┘
+        [3 rows x 3 columns]
+        ```
+
+        ---
+
+        Note:
+            - Numpy array must have '2' dimensions, the first representing the rows, and the second the columns.
+            - If no headers are provided, default headers will be generated as 'col_N' where N represents the column integer index.
+
         """
         if not _has_np:
             raise ModuleNotFoundError(
                 SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use the `from_numpy()` method""")
                 )
+        if (obj_type := type(array).__name__) != 'ndarray':
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{obj_type}', argument for `array` must be of type 'ndarray'")
+            )
+        if (obj_ndim := array.ndim) != 2:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid dimension '{obj_ndim}', argument for `array` must have 2 dimensions representing `(rows, columns)`")
+            )
         return cls(data=array.tolist(),headers=headers, **kwargs)
 
     @classmethod
@@ -2782,18 +2825,37 @@ class SQLDataModel:
 
         Raises:
             - `ModuleNotFoundError`: If the required package `pandas` is not found.
+            - `TypeError`: If `df` argument is not of type 'pandas.DataFrame'.
 
-        Example:
+        Examples:
+
+        ---
+
         ```python
         import pandas as pd
+        from SQLDataModel import SQLDataModel
 
-        sdm = SQLDataModel.from_pandas(pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']}))
+        # Create a pandas DataFrame
+        df = pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']})
+        
+        # Create the model
+        sdm = SQLDataModel.from_pandas(df)
         ```
+
+        ---
+
+        Note:
+            - If `headers` are not provided, the existing pandas columns will be used as the new `SQLDataModel` headers.
+            
         """
         if not _has_pd:
             raise ModuleNotFoundError(
                 SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use the `from_pandas()` method""")
                 )
+        if (obj_type := type(df).__name__) != 'DataFrame':
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{obj_type}', argument for `df` must be of type 'DataFrame'")
+            )        
         data = [x[1:] for x in df.itertuples()]
         headers = df.columns.tolist() if headers is None else headers
         return cls(data=data,headers=headers, **kwargs)
