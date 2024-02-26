@@ -3,7 +3,7 @@ import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json
 from collections.abc import Generator, Callable, Iterator
 from collections import namedtuple
 from ast import literal_eval
-from typing import Literal
+from typing import Literal, Any
 from pathlib import Path
 import urllib.request
 
@@ -1950,25 +1950,160 @@ class SQLDataModel:
         return cls(data=tmp_all_rows, headers=headers, **kwargs)
     
     @classmethod
-    def from_data(cls, data:list[list], headers:list[str]=None, **kwargs) -> SQLDataModel:
+    def from_data(cls, data:Any=None, **kwargs) -> SQLDataModel:
         """
-        Returns a new `SQLDataModel` from the provided data.
+        Convenience method to infer the source of `data` and return the appropriate constructor method to generate a new `SQLDataModel` instance.
 
         Parameters:
-            - `data` (list[list]): The data to populate the SQLDataModel.
-            - `headers` (list[str], optional): List of column headers. If None, no headers are used.
-            - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
+            - `data` (Any, required): The input data from which to create the SQLDataModel object. Constructor methods are called according `type(data)`:
+                - `dict`: If all values are python datatypes, passed as `dtypes` to constructor, otherwise as `data` to `SQLDataModel.from_dict()`.
+                - `list`: If single dimension, passed as `headers` to constructor, otherwise as `data` containing list of lists.
+                - `tuple`: Same as with list, if single dimension passed as `headers`, otherwise as `data` containing tuple of lists.
+                - `numpy.ndarray`: passed to `SQLDataModel.from_numpy()` as array data.
+                - `pandas.DataFrame`: passed to `SQLDataModel.from_pandas()` as dataframe data.
+                - `str`: If starts with 'http', passed to `SQLDataModel.from_html()` as url, otherwise based on extension if valid system filepath:
+                    - `'.csv'`: passed to `SQLDataModel.from_csv()` as csv source data.
+                    - `'.html'`: passed to `SQLDataModel.from_html()` as html source data.
+                    - `'.json'`: passed to `SQLDataModel.from_json()` as json source data.
+                    - `'.md'`: passed to `SQLDataModel.from_markdown()` as markdown source data.
+                    - `'.parquet'`: passed to `SQLDataModel.from_parquet()` as parquet source data.
+                    - `'.pkl'`: passed to `SQLDataModel.from_pickle()` as pickle source data.
+                    - `'.sdm'`: passed to `SQLDataModel.from_pickle()` as pickle source data.
+                    - `'.tex'`: passed to `SQLDataModel.from_latex()` as latex source data.
+                    - `'.tsv'`: passed to `SQLDataModel.from_csv()` as csv source data.
+                    - `'.txt'`: passed to `SQLDataModel.from_text()` as text source data.
+            - `**kwargs`: Additional keyword arguments to be passed to the constructor method, see init method for arguments.
 
         Returns:
-            `SQLDataModel`: The SQLDataModel object created from the provided data.
+            - `SQLDataModel`: The SQLDataModel object created from the provided data.
 
-        Example:
+        Raises:
+            - `TypeError`: If the type of `data` is not supported.
+            - `ValueError`: If the file extension is not found, unsupported, or if the SQL extension is not supported.
+            - `Exception`: If an OS related error occurs during file read operations if `data` is a filepath.
+
+        Examples:
+
+        ---
+            
         ```python
-        data = [[1, 'John', 30], [2, 'Jane', 25], [3, 'Bob', 40]]
-        sdm = SQLDataModel.from_data(data, headers=['ID', 'Name', 'Age'])
+        from SQLDataModel import SQLDataModel
+
+        # Create SQLDataModel from a CSV file
+        sdm_csv = SQLDataModel.from_data("data.csv", headers=['ID', 'Name', 'Value'])
+
+        # Create SQLDataModel from a dictionary
+        sdm_dict = SQLDataModel.from_data({"ID": int, "Name": str, "Value": float})
+
+        # Create SQLDataModel from a list of tuples
+        sdm_list = SQLDataModel.from_data([(1, 'Alice', 100.0), (2, 'Bob', 200.0)], headers=['ID', 'Name', 'Value'])
+
+        # Create SQLDataModel from raw string literal
+        delimited_literal = '''
+        A, B, C
+        1, 2, 3
+        4, 5, 6
+        7, 8, 9
+        '''
+
+        # Create the model by having correct constructor inferred
+        sdm = SQLDataModel.from_data(delimited_literal)
+
+        # View output
+        print(sdm)
         ```
+        ```shell
+        ┌────┬────┬────┐
+        │ A  │ B  │ C  │
+        ├────┼────┼────┤
+        │ 1  │ 2  │ 3  │
+        │ 4  │ 5  │ 6  │
+        │ 7  │ 8  │ 9  │
+        └────┴────┴────┘
+        [3 rows x 3 columns]
+        ```
+        ---
+
+        Note:
+            - This method attempts to infer the correct method to call based on `data` argument, if one cannot be inferred an exception is raised.
+            - For data type specific implementation or examples, see related method for appropriate data type.
+
         """
-        return cls(data, headers, **kwargs)
+        if not isinstance(data, (list, tuple, str, dict)) and (type(data).__name__ not in ('ndarray','DataFrame')):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(data).__name__}', argument for `data` must be one of 'list', 'tuple', 'str', 'dict' or a supported external object type")
+            )
+        supported_ext = ('.csv','.html','.json','.md','.parquet','.pkl','.sdm','.tex','.tsv','.txt')
+        ext_operation = {
+             '.csv': SQLDataModel.from_csv
+            ,'.html': SQLDataModel.from_html
+            ,'.json': SQLDataModel.from_json
+            ,'.md': SQLDataModel.from_markdown
+            ,'.parquet': SQLDataModel.from_parquet
+            ,'.pkl': SQLDataModel.from_pickle
+            ,'.sdm': SQLDataModel.from_pickle
+            ,'.tex': SQLDataModel.from_latex
+            ,'.tsv': SQLDataModel.from_csv
+            ,'.txt': SQLDataModel.from_text
+        }
+        if isinstance(data, dict):
+            if all(value in ('None','int','float','str','bytes','date','datetime','NoneType','bool') for value in data.values()):
+                return SQLDataModel(dtypes=data, **kwargs)
+            else:
+                return SQLDataModel.from_dict(data, **kwargs)            
+        elif isinstance(data, (list,tuple)):
+            if len(data) == 1:
+                return SQLDataModel(headers=data, **kwargs)
+            else:
+                return SQLDataModel(data=data, **kwargs)
+        elif isinstance(data, str):
+            if data.startswith('http'):
+                return ext_operation['.html'](data, **kwargs)
+            if os.path.exists(data):
+                ext = os.path.splitext(data)[-1]
+                if not ext:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: file extension not found, files without extensions cannot be parsed without further information")
+                    )
+                if ext.lower() not in supported_ext:
+                    if ext.lower() in ('.db', '.sqlite'):
+                        raise ValueError(
+                            SQLDataModel.ErrorFormat(f"ValueError: sql extension '{ext}' not supported by `from_data()`, use specialized method `from_sql()` instead")
+                        )                        
+                    else:
+                        raise ValueError(
+                            SQLDataModel.ErrorFormat(f"ValueError: unsupported file extension '{ext}', see documentation for a list of supported file types")
+                        )
+                return ext_operation[ext.lower()](data, **kwargs)
+            html_pattern = r'</table>'
+            latex_pattern = r'\\begin\{tabular\}'
+            markdown_pattern = r'\| *(:?-{3,}:? *\|)+'
+            json_pattern = r'\{.*\}'
+            if bool(re.search(html_pattern, data)):
+                return ext_operation['.html'](data, **kwargs)
+            elif bool(re.search(latex_pattern, data)):
+                return ext_operation['.tex'](data, **kwargs)
+            elif bool(re.search(markdown_pattern, data)):
+                return ext_operation['.md'](data, **kwargs)
+            elif bool(re.search(json_pattern, data)):
+                try:
+                    json.loads(data)
+                    is_json = True
+                except Exception:
+                    is_json = False
+                if is_json:
+                    return ext_operation['.json'](data, **kwargs)
+            return SQLDataModel.from_text(data, **kwargs)
+        else:
+            arg_type = type(data).__name__
+            if arg_type == 'ndarray':
+                return SQLDataModel.from_numpy(data, **kwargs)
+            elif arg_type == 'DataFrame':
+                return SQLDataModel.from_pandas(data, **kwargs)
+            else:
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: unsupported type '{arg_type}', current supported external types are 'numpy.ndarray' or 'pandas.DataFrame' objects")
+                )
     
     @classmethod
     def from_dict(cls, data:dict|list, **kwargs) -> SQLDataModel:
@@ -2846,7 +2981,7 @@ class SQLDataModel:
 
         Note:
             - If `headers` are not provided, the existing pandas columns will be used as the new `SQLDataModel` headers.
-            
+
         """
         if not _has_pd:
             raise ModuleNotFoundError(
@@ -3175,7 +3310,7 @@ class SQLDataModel:
         tables = re.findall(r'┌.*?┘', text_source, re.DOTALL)
         if not tables:
             try:
-                return SQLDataModel.from_csv(text_source,headers=headers)
+                return SQLDataModel.from_csv(text_source,headers=headers, **kwargs)
             except Exception:
                 raise ValueError(
                     SQLDataModel.ErrorFormat("ValueError: no tabular data found in `text_source`, confirm correct filepath or that provided content contains valid tabular data")
