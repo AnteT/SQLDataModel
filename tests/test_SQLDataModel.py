@@ -324,6 +324,18 @@ def test_to_from_csv():
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i]     
 
+@pytest.mark.core
+def test_dtypes():
+    input_data, input_headers = [['abcdefg', 12_345, b'bytes', 3.14159, datetime.date(1992,11,22), datetime.datetime(1978,1,3,7,23,59)]], ['strings','integers','binary','floats','date','datetime']
+    input_dtypes = {input_headers[i]:type(input_data[0][i]).__name__ for i in range(len(input_headers))}
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    output_dtypes = sdm.get_column_dtypes()
+    assert input_dtypes == output_dtypes
+    input_row = input_data[0]
+    output_row = sdm[0,:].data()
+    for i in range(len(input_row)):
+        assert type(input_row[i]) == type(output_row[i])
+
 def test_to_from_pandas():
     input_headers, input_data = ['A','B','C','D'], [(1, 'foo', 4.5, datetime.date(1999, 11, 9)),(2, 'bar', 6.7, datetime.date(2024, 8, 24)),(3, 'baz', 8.9, datetime.date(1985, 1, 13))]
     df_in = pd.DataFrame(data=input_data,columns=input_headers)
