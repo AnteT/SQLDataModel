@@ -6810,7 +6810,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("date","datetime") else f"""{dtype}(trim("{column}"))"""
+        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("date","datetime","bytes") else f"""{dtype}(trim("{column}"))""" if dtype != "bytes" else f"""CASE WHEN (SUBSTR("{column}",1,2) = 'b''' AND SUBSTR("{column}",-1,1) ='''') THEN SUBSTR("{column}",3,LENGTH("{column}")-4) ELSE "{column}" END """
         update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
         self.execute_transaction(update_col_sql)
         
