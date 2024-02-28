@@ -10,6 +10,7 @@ import urllib.request
 from .exceptions import DimensionError, SQLProgrammingError
 from .ANSIColor import ANSIColor
 from .StandardDeviation import StandardDeviation
+from .JSONEncoder import DataTypesEncoder
 from .HTMLParser import HTMLParser
 
 try:
@@ -2336,11 +2337,11 @@ class SQLDataModel:
                         json_source = f.read()
                 except Exception as e:
                     raise Exception (
-                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `json_source`")
                     ) from None    
             json_source = json.loads(json_source)
         data_dict = SQLDataModel.flatten_json(json_source)
-        return cls.from_dict(data_dict, **kwargs)
+        return SQLDataModel.from_dict(data_dict, **kwargs)
 
     @classmethod
     def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, **kwargs) -> SQLDataModel:
@@ -3727,7 +3728,7 @@ class SQLDataModel:
         if filename is not None:
             try:
                 with open(filename, "w") as f:
-                    json.dump(json_data, f, **kwargs)
+                    json.dump(json_data, f, cls=DataTypesEncoder, **kwargs)
             except Exception as e:
                 raise Exception (
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write json")
