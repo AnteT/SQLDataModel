@@ -237,7 +237,7 @@ class SQLDataModel:
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
     
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=4):
         """
         Initializes a new instance of `SQLDataModel`.
 
@@ -3086,31 +3086,61 @@ class SQLDataModel:
 
         Parameters:
             - `filename` (str, optional): The name of the pickle file to load. If None, the current directory will be scanned for the default filename. Default is None.
-            - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
+            - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor, these will override the properties loaded from `filename`.
 
         Returns:
-            `SQLDataModel`: The SQLDataModel object created from the loaded pickle file.
+            - `SQLDataModel`: The SQLDataModel object created from the loaded pickle file.
 
         Raises:
+            - `TypeError`: If filename is provided but is not of type 'str' representing a valid pickle filepath.
             - `FileNotFoundError`: If the provided filename could not be found or does not exist.
+        
+        Examples:
 
-        Example:
+        ---
+
         ```python
-        sdm_obj = SQLDataModel.from_pickle("data.sdm")
+        from SQLDataModel import SQLDataModel
+
+        headers = ['Name','Age','Sex']
+        data = [('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
+
+        # Create the model with sample data
+        sdm = SQLDataModel(data=data, headers=headers)
+
+        # Filepath
+        pkl_file = 'people.sdm'
+
+        # Save the model
+        sdm.to_pickle(filename=pkl_file)
+
+        # Load it back from file
+        sdm = SQLDataModel.from_pickle(filename=pkl_file)
         ```
+
+        ---
+
+        Notes:
+            - All data, headers, data types and display properties will be saved when pickling.
+            - Any additional `kwargs` provided will override those saved in the pickled model.
         """
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
-        if (filename is not None) and (len(filename.split(".")) <= 1):
-            print(SQLDataModel.WarnFormat(f"SQLDataModelWarning: file extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename..."))
-            filename += '.sdm'
-        if not Path(filename).is_file():
-            raise FileNotFoundError(
-                SQLDataModel.ErrorFormat(f"FileNotFoundError: file not found, provided filename \"{filename}\" could not be found, please ensure the filename exists in a valid path...")
+        else:
+            if not isinstance(filename, str):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid pickle filepath")
                 )
-        with open(filename, 'rb') as f:
-            tot_raw = pickle.load(f) # Tuple of Tuples raw data
-            return cls(tot_raw[1:],headers=tot_raw[0], **kwargs)
+        try:
+            with open(filename, 'rb') as f:
+                sdm_deserialized = pickle.load(f)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                SQLDataModel.ErrorFormat(f"FileNotFoundError: no such file or directory '{filename}', please ensure the filename exists and is a valid path")
+                ) from None            
+        if kwargs:
+            sdm_deserialized.update(**kwargs)
+        return cls(**sdm_deserialized)
  
     @classmethod
     def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, dtypes:dict=None, **kwargs) -> SQLDataModel:
@@ -4321,20 +4351,21 @@ class SQLDataModel:
 
     def to_pickle(self, filename:str=None) -> None:
         """
-        Save the `SQLDataModel` instance to the specified `filename`.
-
-        By default, the name of the invoking Python file will be used.
+        Save the `SQLDataModel` instance to the specified `filename` as a pickle object.
 
         Parameters:
-            - `filename` (str, optional): The name of the file to which the instance will be saved. If not provided,
-            the invoking Python file's name with a ".sdm" extension will be used.
+            - `filename` (str, optional): The file name to save the model to. If None, the invoking Python file's name with a ".sdm" extension will be used.
 
         Returns:
-            `None`
+            - `None`
+
+        Raises:
+            - `TypeError`: If filename is provided but is not of type 'str' representing a valid pickle filepath.        
+
+        Examples:
         
         ---
 
-        Example:
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -4358,15 +4389,25 @@ class SQLDataModel:
         # This way the same data can be recreated later by calling the from_pickle() method from the same project:
         sdm = SQLDataModel.from_pickle()
         ```
+
+        ---
+
+        Notes:
+            - All data, headers, data types and display properties will be saved when pickling.
+            - If no `filename` argument is provided, then the invoking module's `__name__` property will be used by default.
+
         """
-        if (filename is not None) and (len(filename.split(".")) <= 1):
-            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: extension missing, provided filename '{filename}' did not contain an extension and so '.sdm' was appended to create a valid filename"))
-            filename += '.sdm'
+        dtypes = {col:self.header_master[col][1] for col in [self.sql_idx,*self.headers]}
+        serialized_sdm = dict(headers=list(dtypes.keys()),dtypes=dtypes, data=self.data(include_index=True), **self._get_display_args())
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
-        serialized_data = tuple(x for x in self.iter_rows(include_index=True,include_headers=True)) # no need to send sql_store_id aka index to pickle
+        else:
+            if not isinstance(filename, str):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid pickle filepath")
+                )
         with open(filename, 'wb') as handle:
-            pickle.dump(serialized_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(serialized_sdm, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def to_sql(self, table:str, extern_conn:sqlite3.Connection, replace_existing:bool=True, include_index:bool=True) -> None:
         """
