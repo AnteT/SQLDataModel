@@ -56,7 +56,7 @@ class HTMLParser(HTMLParser):
         if not self.found_target or self._ignore_next:
             return
         if self._in_td or self._in_th:
-            self._current_cell.append(data.strip())
+            self._current_cell.append(data)
     
     def handle_endtag(self, tag: str) -> None:
         if self._is_finished:
