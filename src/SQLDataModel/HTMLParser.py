@@ -2,7 +2,7 @@ from __future__ import annotations
 from html.parser import HTMLParser
 
 class HTMLParser(HTMLParser):
-    def __init__(self, *, convert_charrefs: bool = True, cell_sep:str=" ", table_identifier:int|str=0) -> None:
+    def __init__(self, *, convert_charrefs: bool = True, cell_sep:str="", table_identifier:int|str=0) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
         if table_identifier is None:
             table_identifier = 0
