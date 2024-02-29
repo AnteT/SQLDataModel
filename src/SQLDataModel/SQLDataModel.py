@@ -1516,6 +1516,8 @@ class SQLDataModel:
         └────────┴───────────────┴────────┴─────────────────────┘
         [12 rows x 4 columns]
         ```
+        ---
+
         Warnings:
             - Generally, do not rely on `SQLDataModel` to do statistics, use `NumPy` or a real library instead
             - Statistics for `date` and `datetime` can be unpredictable if formatting is inconsistent
