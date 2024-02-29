@@ -8,7 +8,7 @@ from src.SQLDataModel.SQLDataModel import SQLDataModel
 @pytest.fixture
 def sample_data() -> tuple[list[list], list[str]]:
     """Returns sample data in format `(data, headers)` to use for testing."""
-    return data_generator(num_rows=12, float_precision=4, num_columns=8, seed=42, return_header_type='list', return_row_type='tuple', return_format='combined')
+    return data_generator(num_rows=120, float_precision=4, num_columns=8, seed=42, return_header_type='list', return_row_type='tuple', return_format='combined')
 
 @pytest.mark.core
 def test_init(sample_data):
