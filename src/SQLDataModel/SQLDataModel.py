@@ -390,7 +390,7 @@ class SQLDataModel:
             [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
         headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
-        sql_insert_params = ','.join([f'cast(? as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})' if headers_to_py_dtypes_dict[col] not in ('bool','datetime','date','None') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else f"""cast(case ? when ('False' or 0) then 0 else 1 end as int)""" if headers_to_py_dtypes_dict[col] == 'bool' else "?" for col in self.headers])
+        sql_insert_params = ','.join([f'cast(? as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})' if headers_to_py_dtypes_dict[col] not in ('bool','bytes','datetime','date','None') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else f"""cast(case ? when ('False' or 0) then 0 else 1 end as int)""" if headers_to_py_dtypes_dict[col] == 'bool' else """cast(trim(replace(?,'b''',''), '''') as blob)""" if headers_to_py_dtypes_dict[col] == 'bytes' else "?" for col in self.headers])
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
@@ -1927,12 +1927,13 @@ class SQLDataModel:
         return cls([[fill_value for _ in range(n_cols)] for _ in range(n_rows)])
         
     @classmethod
-    def from_csv(cls, csv_source:str, encoding:str = "Latin1", delimiters:str = ', \t;|:', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
+    def from_csv(cls, csv_source:str, infer_types:bool=True, encoding:str = "Latin1", delimiters:str = ', \t;|:', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
         """
         Returns a new `SQLDataModel` generated from the provided CSV source, which can be either a file path or a raw delimited string.
 
         Parameters:
             - `csv_source` (str): The path to the CSV file or a raw delimited string.
+            - `infer_types` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
             - `encoding` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
             - `delimiters` (str, optional): Possible delimiters. Default is ` `, `\\t`, `;`, `|`, `:` or `,` (space, tab, semicolon, pipe, colon or comma).
             - `quotechar` (str, optional): The character used for quoting fields. Default is '"'.
@@ -1999,7 +2000,9 @@ class SQLDataModel:
             - If `csv_source` is delimited by characters other than those specified, provide the delimiter to `delimiters`.
             - If `headers` are provided, the first row parsed from source will be the first row in the table and not discarded.
             - This method is called by `SQLDataModel.from_text()` when source data appears to be delimited instead of SQLDataModel's `__repr__()`
-
+            - The `infer_types` argument can be used to infer the appropriate data type for each column:
+                - If `infer_types = True`, a random subset of the data will be used to infer the correct type and cast values accordingly
+                - If `infer_types = False`, values from the first row only will be used to assign types, almost always 'str' when reading from CSV.
         """
         if os.path.exists(csv_source):
             try:
@@ -2036,7 +2039,7 @@ class SQLDataModel:
             )
         if headers is None:
             headers = tmp_all_rows.pop(0)
-        return cls(data=tmp_all_rows, headers=headers, **kwargs)
+        return cls(data=tmp_all_rows, headers=headers, infer_types=infer_types, **kwargs)
     
     @classmethod
     def from_data(cls, data:Any=None, **kwargs) -> SQLDataModel:
@@ -3519,41 +3522,101 @@ class SQLDataModel:
             data = data[0]
         return [tuple(x[0] for x in res.description),*data] if include_headers else data
 
-    def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', include_index:bool=False, **kwargs) -> None:
+    def to_csv(self, filename:str=None, delimiter:str=',', quotechar:str='"', lineterminator:str='\r\n', include_index:bool=False, **kwargs) -> str|None:
         """
-        Writes `SQLDataModel` to the specified file in the `csv_file` argument.
-        The file must have a compatible `.csv` file extension.
+        Writes `SQLDataModel` to the specified file if `filename` argument if provided, otherwise returns the model directly as a CSV formatted string literal.
 
         Parameters:
-            - `csv_file` (str): The name of the CSV file to which the data will be written.
+            - `filename` (str): The name of the CSV file to which the data will be written. Default is None, returning as raw literal.
             - `delimiter` (str, optional): The delimiter to use for separating values. Default is ','.
             - `quotechar` (str, optional): The character used to quote fields. Default is '"'.
+            - `lineterminator` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
             - `include_index` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
             - `**kwargs`: Additional arguments to be passed to the `csv.writer` constructor.
 
         Returns:
-            None
+            - If `filename` is None, returns the model as a delimited string literal.
+            - If `filename` is provided, writes the model to the specified file as a CSV file.
 
-        Example:
+        Examples:
+
+        ---
+
+        #### Example 1: Returning CSV Literal
+
         ```python
         from SQLDataModel import SQLDataModel
 
-        # Create instance
-        sdm = SQLDataModel.from_csv('raw-data.csv')
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Travis', 35, 185.8)
+        ]
 
-        # Save SQLDataModel to csv file in data directory:
-        sdm.to_csv("./data/analysis.csv", include_index=True)
+        # Create the model
+        sdm = SQLDataModel(data, headers)
 
-        # Save SQLDataModel as tab separated values instead:
-        sdm.to_csv("./data/analysis.csv", delimiter='\\t', include_index=False)
+        # Generate the literal using tab delimiter
+        csv_literal = sdm.to_csv(delimiter='\\t')
+
+        # View output
+        print(csv_literal)
         ```
+        ```shell
+        Name    Age     Height
+        John    30      175.3
+        Alice   28      162.0
+        Travis  35      185.8
+        ```
+
+        #### Example 2: Write to File
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Travis', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # CSV filename
+        csv_file = 'persons.csv'
+
+        # Write to the file, keeping the index
+        sdm.to_csv(filename=csv_file, include_index=True)
+        ```
+        `persons.csv`:
+        ```shell
+        idx,Name,Age,Height
+        0,John,30,175.3
+        1,Alice,28,162.0
+        2,Travis,35,185.8
+        ```
+
+        ---
+
+        Notes:
+            - Modifying `delimiter` affects how the data is delimited when writing to `filename` and when returning as raw literal.
+            - When `include_index=True`, the `sdm_index` property determines the column name of the index in the result.
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
-        write_headers = [x[0] for x in res.description]
-        with open(csv_file, 'w', newline='') as file:
-            csvwriter = csv.writer(file,delimiter=delimeter,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, **kwargs)
-            csvwriter.writerow(write_headers)
-            csvwriter.writerows(res.fetchall())
+        headers = [x[0] for x in res.description]
+        if filename is not None:
+            with open(filename, 'w', newline='') as file:
+                csvwriter = csv.writer(file,delimiter=delimiter,lineterminator=lineterminator,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, **kwargs)
+                csvwriter.writerow(headers)
+                csvwriter.writerows(res.fetchall())
+            return
+        csv_repr = lineterminator.join([delimiter.join(headers),*[delimiter.join([str(cell) if cell is not None else '' for cell in row]) for row in res.fetchall()]])
+        return csv_repr
 
     def to_dict(self, orient:Literal["rows","columns","list"]="rows", include_index:bool=None) -> dict|list[dict]:
         """

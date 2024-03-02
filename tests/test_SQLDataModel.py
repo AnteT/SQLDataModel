@@ -230,7 +230,7 @@ def test_repr():
         assert output_repr_lines[i] == baseline_repr_lines[i]              
 
 @pytest.mark.core
-def test_to_from_csv():
+def test_to_from_csv(sample_data):
     ### test from csv file ###
     input_data = [('c1','c2','c3'),('r0-c1', 'r0-c2', 'r0-c3'),('r1-c1', 'r1-c2', 'r1-c3'),('r2-c1', 'r2-c2', 'r2-c3')]
     try:
@@ -246,12 +246,9 @@ def test_to_from_csv():
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i] 
     ### test from delimited raw csv literal ###
-    delimited_csv_literal = """c1,c2,c3\nr0-c1, r0-c2, r0-c3\nr1-c1, r1-c2, r1-c3\nr2-c1, r2-c2, r2-c3"""
-    sdm = SQLDataModel.from_csv(delimited_csv_literal)
-    input_data = [tuple(x.split(',')) for x in delimited_csv_literal.split('\n')]
-    output_data = sdm.data(include_headers=True)
-    for i in range(len(input_data)):
-        assert input_data[i] == output_data[i]     
+    input_literal = SQLDataModel(sample_data[1:], sample_data[0]).to_csv()
+    output_literal = SQLDataModel.from_csv(input_literal).to_csv()
+    assert input_literal == output_literal
 
 @pytest.mark.core
 def test_dtypes():
