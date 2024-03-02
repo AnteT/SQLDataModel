@@ -1,10 +1,9 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random
 from collections.abc import Generator, Callable, Iterator
 from collections import namedtuple
 from ast import literal_eval
 from typing import Literal, Any
-from pathlib import Path
 import urllib.request
 
 from .exceptions import DimensionError, SQLProgrammingError
@@ -237,7 +236,7 @@ class SQLDataModel:
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
     
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=4):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=4, infer_types:bool=False):
         """
         Initializes a new instance of `SQLDataModel`.
 
@@ -252,6 +251,7 @@ class SQLDataModel:
             - `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
             - `display_index` (bool): Whether to display row indices. Default is True.
             - `display_float_precision` (int): The number of decimal places to display for float values. Default is 2.
+            - `infer_types` (bool): Whether to infer the data types based on a randomly selected sample. Default is False, using first row to derive the corresponding type.
 
         Raises:
             - `ValueError`: If `data` and `headers` are not provided, or if `data` is of insufficient length.
@@ -289,9 +289,10 @@ class SQLDataModel:
         ---
 
         Notes:
-            - If `data` is not provided, an empty model is created with headers.
-            - If `headers` is not provided, default headers will be generated.
-            - If `dtypes` is provided, it should be a dictionary with column names as keys and Python data types as values.
+            - If `data` is not provided, an empty model is created with headers, at least one of `data`, `headers` or `dtypes` are required to instantiate the model.
+            - If `headers` are not provided, default headers will be generated using the the format `'col_0', ..., col_N` where N is the column count.
+            - If `dtypes` is provided, it must be a dictionary with column names as keys and Python data types as string values, e.g., `{'first_name': 'str', 'weight': 'float'}`
+            - If `infer_types = True` and `dtypes` are provided, the order will be resolved by first inferring the types, then overriding the inferred types for each `{col:type}` provided in the `dtypes` argument. If one is not provided, then the inferred type will be used as a fallback.
         """
         if data is None:
             if headers is None:
@@ -380,7 +381,11 @@ class SQLDataModel:
         self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
-        headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}
+        if infer_types:
+            inferred_dtypes = SQLDataModel.infer_types_from_sample(input_data=data)
+            headers_to_py_dtypes_dict = {self.headers[i]:inferred_dtypes[i+dyn_idx_offset] for i in range(self.column_count)}
+        else:
+            headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}        
         if dtypes is not None:
             [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
         headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
@@ -477,6 +482,84 @@ class SQLDataModel:
         success_by, success_description = success.split(':',1)
         return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
     
+    @staticmethod
+    def infer_type(obj:str, datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:
+        """
+        Infer the data type of the input object.
+
+        Parameters:
+            - `obj` (str): The object for which the data type is to be inferred.
+            - `datetime_format` (str, optional): The format string for parsing datetime objects if dateutil is not available. Default is '%Y-%m-%d %H:%M:%S'.
+
+        Returns:
+            - `str`: The inferred data type name of the input object according to:
+                - `'str'`: If the input object is a string, or cannot be parsed as another data type.
+                - `'date'`: If the input object represents a date without time information.
+                - `'datetime'`: If the input object represents a datetime with both date and time information.
+                - `'int'`: If the input object represents an integer.
+                - `'float'`: If the input object represents a floating-point number.
+                - `'bool'`: If the input object represents a boolean value.
+                - `'bytes'`: If the input object represents a binary array.
+                - `'None'`: If the input object is None, empty, or not a string.
+
+        Notes:
+            - This method attempts to infer the data type of the input object by evaluating its content.
+            - If the input object is a string, it is parsed to determine whether it represents a date, datetime, integer, or float.
+            - If the input object is not a string or cannot be parsed, its type is determined based on its Python type (bool, int, float, bytes, or None).
+        """        
+        if obj is None or obj == '' or not isinstance(obj, str):
+            return type(obj).__name__ if obj is not None else 'None'
+        try:
+            obj = literal_eval(obj)
+        except (ValueError, SyntaxError):
+            pass
+        if isinstance(obj, (bool, bytes, int, type(None))):
+            return type(obj).__name__ if obj is not None else 'None'
+        if isinstance(obj, float):
+            return 'int' if obj.is_integer() else 'float'
+        try:
+            dt_obj = datetime.datetime.strptime(obj, datetime_format) if not _has_dateutil else dateparser(obj, fuzzy=False, fuzzy_with_tokens=False, ignoretz=True)
+            return 'datetime' if dt_obj.time() != datetime.time.min else 'date'
+        except:
+            pass
+        return 'str'
+        
+    @staticmethod
+    def infer_types_from_sample(input_data:list[list], min_sample:int=16) -> list[str]:
+        """
+        Infer the best types given a sample of `input_data` using a random sample size of `frac` with a minimum sample size of `10`.
+
+        Parameters:
+            - `input_data` (list[list]): A list of lists containing the input data.
+            - `min_sample` (int, optional): The minimum number of samples from the input data to use for inference. Defaults to 16.
+
+        Returns:
+            - `list`: A list representing the best-matching inferred types for each column with each index corresponds to the inferred type based on the sampled data.
+        """    
+        n_samples, n_cols = len(input_data), len(input_data[0])
+        n_subset = min(min_sample, n_samples)
+        rand_samples = random.sample(input_data, n_subset)
+        rand_dtypes = [list(set([SQLDataModel.infer_type(rand_samples[i][j]) for i in range(n_subset)])) for j in range(n_cols)]
+        parsed_dtypes = ['str' for _ in range(n_cols)] # default type
+        for cid in range(n_cols):
+            col_type_ocurx = rand_dtypes[cid]
+            if 'None' in col_type_ocurx:
+                col_type_ocurx = [x for x in col_type_ocurx if x != 'None']
+            num_types = len(col_type_ocurx)
+            if 'str' in col_type_ocurx or num_types > 2 or num_types < 1:
+                continue # leave as is, too many types
+            if num_types == 1:
+                parsed_dtypes[cid] = col_type_ocurx[0]
+                continue
+            if num_types == 2:
+                if 'date' in col_type_ocurx and 'datetime' in col_type_ocurx:
+                    parsed_dtypes[cid] = 'datetime'
+                    continue
+                if 'int' in col_type_ocurx and 'float' in col_type_ocurx:
+                    parsed_dtypes[cid] = 'float'
+                    continue
+        return parsed_dtypes
+
     @staticmethod
     def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None) -> str:
         """
