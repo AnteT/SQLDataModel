@@ -8131,10 +8131,12 @@ class SQLDataModel:
             )
         row_indicies, col_indicies = indicies
         ### rows first ###
-        if not isinstance(row_indicies, (int,tuple,slice)):
+        if not isinstance(row_indicies, (int,tuple,slice,set)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type for row indexing '{type(row_indicies).__name__}', rows must be indexed by type 'int' or 'slice'")
             )
+        if isinstance(row_indicies, set):
+            row_indicies = tuple(row_indicies)        
         if isinstance(row_indicies, int):
             if row_indicies < 0:
                 row_indicies = self.row_count + row_indicies
