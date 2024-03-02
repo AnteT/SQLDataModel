@@ -1,4 +1,4 @@
-import datetime, os, tempfile, csv, sqlite3
+import datetime, os, tempfile, csv, sqlite3, random
 import pytest
 import pandas as pd
 import numpy as np
@@ -24,6 +24,27 @@ def test_data(sample_data):
     sdm = SQLDataModel(data=input_data, headers=input_headers)
     out_data = sdm.data()
     assert all([input_data[i][j] == out_data[i][j] for j in range(len(input_data[0])) for i in range(len(input_data))])
+
+@pytest.mark.core
+def test_getitem():
+    input_data, input_headers = [tuple([f"{x},{y}" for y in range(10)]) for x in range(10)], ['0','1','2','3','4','5','6','7','8','9']
+    sdm = SQLDataModel(input_data, input_headers)
+    rand_row, rand_col = random.randint(0,9), random.randint(0,9)
+    rand_row_slice, rand_col_slice = slice(random.randint(0,4),random.randint(6,9)), slice(random.randint(0,4),random.randint(6,9))
+    rand_row_set = set([random.randint(0,9) for i in range(random.randint(2,9))])
+    rand_col_list = list(set([random.randint(0,9) for i in range(random.randint(2,9))]))
+    ### row indexing ###
+    assert sdm[rand_row].data() == input_data[rand_row] # row index by int
+    assert sdm[rand_row_slice].data() == input_data[rand_row_slice] # row index by slice
+    assert sdm[rand_row_set].data() == [input_data[i] for i in sorted(rand_row_set)] # discontiguous row indicies by set
+    ### column indexing ###
+    assert sdm[str(rand_col)].data() == [(row[rand_col],) for row in input_data] # single column str index
+    assert sdm[str(rand_col)].data() == [(row[rand_col],) for row in input_data] # multiple column str indicies
+    assert sdm[[str(x) for x in rand_col_list]].data() == [tuple([row[i] for i in rand_col_list]) for row in input_data] # discontiguous row indicies by set
+    ### row and column indexing ###
+    assert sdm[rand_row,rand_col].data() == input_data[rand_row][rand_col] # single row, single col
+    assert sdm[rand_row_slice,str(rand_col)].data() == [(input_data[i][rand_col],) for i in range(rand_row_slice.start,rand_row_slice.stop)] # row slice, single column
+    assert sdm[rand_row,rand_col_slice].data() == tuple([input_data[rand_row][i] for i in range(rand_col_slice.start,rand_col_slice.stop)]) # single row, column slice
 
 @pytest.mark.core
 def test_headers(sample_data):
@@ -258,6 +279,23 @@ def test_to_from_json():
     for i in range(len(input_json)):
         assert input_json[i] == output_json[i]
 
+@pytest.mark.ext
+def test_to_from_parquet(sample_data):
+    input_data, input_headers = sample_data[1:], tuple(sample_data[0])
+    sdm = SQLDataModel(input_data,input_headers)
+    try:
+        with tempfile.NamedTemporaryFile(mode='wb', delete=False) as temp_file:
+            par_file = temp_file.name
+            sdm.to_parquet(par_file)
+            output_data = SQLDataModel.from_parquet(par_file).data(include_headers=True)
+    finally:
+        os.unlink(par_file)
+    output_data, output_headers = output_data[1:], output_data[0]
+    assert input_headers == output_headers
+    for i in range(len(input_data)):
+        assert input_data[i] == output_data[i]
+
+@pytest.mark.ext
 def test_to_from_pandas():
     input_headers, input_data = ['A','B','C','D'], [(1, 'foo', 4.5, datetime.date(1999, 11, 9)),(2, 'bar', 6.7, datetime.date(2024, 8, 24)),(3, 'baz', 8.9, datetime.date(1985, 1, 13))]
     df_in = pd.DataFrame(data=input_data,columns=input_headers)
@@ -265,6 +303,7 @@ def test_to_from_pandas():
     for i in range(len(df_in.index)):
         assert df_in.iloc[i].tolist() == df_out.iloc[i].tolist()     
 
+@pytest.mark.ext
 def test_to_from_numpy():
     input_data = [('1', 'foo', '4.5', '1999-11-09'),('2', 'bar', '6.7', '2024-08-24'),('3', 'baz', '8.9', '1985-01-13')]
     sdm = SQLDataModel(input_data)
@@ -335,4 +374,4 @@ def test_to_from_sql(sample_data):
     output_data, output_headers = output_data[1:], list(output_data[0])
     assert input_headers == output_headers
     for i in range(len(input_data)):
-        assert input_data[i] == output_data[i]   
+        assert input_data[i] == output_data[i]    

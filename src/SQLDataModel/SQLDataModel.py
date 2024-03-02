@@ -945,15 +945,15 @@ class SQLDataModel:
         """
         if not isinstance(new_headers, (list,tuple)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid header types, type \"{type(new_headers).__name__}\" is not a valid type for headers, please provide a tuple or list type...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid header types, type '{type(new_headers).__name__}' is not a valid type for headers, please provide a tuple or list type")
                 )
         if len(new_headers) != self.column_count:
             raise DimensionError(
-                SQLDataModel.ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length \"{len(new_headers)} != {self.column_count}\" column count, please provide correct dimensions...")
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length '{len(new_headers)} != {self.column_count}' column count, please provide correct dimensions")
                 )
         if not isinstance(new_headers[0], (str,int,float)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid header values, type \"{type(new_headers[0]).__name__}\" is not a valid type for header values, please provide a string type...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid header values, type '{type(new_headers[0]).__name__}' is not a valid type for header values, please provide a string type")
                 )
         rename_stmts = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
         full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
@@ -963,7 +963,7 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: unable to rename columns, SQL execution failed with: '{e}'")
             ) from None
         self.headers = new_headers
         self._update_model_metadata()
@@ -4556,7 +4556,7 @@ class SQLDataModel:
             extern_c = extern_conn.cursor()
         except Exception as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f"""SQLProgrammingError: provided SQL connection is not open, please reopen the database connection or resolve "{e}"...""")
+                SQLDataModel.ErrorFormat(f"""SQLProgrammingError: provided SQL connection is not open, please reopen the database connection or resolve "{e}" """)
             ) from None
         if replace_existing:
             extern_c.execute(f"""drop table if exists "{table}" """)
@@ -6613,7 +6613,7 @@ class SQLDataModel:
             pen = ANSIColor(color)
             self.display_color = pen
         except:
-            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code..."))
+            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code"))
 
     def sort(self, by:str|list[str]=None, asc:bool=True) -> SQLDataModel:
         """
@@ -6890,7 +6890,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to create function with provided callable "{func}", SQL process failed with: {e}')
             ) from None
-        input_columns = ",".join([f"\"{col}\"" for col in self.headers])
+        input_columns = ",".join([f'"{col}"' for col in self.headers])
         derived_query = f"""select {func_name}({input_columns}) as "{func_name}" from "{self.sql_model}" """
         return self.execute_fetch(derived_query)
 
@@ -7458,19 +7458,19 @@ class SQLDataModel:
         ### get column name from str or index ###
         if (not isinstance(column, int)) and (not isinstance(column, str)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column argument, \"{type(column).__name__}\" is not a valid target, provide column index or column name as a string...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column argument, '{type(column).__name__}' is not a valid target, provide column index or column name as a string")
             )
         if isinstance(column, int):
             try:
                 column = self.headers[column]
             except IndexError as e:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index provided, {column} is not a valid column index, use `.column_count` property to get valid range...")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index provided, '{column}' is not a valid column index, use `.column_count` property to get valid range")
                 ) from None
         if isinstance(column, str):
             if column not in self.headers:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid column provided, {column} is not valid for current model, use `.get_headers()` method to get model headers...")
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', use `.get_headers()` to view current valid model headers")
                     )
             else:
                 column = column
@@ -7486,7 +7486,7 @@ class SQLDataModel:
         if func_argcount == 1:
             input_columns = target_column
         elif func_argcount == self.column_count:
-            input_columns = ",".join([f"\"{col}\"" for col in self.headers])
+            input_columns = ",".join([f'"{col}"' for col in self.headers])
         else:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid function arg count: '{func_argcount}', input args to '{func_name}' must be 1 or '{self.column_count}' based on the current models structure, e.g.,\n{self.generate_apply_function_stub()}")
@@ -8112,7 +8112,7 @@ class SQLDataModel:
                 col_index = [col_index]
             if not all(isinstance(col, str) for col in col_index):
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(col_index[0].__name__)}' received, use `.get_headers()` to view valid column arguments")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(col_index[0]).__name__}' received, use `.get_headers()` to view valid column arguments")
                 )
             for col in col_index:
                 if col not in self.headers and col != self.sql_idx:
