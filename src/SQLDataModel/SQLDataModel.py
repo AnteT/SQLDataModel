@@ -3345,6 +3345,7 @@ class SQLDataModel:
                     when 'REA' then 'float'
                     when 'INT' then 'int'
                     when 'DAT' then 'date'
+                    when 'BLO' then 'bytes'
                     else 'str' end as "column_dtype"
                 from pragma_table_info("{table_name}") """)
                 dtypes = {res[0]: res[1] for res in sql_c.fetchall()}

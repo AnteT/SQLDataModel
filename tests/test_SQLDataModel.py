@@ -1,4 +1,4 @@
-import datetime, os, tempfile, csv
+import datetime, os, tempfile, csv, sqlite3
 import pytest
 import pandas as pd
 import numpy as np
@@ -323,4 +323,16 @@ def test_to_from_html(sample_data):
     output_data, output_headers = SQLDataModel.from_html(sdm.to_html()).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
-        assert input_data[i] == output_data[i]          
+        assert input_data[i] == output_data[i]
+
+@pytest.mark.core
+def test_to_from_sql(sample_data):
+    input_data, input_headers = [tuple([int(j) if isinstance(j,bool) else j for j in i]) for i in sample_data[1:]], sample_data[0]
+    tmp_db_conn = sqlite3.connect(":memory:")
+    sdm = SQLDataModel(input_data, input_headers)
+    sdm.to_sql('t2', tmp_db_conn)
+    output_data = SQLDataModel.from_sql('t2', tmp_db_conn).data(include_headers=True)
+    output_data, output_headers = output_data[1:], list(output_data[0])
+    assert input_headers == output_headers
+    for i in range(len(input_data)):
+        assert input_data[i] == output_data[i]   
