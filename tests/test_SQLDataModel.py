@@ -374,8 +374,12 @@ def test_to_from_sql(sample_data):
         assert input_data[i] == output_data[i]    
 
 @pytest.mark.core
-def test_infer_types():
-    input_data = """string,int,float,bool,date,bytes,datetime\n_2ktmj,-204,359.479684,True,1977-07-16,b'bkn',1992-03-07 06:24:15"""
-    target_types = {'string': 'str', 'int': 'int', 'float': 'float', 'bool': 'int', 'date': 'date', 'bytes': 'bytes', 'datetime': 'datetime'}
-    output_types = SQLDataModel.from_csv(input_data,infer_types=True).get_column_dtypes()
-    assert target_types == output_types
+def test_infer_types(sample_data):
+    typed_input, headers_input = sample_data[1:], tuple(sample_data[0])
+    string_input = [[str(x) for x in row] for row in typed_input]
+    sdm = SQLDataModel(string_input,headers_input,infer_types=True)
+    inferred_output = sdm.data(include_headers=True)
+    inferred_output, headers_output = inferred_output[1:], inferred_output[0]
+    assert headers_input == headers_output
+    for i in range(len(typed_input)):
+        assert typed_input[i] == inferred_output[i]
