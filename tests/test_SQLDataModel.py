@@ -383,3 +383,15 @@ def test_to_from_csv(sample_data):
     input_literal = SQLDataModel(sample_data[1:], sample_data[0]).to_csv()
     output_literal = SQLDataModel.from_csv(input_literal).to_csv()
     assert input_literal == output_literal
+
+@pytest.mark.core
+def test_to_from_delimited(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel(input_data,input_headers)
+    input_data = sdm.data(include_headers=True)
+    valid_delimiters = (",","\t",";","|",":"," ")
+    for delimiter in valid_delimiters:
+        dsv = sdm.to_csv(delimiter=delimiter)
+        sdm = SQLDataModel.from_csv(dsv, delimiters=delimiter)
+        output_data = sdm.data(include_headers=True)
+        assert input_data == output_data    
