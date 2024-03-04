@@ -7916,6 +7916,45 @@ class SQLDataModel:
         fetch_stmt = " ".join(("select",f'"{self.sql_idx}",' if include_index else '',columns_str,f'from "{self.sql_model}"', ordering_str, f"limit {n_rows}"))
         return fetch_stmt
 
+    def _get_valid_indicies(self) -> tuple:
+        """
+        Returns the current valid row indicies for the `SQLDataModel` instance.
+
+        Returns:
+            - `tuple`: A tuple of the current values for `self.sql_idx` in ascending order.
+
+        Example:
+
+        ---
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        headers = ['Name', 'Age', 'Height']
+        data = [('John', 30, 175.3), ('Alice', 28, 162.0), ('Travis', 35, 185.8)]
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # Get current valid indicies
+        valid_indicies = sdm._get_valid_indicies()
+
+        # View results
+        print(valid_indicies)
+        ```
+        ```shell
+        (0, 1, 2)
+        ```
+
+        ---
+
+        Notes:
+            - Primary use is to confirm valid model indexing when starting index != 0 or filtering changes minimum/maximum indexes.
+
+        """
+        fetch_stmt = f"""select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc"""
+        return tuple([x[0] for x in self.sql_db_conn.execute(fetch_stmt).fetchall()])
+
     def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
         """
         Generates and executes a SQL update statement to modify specific rows and columns with provided values in the SQLDataModel.
@@ -7956,6 +7995,7 @@ class SQLDataModel:
             - To copy an existing column, pass the corresponding data is a list of tuples to the `values_to_update` parameter.        
         """
         update_sql_script = None
+        # this is the problem, even if the indicies are 2-7, this will generate 0:5 since the rowcount is 5 regardless of min and max indicies
         rows_to_update = rows_to_update if rows_to_update is not None else tuple(range(self.row_count))
         columns_to_update = columns_to_update if columns_to_update is not None else self.headers
         if not isinstance(values_to_update, (tuple,list)):
