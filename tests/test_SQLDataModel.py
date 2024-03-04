@@ -230,27 +230,6 @@ def test_repr():
         assert output_repr_lines[i] == baseline_repr_lines[i]              
 
 @pytest.mark.core
-def test_to_from_csv(sample_data):
-    ### test from csv file ###
-    input_data = [('c1','c2','c3'),('r0-c1', 'r0-c2', 'r0-c3'),('r1-c1', 'r1-c2', 'r1-c3'),('r2-c1', 'r2-c2', 'r2-c3')]
-    try:
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, newline='') as temp_file:
-            csv_file = temp_file.name
-            csvwriter = csv.writer(temp_file)
-            csvwriter.writerows(input_data)            
-            temp_file.close()
-            sdm = SQLDataModel.from_csv(csv_file)
-    finally:
-        os.unlink(csv_file)
-    output_data = sdm.data(include_headers=True)
-    for i in range(len(input_data)):
-        assert input_data[i] == output_data[i] 
-    ### test from delimited raw csv literal ###
-    input_literal = SQLDataModel(sample_data[1:], sample_data[0]).to_csv()
-    output_literal = SQLDataModel.from_csv(input_literal).to_csv()
-    assert input_literal == output_literal
-
-@pytest.mark.core
 def test_dtypes():
     input_data, input_headers = [['abcdefg', 12_345, b'bytes', 3.14159, datetime.date(1992,11,22), datetime.datetime(1978,1,3,7,23,59)]], ['strings','integers','binary','floats','date','datetime']
     input_dtypes = {input_headers[i]:type(input_data[0][i]).__name__ for i in range(len(input_headers))}
@@ -383,3 +362,24 @@ def test_infer_types(sample_data):
     assert headers_input == headers_output
     for i in range(len(typed_input)):
         assert typed_input[i] == inferred_output[i]
+
+@pytest.mark.core
+def test_to_from_csv(sample_data):
+    ### test from csv file ###
+    input_data = [('c1','c2','c3'),('r0-c1', 'r0-c2', 'r0-c3'),('r1-c1', 'r1-c2', 'r1-c3'),('r2-c1', 'r2-c2', 'r2-c3')]
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, newline='') as temp_file:
+            csv_file = temp_file.name
+            csvwriter = csv.writer(temp_file)
+            csvwriter.writerows(input_data)            
+            temp_file.close()
+            sdm = SQLDataModel.from_csv(csv_file)
+    finally:
+        os.unlink(csv_file)
+    output_data = sdm.data(include_headers=True)
+    for i in range(len(input_data)):
+        assert input_data[i] == output_data[i] 
+    ### test from delimited raw csv literal ###
+    input_literal = SQLDataModel(sample_data[1:], sample_data[0]).to_csv()
+    output_literal = SQLDataModel.from_csv(input_literal).to_csv()
+    assert input_literal == output_literal
