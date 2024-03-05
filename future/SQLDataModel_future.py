@@ -1,15 +1,15 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random
 from collections.abc import Generator, Callable, Iterator
 from collections import namedtuple
 from ast import literal_eval
-from typing import Literal
-from pathlib import Path
+from typing import Literal, Any
 import urllib.request
 
 from .exceptions import DimensionError, SQLProgrammingError
 from .ANSIColor import ANSIColor
 from .StandardDeviation import StandardDeviation
+from .JSONEncoder import DataTypesEncoder
 from .HTMLParser import HTMLParser
 
 try:
@@ -234,9 +234,9 @@ class SQLDataModel:
         - Use `SQLDataModel.set_display_color()` to modify the terminal color of the table, by default no color styling is applied.
         - Use `SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
+    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies')
     
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=4, infer_types:bool=False):
         """
         Initializes a new instance of `SQLDataModel`.
 
@@ -251,6 +251,7 @@ class SQLDataModel:
             - `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
             - `display_index` (bool): Whether to display row indices. Default is True.
             - `display_float_precision` (int): The number of decimal places to display for float values. Default is 2.
+            - `infer_types` (bool): Whether to infer the data types based on a randomly selected sample. Default is False, using first row to derive the corresponding type.
 
         Raises:
             - `ValueError`: If `data` and `headers` are not provided, or if `data` is of insufficient length.
@@ -288,9 +289,10 @@ class SQLDataModel:
         ---
 
         Notes:
-            - If `data` is not provided, an empty model is created with headers.
-            - If `headers` is not provided, default headers will be generated.
-            - If `dtypes` is provided, it should be a dictionary with column names as keys and Python data types as values.
+            - If `data` is not provided, an empty model is created with headers, at least one of `data`, `headers` or `dtypes` are required to instantiate the model.
+            - If `headers` are not provided, default headers will be generated using the the format `'col_0', ..., col_N` where N is the column count.
+            - If `dtypes` is provided, it must be a dictionary with column names as keys and Python data types as string values, e.g., `{'first_name': 'str', 'weight': 'float'}`
+            - If `infer_types = True` and `dtypes` are provided, the order will be resolved by first inferring the types, then overriding the inferred types for each `{col:type}` provided in the `dtypes` argument. If one is not provided, then the inferred type will be used as a fallback.
         """
         if data is None:
             if headers is None:
@@ -361,7 +363,7 @@ class SQLDataModel:
                         SQLDataModel.ErrorFormat(f"ValueError: invalid character in column '{col}', headers must be of type 'str' consisting of valid SQL column identifiers")
                     )
         else:
-            headers = [f"col_{x}" for x in range(len(data[0]))]
+            headers = list(dtypes.keys()) if dtypes is not None else [f"col_{x}" for x in range(len(data[0]))]
         self.sql_idx = "idx"
         self.sql_model = "sdm"
         self.display_max_rows = display_max_rows
@@ -379,12 +381,17 @@ class SQLDataModel:
         self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
-        headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}
+        if infer_types:
+            inferred_dtypes = SQLDataModel.infer_types_from_sample(input_data=data)
+            headers_to_py_dtypes_dict = {self.headers[i]:inferred_dtypes[i+dyn_idx_offset] for i in range(self.column_count)}
+        else:
+            headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}        
         if dtypes is not None:
             [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
         headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
-        sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
+        sql_insert_params = ','.join([f'cast(? as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})' if headers_to_py_dtypes_dict[col] not in ('bool','bytes','datetime','date','None') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else f"""cast(case ? when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if headers_to_py_dtypes_dict[col] == 'bool' else """cast(? as blob)""" if headers_to_py_dtypes_dict[col] == 'bytes' else "nullif(trim(nullif(?,'None')),'')" if headers_to_py_dtypes_dict[col] == 'None' else "?" for col in self.headers])
+        sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
         self.sql_db_conn.execute(sql_create_stmt)
@@ -394,23 +401,30 @@ class SQLDataModel:
             ON "{self.sql_model}" WHEN (select count("{self.sql_idx}") from "{self.sql_model}") = 1 
             BEGIN update "{self.sql_model}" set "{self.sql_idx}" = 0 where "{self.sql_idx}" = 1; END;"""
             self.sql_db_conn.execute(trig_zero_init)
+            self.indicies = tuple()
             return
         if not had_idx:
-            first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{','.join(['?' if headers_to_py_dtypes_dict[col] not in ('datetime','date') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" for col in self.headers])})"""
+            first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{sql_insert_params})"""
             try:
                 self.sql_db_conn.execute(first_row_insert_stmt, (0,*data[0]))
             except sqlite3.ProgrammingError as e:
                 raise SQLProgrammingError(
                     SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid or inconsistent data, failed with '{e}'")
-                ) from None                
+                ) from None   
+            self.indicies = tuple(range(self.row_count))
             data = data[1:] # remove first row from remaining data
+        else:
+            self.indicies = tuple([row[0] for row in data])
         try:
             self.sql_db_conn.executemany(sql_insert_stmt,data)
         except sqlite3.ProgrammingError as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid or inconsistent data, failed with '{e}'")
-            ) from None 
-   
+            ) from None  
+        if 'bytes' in headers_to_py_dtypes_dict.values():
+            fix_str_to_bytes_stmt = "".join(["BEGIN TRANSACTION;","".join([f"""UPDATE "{self.sql_model}" SET "{col}" = CAST(SUBSTR("{col}",3,LENGTH("{col}")-3) AS BLOB) WHERE (SUBSTR("{col}",1,2) = x'6227' AND SUBSTR("{col}",-1) = x'27');""" for col in self.headers if headers_to_py_dtypes_dict[col] == 'bytes']),"END TRANSACTION;"])
+            self.sql_db_conn.executescript(fix_str_to_bytes_stmt)
+
 ################################################################################################################
 ################################################ static methods ################################################
 ################################################################################################################
@@ -476,6 +490,84 @@ class SQLDataModel:
         return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
     
     @staticmethod
+    def infer_type(obj:str, datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:
+        """
+        Infer the data type of the input object.
+
+        Parameters:
+            - `obj` (str): The object for which the data type is to be inferred.
+            - `datetime_format` (str, optional): The format string for parsing datetime objects if dateutil is not available. Default is '%Y-%m-%d %H:%M:%S'.
+
+        Returns:
+            - `str`: The inferred data type name of the input object according to:
+                - `'str'`: If the input object is a string, or cannot be parsed as another data type.
+                - `'date'`: If the input object represents a date without time information.
+                - `'datetime'`: If the input object represents a datetime with both date and time information.
+                - `'int'`: If the input object represents an integer.
+                - `'float'`: If the input object represents a floating-point number.
+                - `'bool'`: If the input object represents a boolean value.
+                - `'bytes'`: If the input object represents a binary array.
+                - `'None'`: If the input object is None, empty, or not a string.
+
+        Notes:
+            - This method attempts to infer the data type of the input object by evaluating its content.
+            - If the input object is a string, it is parsed to determine whether it represents a date, datetime, integer, or float.
+            - If the input object is not a string or cannot be parsed, its type is determined based on its Python type (bool, int, float, bytes, or None).
+        """        
+        if obj is None or obj == '' or not isinstance(obj, str):
+            return type(obj).__name__ if obj is not None else 'None'
+        try:
+            obj = literal_eval(obj)
+        except (ValueError, SyntaxError):
+            pass
+        if isinstance(obj, (bool, bytes, int, type(None))):
+            return type(obj).__name__ if obj is not None else 'None'
+        if isinstance(obj, float):
+            return 'int' if obj.is_integer() else 'float'
+        try:
+            dt_obj = datetime.datetime.strptime(obj, datetime_format) if not _has_dateutil else dateparser(obj, fuzzy=False, fuzzy_with_tokens=False, ignoretz=True)
+            return 'datetime' if dt_obj.time() != datetime.time.min else 'date'
+        except:
+            pass
+        return 'str'
+        
+    @staticmethod
+    def infer_types_from_sample(input_data:list[list], min_sample:int=16) -> list[str]:
+        """
+        Infer the best types given a sample of `input_data` using a random sample size of `frac` with a minimum sample size of `10`.
+
+        Parameters:
+            - `input_data` (list[list]): A list of lists containing the input data.
+            - `min_sample` (int, optional): The minimum number of samples from the input data to use for inference. Defaults to 16.
+
+        Returns:
+            - `list`: A list representing the best-matching inferred types for each column with each index corresponds to the inferred type based on the sampled data.
+        """    
+        n_samples, n_cols = len(input_data), len(input_data[0])
+        n_subset = min(min_sample, n_samples)
+        rand_samples = random.sample(input_data, n_subset)
+        rand_dtypes = [list(set([SQLDataModel.infer_type(rand_samples[i][j]) for i in range(n_subset)])) for j in range(n_cols)]
+        parsed_dtypes = ['str' for _ in range(n_cols)] # default type
+        for cid in range(n_cols):
+            col_type_ocurx = rand_dtypes[cid]
+            if ('None' in col_type_ocurx) and (len(col_type_ocurx) > 1):
+                col_type_ocurx = [x for x in col_type_ocurx if x != 'None']
+            num_types = len(col_type_ocurx)
+            if 'str' in col_type_ocurx or num_types > 2 or num_types < 1:
+                continue # leave as is, too many types
+            if num_types == 1:
+                parsed_dtypes[cid] = col_type_ocurx[0]
+                continue
+            if num_types == 2:
+                if 'date' in col_type_ocurx and 'datetime' in col_type_ocurx:
+                    parsed_dtypes[cid] = 'datetime'
+                    continue
+                if 'int' in col_type_ocurx and 'float' in col_type_ocurx:
+                    parsed_dtypes[cid] = 'float'
+                    continue
+        return parsed_dtypes
+
+    @staticmethod
     def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None) -> str:
         """
         Formats SQLite SELECT clauses based on column parameters to provide preformatted fetches, providing most of the formatting for `repr` output.
@@ -497,9 +589,9 @@ class SQLDataModel:
         """
         if alignment is None: # dynamic alignment
             if dtype == 'float':
-                select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s', '') ELSE printf('%.{max_pad_width}s', printf('% {max_pad_width}.{float_precision}f',"{column}")) END""" # does the most precision then treats as string to trim
+                select_item_fmt = f"""(CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s', '') WHEN LENGTH(printf('% .{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%.{max_pad_width}s', printf('% {max_pad_width}.{float_precision}f',"{column}")) ELSE SUBSTR(printf('% .{float_precision}f',"{column}"),1,{max_pad_width}-2) || '⠤⠄' END)"""
             elif dtype == 'int':
-                select_item_fmt = f"""printf('% {max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
+                select_item_fmt = f"""printf('%{max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
             elif dtype == 'bytes':
                 select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
             elif dtype == 'index':
@@ -511,7 +603,7 @@ class SQLDataModel:
             if alignment in ("<", ">"):
                 dyn_left_right = '-' if alignment == '<' else ''
                 if dtype == 'float':
-                    select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{dyn_left_right}{max_pad_width}s', '') ELSE printf('%{dyn_left_right}.{max_pad_width}s', printf('%{dyn_left_right}{max_pad_width}.{float_precision}f',"{column}")) END""" # does the most precision then treats as string to trim
+                    select_item_fmt = f"""(CASE WHEN "{column}" IS NULL THEN printf('%{dyn_left_right}{max_pad_width}s', '') WHEN LENGTH(printf('%{dyn_left_right}.{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%.{max_pad_width}s', printf('%{dyn_left_right}{max_pad_width}.{float_precision}f',"{column}")) ELSE SUBSTR(printf('%{dyn_left_right}.{float_precision}f',"{column}"),1,{max_pad_width}-2) || '⠤⠄' END)"""
                 elif dtype == 'bytes':
                     select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}"||'''',1,{max_pad_width}-2)||'⠤⠄' END) """
                 elif dtype == 'index':
@@ -860,15 +952,15 @@ class SQLDataModel:
         """
         if not isinstance(new_headers, (list,tuple)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid header types, type \"{type(new_headers).__name__}\" is not a valid type for headers, please provide a tuple or list type...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid header types, type '{type(new_headers).__name__}' is not a valid type for headers, please provide a tuple or list type")
                 )
         if len(new_headers) != self.column_count:
             raise DimensionError(
-                SQLDataModel.ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length \"{len(new_headers)} != {self.column_count}\" column count, please provide correct dimensions...")
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length '{len(new_headers)} != {self.column_count}' column count, please provide correct dimensions")
                 )
         if not isinstance(new_headers[0], (str,int,float)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid header values, type \"{type(new_headers[0]).__name__}\" is not a valid type for header values, please provide a string type...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid header values, type '{type(new_headers[0]).__name__}' is not a valid type for header values, please provide a string type")
                 )
         rename_stmts = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
         full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
@@ -878,7 +970,7 @@ class SQLDataModel:
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: unable to rename columns, SQL execution failed with: '{e}'")
             ) from None
         self.headers = new_headers
         self._update_model_metadata()
@@ -1514,6 +1606,8 @@ class SQLDataModel:
         └────────┴───────────────┴────────┴─────────────────────┘
         [12 rows x 4 columns]
         ```
+        ---
+
         Warnings:
             - Generally, do not rely on `SQLDataModel` to do statistics, use `NumPy` or a real library instead
             - Statistics for `date` and `datetime` can be unpredictable if formatting is inconsistent
@@ -1608,7 +1702,7 @@ class SQLDataModel:
             ) 
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows=n_samples,ordering="random"), **kwargs)
 
-    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, datetime_format:str="%Y-%m-%d %H:%M:%S", non_inferrable_dtype:Literal["str","int","float","datetime","date","bytes"]="str") -> None:
+    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, datetime_format:str="%Y-%m-%d %H:%M:%S", non_inferrable_dtype:Literal["str","int","float","datetime","date","bytes","bool"]="str") -> None:
         """
         Infer and set data types for columns based on random sampling of `n_samples` from the dataset if proportion of data types in returned sample equals or exceeds `infer_threshold` otherwise fallback to data type specified in `non_inferrable_dtype` argument.
         Dateutil library required for datetime parsing, otherwise if module not found `datetime_format` will be used.
@@ -1616,12 +1710,12 @@ class SQLDataModel:
             - `n_samples` (int): The number of random samples to use for data type inference.
             - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
             - `datetime_format` (str): The datetime format to use to try and parse datetime.date and datetime.datetime objects from if `dateutil` library not installed.
-            - `non_inferrable_dtype` (Literal["str","int","float","datetime","date","bytes"]): The default data type to assign when ties occur, or when no dtype can be inferred.
+            - `non_inferrable_dtype` (Literal["str","int","float","datetime","date","bytes","bool]): The default data type to assign when ties occur, or when no dtype can be inferred.
         
         Raises:
             - `TypeError`: If argument for `n_samples` is not of type `int` or `infer_threshold` is not of type `float`
             - `ValueError`: If value for `infer_threshold` is not a valid range satisfying `0.0 < infer_threshold <= 1.0`
-            - `TypeError`: If `non_inferrable_dtype` is not one of "str", "int", "float", "datetime", "date", "bytes"
+            - `TypeError`: If `non_inferrable_dtype` is not one of "str", "int", "float", "datetime", "date", "bytes", "bool"
 
         Returns:
             - `None`
@@ -1699,17 +1793,17 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid `infer_threshold` value '{infer_threshold}', expected value in range '0.0 < infer_threshold <= 1.0' for `infer_dtypes()` method")
             )   
-        if non_inferrable_dtype not in ("str","int","float","datetime","date","bytes"):
+        if non_inferrable_dtype not in ("str","int","float","datetime","date","bytes","bool"):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid `non_inferrable_dtype` type '{type(non_inferrable_dtype).__name__}', expected one of 'str','int','float','datetime','date','bytes' for `infer_dtypes()` method")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid `non_inferrable_dtype` type '{type(non_inferrable_dtype).__name__}', expected one of 'str','int','float','datetime','date','bytes' or 'bool' for `infer_dtypes()` method")
             )
         str_dtype_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
         fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_dtype_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
         samples_dict = {col:tuple(row[j] for row in self.sql_db_conn.execute(fetch_str_dtype_stmt)) for j,col in enumerate(str_dtype_columns)}
         inferred_dtypes = {k:non_inferrable_dtype for k in samples_dict.keys()}
-        dtype_labels = ("str", "int", "float", "datetime", "date", "bytes")
+        dtype_labels = ("str", "int", "float", "datetime", "date", "bytes", "bool")
         for s_header, s_samples in samples_dict.items():
-            count_checked, count_str, count_int, count_float, count_datetime, count_date, count_bytes = 0,0,0,0,0,0,0
+            count_checked, count_str, count_int, count_float, count_datetime, count_date, count_bytes, count_bool = 0,0,0,0,0,0,0,0
             for s_item in s_samples:
                 if (s_item is None) or (s_item == ''):
                     continue
@@ -1732,7 +1826,9 @@ class SQLDataModel:
                     except:
                         count_str += 1
                     continue
-                if isinstance(s_type, int):
+                if isinstance(s_type, bool):
+                    count_bool += 1
+                elif isinstance(s_type, int):
                     count_int += 1
                 elif isinstance(s_type, float):
                     if s_type.is_integer():
@@ -1745,7 +1841,7 @@ class SQLDataModel:
                     continue
                 else:
                     count_str += 1
-            dtype_results = (count_str, count_int, count_float, count_datetime, count_date, count_bytes)
+            dtype_results = (count_str, count_int, count_float, count_datetime, count_date, count_bytes, count_bool)
             max_number_dtypes_found = max(dtype_results)
             if count_str != 0:
                 inferred_dtypes[s_header] = "str"
@@ -1838,12 +1934,13 @@ class SQLDataModel:
         return cls([[fill_value for _ in range(n_cols)] for _ in range(n_rows)])
         
     @classmethod
-    def from_csv(cls, csv_source:str, encoding:str = "Latin1", delimiters:str = ', \t;|:', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
+    def from_csv(cls, csv_source:str, infer_types:bool=True, encoding:str = "Latin1", delimiters:str = ', \t;|:', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
         """
         Returns a new `SQLDataModel` generated from the provided CSV source, which can be either a file path or a raw delimited string.
 
         Parameters:
             - `csv_source` (str): The path to the CSV file or a raw delimited string.
+            - `infer_types` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
             - `encoding` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
             - `delimiters` (str, optional): Possible delimiters. Default is ` `, `\\t`, `;`, `|`, `:` or `,` (space, tab, semicolon, pipe, colon or comma).
             - `quotechar` (str, optional): The character used for quoting fields. Default is '"'.
@@ -1910,7 +2007,9 @@ class SQLDataModel:
             - If `csv_source` is delimited by characters other than those specified, provide the delimiter to `delimiters`.
             - If `headers` are provided, the first row parsed from source will be the first row in the table and not discarded.
             - This method is called by `SQLDataModel.from_text()` when source data appears to be delimited instead of SQLDataModel's `__repr__()`
-
+            - The `infer_types` argument can be used to infer the appropriate data type for each column:
+                - If `infer_types = True`, a random subset of the data will be used to infer the correct type and cast values accordingly
+                - If `infer_types = False`, values from the first row only will be used to assign types, almost always 'str' when reading from CSV.
         """
         if os.path.exists(csv_source):
             try:
@@ -1947,28 +2046,163 @@ class SQLDataModel:
             )
         if headers is None:
             headers = tmp_all_rows.pop(0)
-        return cls(data=tmp_all_rows, headers=headers, **kwargs)
+        return cls(data=tmp_all_rows, headers=headers, infer_types=infer_types, **kwargs)
     
     @classmethod
-    def from_data(cls, data:list[list], headers:list[str]=None, **kwargs) -> SQLDataModel:
+    def from_data(cls, data:Any=None, **kwargs) -> SQLDataModel:
         """
-        Returns a new `SQLDataModel` from the provided data.
+        Convenience method to infer the source of `data` and return the appropriate constructor method to generate a new `SQLDataModel` instance.
 
         Parameters:
-            - `data` (list[list]): The data to populate the SQLDataModel.
-            - `headers` (list[str], optional): List of column headers. If None, no headers are used.
-            - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
+            - `data` (Any, required): The input data from which to create the SQLDataModel object. Constructor methods are called according `type(data)`:
+                - `dict`: If all values are python datatypes, passed as `dtypes` to constructor, otherwise as `data` to `SQLDataModel.from_dict()`.
+                - `list`: If single dimension, passed as `headers` to constructor, otherwise as `data` containing list of lists.
+                - `tuple`: Same as with list, if single dimension passed as `headers`, otherwise as `data` containing tuple of lists.
+                - `numpy.ndarray`: passed to `SQLDataModel.from_numpy()` as array data.
+                - `pandas.DataFrame`: passed to `SQLDataModel.from_pandas()` as dataframe data.
+                - `str`: If starts with 'http', passed to `SQLDataModel.from_html()` as url, otherwise based on extension if valid system filepath:
+                    - `'.csv'`: passed to `SQLDataModel.from_csv()` as csv source data.
+                    - `'.html'`: passed to `SQLDataModel.from_html()` as html source data.
+                    - `'.json'`: passed to `SQLDataModel.from_json()` as json source data.
+                    - `'.md'`: passed to `SQLDataModel.from_markdown()` as markdown source data.
+                    - `'.parquet'`: passed to `SQLDataModel.from_parquet()` as parquet source data.
+                    - `'.pkl'`: passed to `SQLDataModel.from_pickle()` as pickle source data.
+                    - `'.sdm'`: passed to `SQLDataModel.from_pickle()` as pickle source data.
+                    - `'.tex'`: passed to `SQLDataModel.from_latex()` as latex source data.
+                    - `'.tsv'`: passed to `SQLDataModel.from_csv()` as csv source data.
+                    - `'.txt'`: passed to `SQLDataModel.from_text()` as text source data.
+            - `**kwargs`: Additional keyword arguments to be passed to the constructor method, see init method for arguments.
 
         Returns:
-            `SQLDataModel`: The SQLDataModel object created from the provided data.
+            - `SQLDataModel`: The SQLDataModel object created from the provided data.
 
-        Example:
+        Raises:
+            - `TypeError`: If the type of `data` is not supported.
+            - `ValueError`: If the file extension is not found, unsupported, or if the SQL extension is not supported.
+            - `Exception`: If an OS related error occurs during file read operations if `data` is a filepath.
+
+        Examples:
+
+        ---
+            
         ```python
-        data = [[1, 'John', 30], [2, 'Jane', 25], [3, 'Bob', 40]]
-        sdm = SQLDataModel.from_data(data, headers=['ID', 'Name', 'Age'])
+        from SQLDataModel import SQLDataModel
+
+        # Create SQLDataModel from a CSV file
+        sdm_csv = SQLDataModel.from_data("data.csv", headers=['ID', 'Name', 'Value'])
+
+        # Create SQLDataModel from a dictionary
+        sdm_dict = SQLDataModel.from_data({"ID": int, "Name": str, "Value": float})
+
+        # Create SQLDataModel from a list of tuples
+        sdm_list = SQLDataModel.from_data([(1, 'Alice', 100.0), (2, 'Bob', 200.0)], headers=['ID', 'Name', 'Value'])
+
+        # Create SQLDataModel from raw string literal
+        delimited_literal = '''
+        A, B, C
+        1, 2, 3
+        4, 5, 6
+        7, 8, 9
+        '''
+
+        # Create the model by having correct constructor inferred
+        sdm = SQLDataModel.from_data(delimited_literal)
+
+        # View output
+        print(sdm)
         ```
+        ```shell
+        ┌────┬────┬────┐
+        │ A  │ B  │ C  │
+        ├────┼────┼────┤
+        │ 1  │ 2  │ 3  │
+        │ 4  │ 5  │ 6  │
+        │ 7  │ 8  │ 9  │
+        └────┴────┴────┘
+        [3 rows x 3 columns]
+        ```
+        ---
+
+        Note:
+            - This method attempts to infer the correct method to call based on `data` argument, if one cannot be inferred an exception is raised.
+            - For data type specific implementation or examples, see related method for appropriate data type.
+
         """
-        return cls(data, headers, **kwargs)
+        if not isinstance(data, (list, tuple, str, dict)) and (type(data).__name__ not in ('ndarray','DataFrame')):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(data).__name__}', argument for `data` must be one of 'list', 'tuple', 'str', 'dict' or a supported external object type")
+            )
+        supported_ext = ('.csv','.html','.json','.md','.parquet','.pkl','.sdm','.tex','.tsv','.txt')
+        ext_operation = {
+             '.csv': SQLDataModel.from_csv
+            ,'.html': SQLDataModel.from_html
+            ,'.json': SQLDataModel.from_json
+            ,'.md': SQLDataModel.from_markdown
+            ,'.parquet': SQLDataModel.from_parquet
+            ,'.pkl': SQLDataModel.from_pickle
+            ,'.sdm': SQLDataModel.from_pickle
+            ,'.tex': SQLDataModel.from_latex
+            ,'.tsv': SQLDataModel.from_csv
+            ,'.txt': SQLDataModel.from_text
+        }
+        if isinstance(data, dict):
+            if all(value in ('None','int','float','str','bytes','date','datetime','NoneType','bool') for value in data.values()):
+                return SQLDataModel(dtypes=data, **kwargs)
+            else:
+                return SQLDataModel.from_dict(data, **kwargs)            
+        elif isinstance(data, (list,tuple)):
+            if len(data) == 1:
+                return SQLDataModel(headers=data, **kwargs)
+            else:
+                return SQLDataModel(data=data, **kwargs)
+        elif isinstance(data, str):
+            if data.startswith('http'):
+                return ext_operation['.html'](data, **kwargs)
+            if os.path.exists(data):
+                ext = os.path.splitext(data)[-1]
+                if not ext:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: file extension not found, files without extensions cannot be parsed without further information")
+                    )
+                if ext.lower() not in supported_ext:
+                    if ext.lower() in ('.db', '.sqlite'):
+                        raise ValueError(
+                            SQLDataModel.ErrorFormat(f"ValueError: sql extension '{ext}' not supported by `from_data()`, use specialized method `from_sql()` instead")
+                        )                        
+                    else:
+                        raise ValueError(
+                            SQLDataModel.ErrorFormat(f"ValueError: unsupported file extension '{ext}', see documentation for a list of supported file types")
+                        )
+                return ext_operation[ext.lower()](data, **kwargs)
+            html_pattern = r'</table>'
+            latex_pattern = r'\\begin\{tabular\}'
+            markdown_pattern = r'\| *(:?-{3,}:? *\|)+'
+            json_pattern = r'\{.*\}'
+            if bool(re.search(html_pattern, data)):
+                return ext_operation['.html'](data, **kwargs)
+            elif bool(re.search(latex_pattern, data)):
+                return ext_operation['.tex'](data, **kwargs)
+            elif bool(re.search(markdown_pattern, data)):
+                return ext_operation['.md'](data, **kwargs)
+            elif bool(re.search(json_pattern, data)):
+                try:
+                    json.loads(data)
+                    is_json = True
+                except Exception:
+                    is_json = False
+                if is_json:
+                    return ext_operation['.json'](data, **kwargs)
+            return SQLDataModel.from_text(data, **kwargs)
+        else:
+            arg_type = type(data).__name__
+            if arg_type == 'ndarray':
+                return SQLDataModel.from_numpy(data, **kwargs)
+            elif arg_type == 'DataFrame':
+                return SQLDataModel.from_pandas(data, **kwargs)
+            else:
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: unsupported type '{arg_type}', current supported external types are 'numpy.ndarray' or 'pandas.DataFrame' objects")
+                )
     
     @classmethod
     def from_dict(cls, data:dict|list, **kwargs) -> SQLDataModel:
@@ -2056,7 +2290,7 @@ class SQLDataModel:
         Parameters:
             - `json_source` (str | list | dict): The JSON source. If a string, it can represent a file path or a JSON-like object.
             - `encoding` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
-            - `**kwargs`: Additional keyword arguments to pass to the file reading operation.
+            - `**kwargs`: Additional keyword arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
             - `SQLDataModel`: A new SQLDataModel instance created from the JSON source.
@@ -2065,9 +2299,11 @@ class SQLDataModel:
             - `TypeError`: If the `json_source` argument is not of type 'str', 'list', or 'dict'.
             - `OSError`: If related exception occurs when trying to open and read from `json_source` as file path.
 
+        Examples:
+
         ---
 
-        Example 1: From JSON String
+        #### Example 1: From JSON String Literal
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2110,7 +2346,7 @@ class SQLDataModel:
 
         ---
 
-        Example 2: From JSON-like Object
+        #### Example 2: From JSON-like Object
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2149,7 +2385,7 @@ class SQLDataModel:
 
         ---
 
-        Example 3: From JSON file
+        #### Example 3: From JSON file
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2193,15 +2429,15 @@ class SQLDataModel:
         if isinstance(json_source, str):
             if os.path.exists(json_source):
                 try:
-                    with open(json_source, 'r', encoding=encoding, **kwargs) as f:
+                    with open(json_source, 'r', encoding=encoding) as f:
                         json_source = f.read()
                 except Exception as e:
                     raise Exception (
-                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `json_source`")
                     ) from None    
             json_source = json.loads(json_source)
         data_dict = SQLDataModel.flatten_json(json_source)
-        return cls.from_dict(data_dict)
+        return SQLDataModel.from_dict(data_dict, **kwargs)
 
     @classmethod
     def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, **kwargs) -> SQLDataModel:
@@ -2232,9 +2468,11 @@ class SQLDataModel:
             - `ValueError`: If no <table> elements are found or if the targeted `table_identifier` is not found.
             - `OSError`: Related exceptions that may be raised when `html_source` is considered a file path.
 
+        Examples:
+
         ---
 
-        From URL Example:
+        #### Example 1: From Website URL:
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2266,7 +2504,7 @@ class SQLDataModel:
 
         ---
 
-        From Local File Example: 
+        #### Example 2: From Local File 
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2295,7 +2533,7 @@ class SQLDataModel:
         
         ---
 
-        From Raw HTML Example:
+        #### Example 3: From Raw HTML
 
         ```python
         from SQLDataModel import SQLDataModel
@@ -2754,17 +2992,56 @@ class SQLDataModel:
 
         Raises:
             - `ModuleNotFoundError`: If the required package `numpy` is not found.
+            - `TypeError`: If `array` argument is not of type 'numpy.ndarray'.
+            - `DimensionError`: If `array.ndim != 2` representing a (row, column) tabular array.
 
-        Example:
+        Examples:
+
+        ---
+
         ```python
         import numpy as np
-        sdm_obj = SQLDataModel.from_numpy(np.array([[1, 'a'], [2, 'b'], [3, 'c']]), headers=['Number', 'Letter'])
+        from SQLDataModel import SQLDataModel
+
+        # Sample array
+        arr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+        # Create the model with custom headers
+        sdm = SQLDataModel.from_numpy(arr, headers=['Col A', 'Col B', 'Col C])
+
+        # View output
+        print(sdm)
         ```
+        ```shell
+        ┌───────┬───────┬───────┐
+        │ Col A │ Col B │ Col C │
+        ├───────┼───────┼───────┤
+        │     1 │     2 │     3 │
+        │     4 │     5 │     6 │
+        │     7 │     8 │     9 │
+        └───────┴───────┴───────┘
+        [3 rows x 3 columns]
+        ```
+
+        ---
+
+        Note:
+            - Numpy array must have '2' dimensions, the first representing the rows, and the second the columns.
+            - If no headers are provided, default headers will be generated as 'col_N' where N represents the column integer index.
+
         """
         if not _has_np:
             raise ModuleNotFoundError(
                 SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use the `from_numpy()` method""")
                 )
+        if (obj_type := type(array).__name__) != 'ndarray':
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{obj_type}', argument for `array` must be of type 'ndarray'")
+            )
+        if (obj_ndim := array.ndim) != 2:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid dimension '{obj_ndim}', argument for `array` must have 2 dimensions representing `(rows, columns)`")
+            )
         return cls(data=array.tolist(),headers=headers, **kwargs)
 
     @classmethod
@@ -2782,18 +3059,37 @@ class SQLDataModel:
 
         Raises:
             - `ModuleNotFoundError`: If the required package `pandas` is not found.
+            - `TypeError`: If `df` argument is not of type 'pandas.DataFrame'.
 
-        Example:
+        Examples:
+
+        ---
+
         ```python
         import pandas as pd
+        from SQLDataModel import SQLDataModel
 
-        sdm = SQLDataModel.from_pandas(pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']}))
+        # Create a pandas DataFrame
+        df = pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']})
+        
+        # Create the model
+        sdm = SQLDataModel.from_pandas(df)
         ```
+
+        ---
+
+        Note:
+            - If `headers` are not provided, the existing pandas columns will be used as the new `SQLDataModel` headers.
+
         """
         if not _has_pd:
             raise ModuleNotFoundError(
                 SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use the `from_pandas()` method""")
                 )
+        if (obj_type := type(df).__name__) != 'DataFrame':
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{obj_type}', argument for `df` must be of type 'DataFrame'")
+            )        
         data = [x[1:] for x in df.itertuples()]
         headers = df.columns.tolist() if headers is None else headers
         return cls(data=data,headers=headers, **kwargs)
@@ -2885,31 +3181,61 @@ class SQLDataModel:
 
         Parameters:
             - `filename` (str, optional): The name of the pickle file to load. If None, the current directory will be scanned for the default filename. Default is None.
-            - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
+            - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor, these will override the properties loaded from `filename`.
 
         Returns:
-            `SQLDataModel`: The SQLDataModel object created from the loaded pickle file.
+            - `SQLDataModel`: The SQLDataModel object created from the loaded pickle file.
 
         Raises:
+            - `TypeError`: If filename is provided but is not of type 'str' representing a valid pickle filepath.
             - `FileNotFoundError`: If the provided filename could not be found or does not exist.
+        
+        Examples:
 
-        Example:
+        ---
+
         ```python
-        sdm_obj = SQLDataModel.from_pickle("data.sdm")
+        from SQLDataModel import SQLDataModel
+
+        headers = ['Name','Age','Sex']
+        data = [('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
+
+        # Create the model with sample data
+        sdm = SQLDataModel(data=data, headers=headers)
+
+        # Filepath
+        pkl_file = 'people.sdm'
+
+        # Save the model
+        sdm.to_pickle(filename=pkl_file)
+
+        # Load it back from file
+        sdm = SQLDataModel.from_pickle(filename=pkl_file)
         ```
+
+        ---
+
+        Notes:
+            - All data, headers, data types and display properties will be saved when pickling.
+            - Any additional `kwargs` provided will override those saved in the pickled model.
         """
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
-        if (filename is not None) and (len(filename.split(".")) <= 1):
-            print(SQLDataModel.WarnFormat(f"SQLDataModelWarning: file extension missing, provided filename \"{filename}\" did not contain an extension and so \".sdm\" was appended to create a valid filename..."))
-            filename += '.sdm'
-        if not Path(filename).is_file():
-            raise FileNotFoundError(
-                SQLDataModel.ErrorFormat(f"FileNotFoundError: file not found, provided filename \"{filename}\" could not be found, please ensure the filename exists in a valid path...")
+        else:
+            if not isinstance(filename, str):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid pickle filepath")
                 )
-        with open(filename, 'rb') as f:
-            tot_raw = pickle.load(f) # Tuple of Tuples raw data
-            return cls(tot_raw[1:],headers=tot_raw[0], **kwargs)
+        try:
+            with open(filename, 'rb') as f:
+                sdm_deserialized = pickle.load(f)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                SQLDataModel.ErrorFormat(f"FileNotFoundError: no such file or directory '{filename}', please ensure the filename exists and is a valid path")
+                ) from None            
+        if kwargs:
+            sdm_deserialized.update(**kwargs)
+        return cls(**sdm_deserialized)
  
     @classmethod
     def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, dtypes:dict=None, **kwargs) -> SQLDataModel:
@@ -3029,6 +3355,7 @@ class SQLDataModel:
                     when 'REA' then 'float'
                     when 'INT' then 'int'
                     when 'DAT' then 'date'
+                    when 'BLO' then 'bytes'
                     else 'str' end as "column_dtype"
                 from pragma_table_info("{table_name}") """)
                 dtypes = {res[0]: res[1] for res in sql_c.fetchall()}
@@ -3113,7 +3440,7 @@ class SQLDataModel:
         tables = re.findall(r'┌.*?┘', text_source, re.DOTALL)
         if not tables:
             try:
-                return SQLDataModel.from_csv(text_source,headers=headers)
+                return SQLDataModel.from_csv(text_source,headers=headers, **kwargs)
             except Exception:
                 raise ValueError(
                     SQLDataModel.ErrorFormat("ValueError: no tabular data found in `text_source`, confirm correct filepath or that provided content contains valid tabular data")
@@ -3202,41 +3529,101 @@ class SQLDataModel:
             data = data[0]
         return [tuple(x[0] for x in res.description),*data] if include_headers else data
 
-    def to_csv(self, csv_file:str, delimeter:str=',', quotechar:str='"', include_index:bool=False, **kwargs) -> None:
+    def to_csv(self, filename:str=None, delimiter:str=',', quotechar:str='"', lineterminator:str='\r\n', include_index:bool=False, **kwargs) -> str|None:
         """
-        Writes `SQLDataModel` to the specified file in the `csv_file` argument.
-        The file must have a compatible `.csv` file extension.
+        Writes `SQLDataModel` to the specified file if `filename` argument if provided, otherwise returns the model directly as a CSV formatted string literal.
 
         Parameters:
-            - `csv_file` (str): The name of the CSV file to which the data will be written.
+            - `filename` (str): The name of the CSV file to which the data will be written. Default is None, returning as raw literal.
             - `delimiter` (str, optional): The delimiter to use for separating values. Default is ','.
             - `quotechar` (str, optional): The character used to quote fields. Default is '"'.
+            - `lineterminator` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
             - `include_index` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
             - `**kwargs`: Additional arguments to be passed to the `csv.writer` constructor.
 
         Returns:
-            None
+            - If `filename` is None, returns the model as a delimited string literal.
+            - If `filename` is provided, writes the model to the specified file as a CSV file.
 
-        Example:
+        Examples:
+
+        ---
+
+        #### Example 1: Returning CSV Literal
+
         ```python
         from SQLDataModel import SQLDataModel
 
-        # Create instance
-        sdm = SQLDataModel.from_csv('raw-data.csv')
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Travis', 35, 185.8)
+        ]
 
-        # Save SQLDataModel to csv file in data directory:
-        sdm.to_csv("./data/analysis.csv", include_index=True)
+        # Create the model
+        sdm = SQLDataModel(data, headers)
 
-        # Save SQLDataModel as tab separated values instead:
-        sdm.to_csv("./data/analysis.csv", delimiter='\\t', include_index=False)
+        # Generate the literal using tab delimiter
+        csv_literal = sdm.to_csv(delimiter='\\t')
+
+        # View output
+        print(csv_literal)
         ```
+        ```shell
+        Name    Age     Height
+        John    30      175.3
+        Alice   28      162.0
+        Travis  35      185.8
+        ```
+
+        #### Example 2: Write to File
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Travis', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # CSV filename
+        csv_file = 'persons.csv'
+
+        # Write to the file, keeping the index
+        sdm.to_csv(filename=csv_file, include_index=True)
+        ```
+        `persons.csv`:
+        ```shell
+        idx,Name,Age,Height
+        0,John,30,175.3
+        1,Alice,28,162.0
+        2,Travis,35,185.8
+        ```
+
+        ---
+
+        Notes:
+            - Modifying `delimiter` affects how the data is delimited when writing to `filename` and when returning as raw literal.
+            - When `include_index=True`, the `sdm_index` property determines the column name of the index in the result.
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
-        write_headers = [x[0] for x in res.description]
-        with open(csv_file, 'w', newline='') as file:
-            csvwriter = csv.writer(file,delimiter=delimeter,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, **kwargs)
-            csvwriter.writerow(write_headers)
-            csvwriter.writerows(res.fetchall())
+        headers = [x[0] for x in res.description]
+        if filename is not None:
+            with open(filename, 'w', newline='') as file:
+                csvwriter = csv.writer(file,delimiter=delimiter,lineterminator=lineterminator,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, **kwargs)
+                csvwriter.writerow(headers)
+                csvwriter.writerows(res.fetchall())
+            return
+        csv_repr = lineterminator.join([delimiter.join([f'''{quotechar}{col}{quotechar}''' for col in headers]),*[delimiter.join([f'''{quotechar}{cell}{quotechar}''' for cell in row]) for row in res.fetchall()]])
+        return csv_repr
 
     def to_dict(self, orient:Literal["rows","columns","list"]="rows", include_index:bool=None) -> dict|list[dict]:
         """
@@ -3528,7 +3915,7 @@ class SQLDataModel:
         if filename is not None:
             try:
                 with open(filename, "w") as f:
-                    json.dump(json_data, f, **kwargs)
+                    json.dump(json_data, f, cls=DataTypesEncoder, **kwargs)
             except Exception as e:
                 raise Exception (
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write json")
@@ -3687,12 +4074,10 @@ class SQLDataModel:
         latex_bold = """\\textbf""" if bold_headers else """"""
         vertical_truncation_required = False
         max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
-        check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
-        check_width_bottom = (self.row_count-1) - check_width_top
         display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if include_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if include_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -3781,16 +4166,17 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
         return [tuple([x[0] for x in res.description]),*res.fetchall()] if include_headers else res.fetchall()
     
-    def to_markdown(self, filename:str=None, include_index:bool=False, min_column_width:int=None, max_column_width:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None) -> str|None:
+    def to_markdown(self, filename:str=None, include_index:bool=False, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None) -> str|None:
         """
         Returns the current `SQLDataModel` as a markdown table literal if `filename` is None, otherwise writes the table to the provided file as markdown.
 
         Parameters:
             - `filename` (str, optional): The name of the file to write the Markdown content. If not provided, the Markdown content is returned as a string. Default is None.
             - `include_index` (bool, optional): Whether to include the index column in the Markdown output. Default is False.
-            - `min_column_width` (int, optional): The minimum column width for table cells. Default is current value set on property `self.min_column_width`.
-            - `max_column_width` (int, optional): The maximum column width for table cells. Default is current value set on property `self.max_column_width`.
-            - `column_alignment` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is current value set on property `self.column_alignment`.
+            - `min_column_width` (int, optional): The minimum column width for table cells. Default is current value set on `self.min_column_width`.
+            - `max_column_width` (int, optional): The maximum column width for table cells. Default is current value set on `self.max_column_width`.
+            - `float_precision` (int, optional): The precision for floating-point values. Default is current value set on `self.display_float_precision`.
+            - `column_alignment` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is current value set on `self.column_alignment`.
                 - `'dynamic'`: dynamically aligns column content, right for numeric types and left for remaining types.
                 - `'left'`: left-aligns all column content.
                 - `'center'`: center-aligns all column content preferring left on uneven splits.
@@ -3864,17 +4250,17 @@ class SQLDataModel:
         sdm = SQLDataModel(data=data, headers=headers)
 
         # Write the output to the file, center-aligning all columns
-        markdown_table = sdm.to_markdown(filename='Table.MD', column_alignment='center')        
-        ```
+        sdm.to_markdown(filename='Table.MD', column_alignment='center')  
         
-        Markdown file table content be rendered as:
-
+        ```
+        `Table.MD`:
+        ```markdown
         | Name    |  Age |  Height |
         |:--------|-----:|--------:|
         | John    |   30 |  175.30 |
         | Alice   |   28 |  162.00 |
         | Michael |   35 |  185.80 |
-
+        ```
         ---
 
         Note:
@@ -3898,6 +4284,10 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(max_column_width).__name__}', expected `max_column_width` to be of type 'int' representing maximum column width for table cells")
             )   
+        if (not isinstance(float_precision, int) and (float_precision is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(float_precision).__name__}', expected `float_precision` to be of type 'int' representing precision to use for values of type 'float'")
+            )          
         if (column_alignment is not None) and (column_alignment not in ('dynamic', 'left', 'center', 'right')):
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of 'dynamic', 'left', 'center', 'right' representing column alignment for markdown output")
@@ -3905,17 +4295,16 @@ class SQLDataModel:
         min_column_width = self.min_column_width if min_column_width is None else min_column_width
         max_column_width = self.max_column_width if max_column_width is None else max_column_width
         max_column_width = max_column_width if max_column_width >= 2 else 2 # minimum required width
+        float_precision = self.display_float_precision if float_precision is None else float_precision
         column_alignment = self.column_alignment if column_alignment is None else column_alignment
         column_alignment = None if column_alignment == 'dynamic' else '<' if column_alignment == 'left' else '^' if column_alignment == 'center' else '>'
         display_max_rows = self.row_count
         vertical_truncation_required = False
         max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
-        check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
-        check_width_bottom = (self.row_count-1) - check_width_top
         display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
-        header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if include_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
+        header_printf_modifiers_dict = {col:(f"'% .{float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if include_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -3927,7 +4316,7 @@ class SQLDataModel:
         table_dynamic_newline = """\n"""
         vconcat_column_separator = """|| ' | ' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if include_index else ""
-        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
         fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' |{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if column_alignment is None:
@@ -4120,20 +4509,21 @@ class SQLDataModel:
 
     def to_pickle(self, filename:str=None) -> None:
         """
-        Save the `SQLDataModel` instance to the specified `filename`.
-
-        By default, the name of the invoking Python file will be used.
+        Save the `SQLDataModel` instance to the specified `filename` as a pickle object.
 
         Parameters:
-            - `filename` (str, optional): The name of the file to which the instance will be saved. If not provided,
-            the invoking Python file's name with a ".sdm" extension will be used.
+            - `filename` (str, optional): The file name to save the model to. If None, the invoking Python file's name with a ".sdm" extension will be used.
 
         Returns:
-            `None`
+            - `None`
+
+        Raises:
+            - `TypeError`: If filename is provided but is not of type 'str' representing a valid pickle filepath.        
+
+        Examples:
         
         ---
 
-        Example:
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -4157,15 +4547,25 @@ class SQLDataModel:
         # This way the same data can be recreated later by calling the from_pickle() method from the same project:
         sdm = SQLDataModel.from_pickle()
         ```
+
+        ---
+
+        Notes:
+            - All data, headers, data types and display properties will be saved when pickling.
+            - If no `filename` argument is provided, then the invoking module's `__name__` property will be used by default.
+
         """
-        if (filename is not None) and (len(filename.split(".")) <= 1):
-            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: extension missing, provided filename '{filename}' did not contain an extension and so '.sdm' was appended to create a valid filename"))
-            filename += '.sdm'
+        dtypes = {col:self.header_master[col][1] for col in [self.sql_idx,*self.headers]}
+        serialized_sdm = dict(headers=list(dtypes.keys()),dtypes=dtypes, data=self.data(include_index=True), **self._get_display_args())
         if filename is None:
             filename = os.path.basename(sys.argv[0]).split(".")[0]+'.sdm'
-        serialized_data = tuple(x for x in self.iter_rows(include_index=True,include_headers=True)) # no need to send sql_store_id aka index to pickle
+        else:
+            if not isinstance(filename, str):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid pickle filepath")
+                )
         with open(filename, 'wb') as handle:
-            pickle.dump(serialized_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(serialized_sdm, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def to_sql(self, table:str, extern_conn:sqlite3.Connection, replace_existing:bool=True, include_index:bool=True) -> None:
         """
@@ -4226,7 +4626,7 @@ class SQLDataModel:
             extern_c = extern_conn.cursor()
         except Exception as e:
             raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f"""SQLProgrammingError: provided SQL connection is not open, please reopen the database connection or resolve "{e}"...""")
+                SQLDataModel.ErrorFormat(f"""SQLProgrammingError: provided SQL connection is not open, please reopen the database connection or resolve "{e}" """)
             ) from None
         if replace_existing:
             extern_c.execute(f"""drop table if exists "{table}" """)
@@ -4242,20 +4642,37 @@ class SQLDataModel:
         extern_conn.commit()
         return
 
-    def to_text(self, filename:str, include_ts:bool=False) -> None:
+    def to_text(self, filename:str=None, include_index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None) -> str|None:
         """
-        Writes contents of `SQLDataModel` to the specified `filename` as text representation.
+        Returns a textual representation of the current `SQLDataModel` as a string literal or by writing to file if a `filename` is provided.
 
         Parameters:
-            - `filename` (str): The name of the file to which the contents will be written.
-            - `include_ts` (bool, optional): If True, includes a timestamp in the file. Default is False.
+            - `filename` (str, optional): The name of the file to write the text content. If provided, writes the text to the specified file. Default is None.
+            - `include_index` (bool, optional): Whether to include the index column in the text output. Default is value set on `self.display_index`.
+            - `min_column_width` (int, optional): The minimum column width for table cells. Default is value set on `self.min_column_width`.
+            - `max_column_width` (int, optional): The maximum column width for table cells. Default is value set on `self.max_column_width`.
+            - `float_precision` (int, optional): The precision for floating-point values. Default is value set on `self.display_float_precision`.
+            - `column_alignment` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is value set on `self.column_alignment`.
+                - `'dynamic'`: dynamically aligns column content, right for numeric types and left for remaining types.
+                - `'left'`: left-aligns all column content.
+                - `'center'`: center-aligns all column content.
+                - `'right'`: right-aligns all column content.
 
         Returns:
-            - `None`
+            - If `filename` is None, returns the textual representation as a string.
+            - If `filename` is provided, writes the textual representation to the specified file and returns None.
+
+        Raises:
+            - `TypeError`: If arguments are provided but are not the correct types: `filename` (str), `include_index` (bool), `min_column_width` (int), `max_column_width` (int), `float_precision` (int).
+            - `ValueError`: If the `column_alignment` argument is provided and is not one of 'dynamic', 'left', 'center', or 'right'.
+            - `Exception`: If there is an OS related error encountered when opening or writing to the provided `filename`.
+
+        Examples:
 
         ---
 
-        Example:
+        #### Example 1: Returning Text Literal
+
         ```python
         from SQLDataModel import SQLDataModel
 
@@ -4269,35 +4686,137 @@ class SQLDataModel:
 
         # Create the model
         sdm = SQLDataModel(data=data, headers=headers)
-    
-        # Write the model to text file
-        sdm.to_text("output.txt", include_ts=True)
 
-        # File content generated:
+        # Generate text table literal
+        text_table = sdm.to_text()
+
+        # View output
+        print(text_table)
+
         ```
-        
         ```shell
-        February 21 2024 09:13:53 status:
-        ┌─────────┬──────┬─────────┐
-        │ Name    │  Age │  Height │
-        ├─────────┼──────┼─────────┤
-        │ John    │   30 │  175.30 │
-        │ Alice   │   28 │  162.00 │
-        │ Michael │   35 │  185.80 │
-        └─────────┴──────┴─────────┘
-        [3 rows x 3 columns]
+
+        ┌─────────┬──────┬────────┐
+        │ Name    │  Age │ Height │
+        ├─────────┼──────┼────────┤
+        │ John    │   30 │  175.3 │
+        │ Alice   │   28 │  162.0 │
+        │ Michael │   35 │  185.8 │
+        └─────────┴──────┴────────┘
         ```
 
         ---
-        
-        Notes:
-            - Text written to provided filename will reflect all properties and settings on the instance calling the method.
-            - Change the instance properties to adjust minimum and maximum column widths and how table truncation is decided.
 
-        """
-        contents = f"{datetime.datetime.now().strftime('%B %d %Y %H:%M:%S')} status:\n" + self.__repr__() if include_ts else self.__repr__()
-        with open(filename, "w", encoding='utf-8') as file:
-            file.write(contents)
+        #### Example 2: Write to File
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        # Sample data
+        headers = ['Name', 'Age', 'Height']
+        data = [
+            ('John', 30, 175.3), 
+            ('Alice', 28, 162.0), 
+            ('Michael', 35, 185.8)
+        ]
+
+        # Create the model
+        sdm = SQLDataModel(data=data, headers=headers)
+
+        # Write the output to the file, center-aligning all columns
+        sdm.to_text(filename='Table.txt', column_alignment='center')        
+
+        ```
+        `Table.txt`:
+        ```shell
+        ┌───┬─────────┬──────┬────────┐
+        │   │  Name   │ Age  │ Height │
+        ├───┼─────────┼──────┼────────┤
+        │ 0 │  John   │  30  │ 175.3  │
+        │ 1 │  Alice  │  28  │ 162.0  │
+        │ 2 │ Michael │  35  │ 185.8  │
+        └───┴─────────┴──────┴────────┘
+        ```
+        
+        ---
+
+        Notes:
+            - If `filename` is provided, the method writes the text to the specified file; otherwise, it returns the textual representation as a string.
+            - If `include_index` is None, the method uses the current value set on instance property `self.display_index`.
+            - If `min_column_width` is None, the method uses the current value set on instance property `self.min_column_width`.
+            - If `max_column_width` is None, the method uses the current value set on instance property `self.max_column_width`.
+            - If `float_precision` is None, the method uses the current value set on instance property `self.display_float_precision`.
+            - If `column_alignment` is None, the method uses the current value set on instance property `self.column_alignment`.
+
+        """        
+        if not isinstance(filename, str) and filename is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', expected `filename` to be of type 'str' representing a valid file path to write text")
+            )
+        if not isinstance(include_index, bool) and include_index is not None:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(include_index).__name__}', expected `include_index` to be of type 'bool' representing whether index should be included in text output")
+            )
+        if (not isinstance(min_column_width, int) and (min_column_width is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(min_column_width).__name__}', expected `min_column_width` to be of type 'int' representing minimum column width for table cells")
+            )        
+        if (not isinstance(max_column_width, int) and (max_column_width is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(max_column_width).__name__}', expected `max_column_width` to be of type 'int' representing maximum column width for table cells")
+            )   
+        if (not isinstance(float_precision, int) and (float_precision is not None)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(float_precision).__name__}', expected `float_precision` to be of type 'int' representing precision to use for values of type 'float'")
+            )          
+        if (column_alignment is not None) and (column_alignment not in ('dynamic', 'left', 'center', 'right')):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of 'dynamic', 'left', 'center', 'right' representing column alignment for text output")
+            )
+        include_index = self.display_index if include_index is None else include_index
+        min_column_width = self.min_column_width if min_column_width is None else min_column_width
+        max_column_width = self.max_column_width if max_column_width is None else max_column_width
+        max_column_width = max_column_width if max_column_width >= 2 else 2 # minimum required width
+        float_precision = self.display_float_precision if float_precision is None else float_precision
+        column_alignment = self.column_alignment if column_alignment is None else column_alignment
+        column_alignment = None if column_alignment == 'dynamic' else '<' if column_alignment == 'left' else '^' if column_alignment == 'center' else '>'
+        display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
+        header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
+        header_printf_modifiers_dict = {col:(f"'% .{float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if include_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc'))
+        headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
+        headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
+        length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
+        header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}
+        txt_repr = """""" # big things...
+        table_left_edge = """│ """
+        table_right_edge = """ │"""
+        table_bare_newline = """\n"""
+        vconcat_column_separator = """|| ' │ ' ||"""
+        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if include_index else ""
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_bare_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc"""
+        formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
+        if column_alignment is None: # dynamic alignment
+            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
+        else: # left, center, right alignment
+            formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
+        table_cross_bar = """┌─""" + """─┬─""".join(["""─""" * header_length_dict[col] for col in display_headers]) + """─┐""" + table_bare_newline
+        txt_repr = "".join([txt_repr, table_cross_bar])
+        txt_repr = "".join([txt_repr, table_left_edge + """ │ """.join(formatted_headers) + table_right_edge + table_bare_newline])
+        txt_repr = "".join([txt_repr, table_cross_bar.replace("┌","├").replace("┬","┼").replace("┐","┤")])
+        txt_repr = "".join([txt_repr,*[row[0] for row in formatted_response]])
+        txt_repr = "".join([txt_repr, table_cross_bar.replace("┌","└").replace("┬","┴").replace("┐","┘")]).strip()
+        if filename is not None:
+            try:
+                with open(filename, "w", encoding='utf-8') as f:
+                    f.write(txt_repr)
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write text to '{filename}'")
+                ) from None
+        else:
+            return txt_repr 
 
     def to_local_db(self, db:str=None) -> None:
         """
@@ -5218,7 +5737,7 @@ class SQLDataModel:
                 ) from None
         # normal update values process where target update values is not another SQLDataModel object:
         if isinstance(target_indicies, str) and target_indicies not in self.headers:
-            validated_rows, validated_columns = tuple(range(self.row_count)), [target_indicies]
+            validated_rows, validated_columns = self.indicies, [target_indicies]
         else:
             try:
                 validated_rows, validated_columns = self.validate_indicies(target_indicies)
@@ -6164,7 +6683,7 @@ class SQLDataModel:
             pen = ANSIColor(color)
             self.display_color = pen
         except:
-            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code..."))
+            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code"))
 
     def sort(self, by:str|list[str]=None, asc:bool=True) -> SQLDataModel:
         """
@@ -6441,7 +6960,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to create function with provided callable "{func}", SQL process failed with: {e}')
             ) from None
-        input_columns = ",".join([f"\"{col}\"" for col in self.headers])
+        input_columns = ",".join([f'"{col}"' for col in self.headers])
         derived_query = f"""select {func_name}({input_columns}) as "{func_name}" from "{self.sql_model}" """
         return self.execute_fetch(derived_query)
 
@@ -6542,13 +7061,13 @@ class SQLDataModel:
                 )
         return {col:self.header_master[col][dtypes] for col in columns}
 
-    def set_column_dtypes(self, column:str|int, dtype:Literal['bytes','date','datetime','float','int','str']) -> None:
+    def set_column_dtypes(self, column:str|int, dtype:Literal['bool','bytes','date','datetime','float','int','str']) -> None:
         """
         Casts the specified `column` into the provided python `dtype`. The datatype must be a valid convertable python datatype to map to an equivalent SQL datatype.
 
         Parameters:
             - `column` (str or int): The name or index of the column to be cast, must be current header or within range of current `column_count`
-            - `dtype` (Literal['bytes', 'datetime', 'float', 'int', 'str']): The target python data type for the specified column.
+            - `dtype` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'str']): The target python data type for the specified column.
 
         Raises:
             - `TypeError`: If `column` is not of type 'str' or 'int'.
@@ -6596,9 +7115,9 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
             )
-        if dtype not in ('bytes','date','datetime','float','int','str'):
+        if dtype not in ('bool','bytes','date','datetime','float','int','str'):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bytes','date','datetime','float','int','str' use `get_column_dtypes()` to view current column datatypes")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bool','bytes','date','datetime','float','int','str' use `get_column_dtypes()` to view current column datatypes")
             )        
         if isinstance(column, int):
             try:
@@ -6613,7 +7132,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("date","datetime") else f"""{dtype}(trim("{column}"))"""
+        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("bool","date","datetime","bytes") else f"""{dtype}(trim("{column}"))""" if dtype not in ("bool","bytes") else f"""cast(case when ("{column}" = 'False' or "{column}" = 0) then 0 else 1 end as {col_sql_dtype})""" if dtype != "bytes" else f"""cast(CASE WHEN (SUBSTR("{column}",1,2) = 'b''' AND SUBSTR("{column}",-1,1) ='''') THEN SUBSTR("{column}",3,LENGTH("{column}")-4) ELSE "{column}" END as {col_sql_dtype})"""
         update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
         self.execute_transaction(update_col_sql)
         
@@ -6731,9 +7250,9 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
             )
         if not kwargs:
-            return type(self)(fetch_result, headers=fetch_headers, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+            return type(self)(fetch_result, headers=fetch_headers, dtypes=self.get_column_dtypes(), display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
         else:
-            params = {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
+            params = {"dtypes":self.get_column_dtypes(),"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
             params.update({k:v for k,v in kwargs.items()})
             return type(self)(fetch_result, headers=fetch_headers, **params)
 
@@ -7009,19 +7528,19 @@ class SQLDataModel:
         ### get column name from str or index ###
         if (not isinstance(column, int)) and (not isinstance(column, str)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column argument, \"{type(column).__name__}\" is not a valid target, provide column index or column name as a string...")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column argument, '{type(column).__name__}' is not a valid target, provide column index or column name as a string")
             )
         if isinstance(column, int):
             try:
                 column = self.headers[column]
             except IndexError as e:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index provided, {column} is not a valid column index, use `.column_count` property to get valid range...")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index provided, '{column}' is not a valid column index, use `.column_count` property to get valid range")
                 ) from None
         if isinstance(column, str):
             if column not in self.headers:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid column provided, {column} is not valid for current model, use `.get_headers()` method to get model headers...")
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', use `.get_headers()` to view current valid model headers")
                     )
             else:
                 column = column
@@ -7037,7 +7556,7 @@ class SQLDataModel:
         if func_argcount == 1:
             input_columns = target_column
         elif func_argcount == self.column_count:
-            input_columns = ",".join([f"\"{col}\"" for col in self.headers])
+            input_columns = ",".join([f'"{col}"' for col in self.headers])
         else:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid function arg count: '{func_argcount}', input args to '{func_name}' must be 1 or '{self.column_count}' based on the current models structure, e.g.,\n{self.generate_apply_function_stub()}")
@@ -7244,7 +7763,7 @@ class SQLDataModel:
 
     def _update_model_metadata(self, update_row_meta:bool=False) -> None:
         """
-        Generates and updates metadata information about the columns and optionally the rows in the SQLDataModel instance based on the current model. 
+        Generates and updates metadata information about the columns and optionally the rows in the `SQLDataModel` instance based on the current model. 
 
         Parameters:
             - `update_row_meta` (bool, optional): If True, updates row metadata information; otherwise, retrieves column metadata only (default).
@@ -7253,6 +7772,7 @@ class SQLDataModel:
             - `self.header_master`: Master dictionary of column metadata.
             - `self.headers`: List of current model headers, order retained.
             - `self.column_count`: Number of columns in current model.
+                - `self.indicies`: Optionally updated, represents current valid row indicies.
                 - `self.row_count`: Optionally updated, represents current row count.
             
         Returns:
@@ -7321,22 +7841,14 @@ class SQLDataModel:
         print(f"cols before: {num_cols_before}, cols after: {num_cols_after}")
         ```
         """        
-        if update_row_meta:
-            fetch_metadata = f"""select "_ordered_name","_ordered_type","_is_regular_column","_def_alignment" from (
-                select '_rowmeta' as "_ordered_name", 0 as "_ordered_type", 0 as "_is_regular_column", count("{self.sql_idx}") as "_def_alignment" from "{self.sql_model}"
-                union all
-                select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') 
-            ) order by "_ordered_name"='_rowmeta' desc, {",".join([f'"_ordered_name"="{col}" desc' for col in self.headers])}"""
-        else:
-            fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
+        fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
-        if update_row_meta:
-            self.row_count = metadata[0][-1]
-            metadata = metadata[1:]
         header_master = {m[0]:(m[1], self.static_sql_to_py_map_dict[m[1]],True if m[2] == 0 else False,m[3]) for m in metadata}
         self.headers = list(dict.fromkeys([k for k,v in header_master.items() if v[2]]))
         self.column_count = len(self.headers)
         self.header_master = header_master # format: 'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')
+        if update_row_meta:
+            self._update_indicies()
 
     def _generate_sql_stmt(self, columns:list[str]=None, rows:int|slice|tuple=None, include_index:bool=True) -> str:
         """
@@ -7401,6 +7913,60 @@ class SQLDataModel:
         fetch_stmt = " ".join(("select",f'"{self.sql_idx}",' if include_index else '',columns_str,f'from "{self.sql_model}"', ordering_str, f"limit {n_rows}"))
         return fetch_stmt
 
+    def _update_indicies(self) -> None:
+        """
+        Updates the `indicies` and `row_count` properties of the `SQLDataModel` instance representing the current valid row indicies and count.
+
+        Returns:
+            - `None`: The `self.indicies` and `self.row_count` propety is updated with the current indicies as a tuple.
+
+        Note:
+            - This method is called internally any time the `row_count` property is subject to change, or data manipulation requires updating the current values.
+            - There is no reason to call this method manually unless the model has been changed outside of the standard instance methods.
+
+        """
+        fetch_stmt = f"""select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc"""
+        self.indicies = tuple([x[0] for x in self.sql_db_conn.execute(fetch_stmt).fetchall()])
+        self.row_count = len(self.indicies)
+    
+    def get_indicies(self) -> tuple:
+        """
+        Returns the current valid row indicies for the `SQLDataModel` instance.
+
+        Returns:
+            - `tuple`: A tuple of the current values for `self.sql_idx` in ascending order.
+
+        Example:
+
+        ---
+
+        ```python
+        from SQLDataModel import SQLDataModel
+
+        headers = ['Name', 'Age', 'Height']
+        data = [('John', 30, 175.3), ('Alice', 28, 162.0), ('Travis', 35, 185.8)]
+
+        # Create the model
+        sdm = SQLDataModel(data, headers)
+
+        # Get current valid indicies
+        valid_indicies = sdm.get_indicies()
+
+        # View results
+        print(valid_indicies)
+        ```
+        ```shell
+        (0, 1, 2)
+        ```
+
+        ---
+
+        Notes:
+            - Primary use is to confirm valid model indexing when starting index != 0 or filtering changes minimum/maximum indexes.
+
+        """
+        return self.indicies
+
     def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
         """
         Generates and executes a SQL update statement to modify specific rows and columns with provided values in the SQLDataModel.
@@ -7441,7 +8007,8 @@ class SQLDataModel:
             - To copy an existing column, pass the corresponding data is a list of tuples to the `values_to_update` parameter.        
         """
         update_sql_script = None
-        rows_to_update = rows_to_update if rows_to_update is not None else tuple(range(self.row_count))
+        # this is the problem, even if the indicies are 2-7, this will generate 0:5 since the rowcount is 5 regardless of min and max indicies
+        rows_to_update = rows_to_update if rows_to_update is not None else self.indicies # use all rows if none specified, courtesy of new `indicies` property
         columns_to_update = columns_to_update if columns_to_update is not None else self.headers
         if not isinstance(values_to_update, (tuple,list)):
             values_to_update = (values_to_update,)
@@ -7613,47 +8180,32 @@ class SQLDataModel:
         ### single row index ###
         if isinstance(indicies, int):
             row_index = indicies
-            if row_index < 0:
-                row_index = self.row_count + row_index
-            if row_index < 0:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}'")
-                )
-            # modified to row index > row count to allow new rows to be inserted when row index == current row count
-            if row_index > self.row_count:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}'")
-                )
+            try:
+                row_index = self.indicies[row_index] # TODO: RIMOD
+            except IndexError:
+                if row_index != max(self.indicies): # auto add escape, ok to be out of range
+                    raise IndexError(
+                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within currend model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                    ) from None
             return (row_index, self.headers)
         ### single row slice index ###
         if isinstance(indicies, slice):
-            row_slice = indicies
-            start_idx = row_slice.start if row_slice.start is not None else 0
-            stop_idx = row_slice.stop if row_slice.stop is not None else self.row_count
-            start_idx = start_idx if start_idx >= 0 else self.row_count + start_idx
-            stop_idx = stop_idx if stop_idx > 0 else self.row_count + stop_idx
-            if start_idx < 0:
+            try:
+                rows_in_scope = self.indicies[indicies]
+            except ValueError:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows indexed, provided row index returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
+                ) from None
+            if (num_rows_in_scope := len(rows_in_scope)) < 1:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
-            if stop_idx <= start_idx:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{start_idx-stop_idx}', provided row index returns no valid rows within current model range of '0:{self.row_count}'")
-                )
-            if row_slice.step is None:
-                return (slice(start_idx,stop_idx), self.headers)
-            else:
-                rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_slice.step)]
-                if (num_rows_in_scope := len(rows_in_scope)) < 1:
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                    )
-                return (rows_in_scope, self.headers)
+            return (rows_in_scope, self.headers)
         ### single set of row indicies ###
         if isinstance(indicies, set):
             if (len_set := len(indicies)) < 1:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
             return (tuple(indicies), self.headers)
         ### columns by str or list of str ###
@@ -7663,7 +8215,7 @@ class SQLDataModel:
                 col_index = [col_index]
             if not all(isinstance(col, str) for col in col_index):
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(col_index[0].__name__)}' received, use `.get_headers()` to view valid column arguments")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(col_index[0]).__name__}' received, use `.get_headers()` to view valid column arguments")
                 )
             for col in col_index:
                 if col not in self.headers and col != self.sql_idx:
@@ -7682,22 +8234,19 @@ class SQLDataModel:
             )
         row_indicies, col_indicies = indicies
         ### rows first ###
-        if not isinstance(row_indicies, (int,tuple,slice)):
+        if not isinstance(row_indicies, (int,tuple,slice,set)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type for row indexing '{type(row_indicies).__name__}', rows must be indexed by type 'int' or 'slice'")
             )
+        if isinstance(row_indicies, set):
+            row_indicies = tuple(row_indicies)        
         if isinstance(row_indicies, int):
-            if row_indicies < 0:
-                row_indicies = self.row_count + row_indicies
-            if row_indicies < 0:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '0:{self.row_count}'")
-                )
-            if row_indicies >= self.row_count:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '0:{self.row_count}'")
-                )
-            validated_row_indicies = row_indicies
+            try:
+                validated_row_indicies = self.indicies[row_indicies] # TODO: RIMOD
+            except IndexError:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_indicies}', index must be within currend model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                ) from None
         elif isinstance(row_indicies, tuple): # tuple of disconnected row indicies
             if not all(isinstance(row, int) for row in row_indicies):
                 raise TypeError(
@@ -7706,33 +8255,25 @@ class SQLDataModel:
             min_row_idx, max_row_idx = min(row_indicies), max(row_indicies)
             if min_row_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
             if max_row_idx >= self.row_count:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
             validated_row_indicies = row_indicies
         else: # is slice
-            start_idx = 0 if row_indicies.start is None else row_indicies.start if row_indicies.start >= 0 else (self.row_count + row_indicies.start)
-            stop_idx = self.row_count if row_indicies.stop is None else row_indicies.stop if row_indicies.stop >= 0 else (self.row_count + row_indicies.stop)
-            if start_idx < 0:
+            try:
+                rows_in_scope = self.indicies[row_indicies]
+            except ValueError:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows indexed, provided row index returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
+                ) from None
+            if (num_rows_in_scope := len(rows_in_scope)) < 1:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
-            if stop_idx <= start_idx:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{stop_idx - start_idx}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                )    
-            if row_indicies.step is None:
-                validated_row_indicies = slice(start_idx, stop_idx)
-            else:
-                rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_indicies.step)]
-                if (num_rows_in_scope := len(rows_in_scope)) < 1:
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                    )
-                validated_row_indicies = rows_in_scope
+            validated_row_indicies = rows_in_scope
         ### then columns ###
         if not isinstance(col_indicies, (int,slice,tuple,str,list)):
             raise TypeError(
