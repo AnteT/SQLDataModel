@@ -388,7 +388,12 @@ class SQLDataModel:
             headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}        
         if dtypes is not None:
             [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if col in self.headers and dtype in self.static_py_to_sql_map_dict]
-        headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
+        try:
+            headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
+        except KeyError as e:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in `data` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
+            ) from None
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_params = ','.join([f'cast(? as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})' if headers_to_py_dtypes_dict[col] not in ('bool','bytes','datetime','date','None') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else f"""cast(case ? when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if headers_to_py_dtypes_dict[col] == 'bool' else """cast(? as blob)""" if headers_to_py_dtypes_dict[col] == 'bytes' else "nullif(trim(nullif(?,'None')),'')" if headers_to_py_dtypes_dict[col] == 'None' else "?" for col in self.headers])
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
@@ -532,21 +537,23 @@ class SQLDataModel:
         return 'str'
         
     @staticmethod
-    def infer_types_from_sample(input_data:list[list], min_sample:int=16) -> list[str]:
+    def infer_types_from_sample(input_data:list[list], min_sample:int=16, resample:bool=True) -> list[str]:
         """
-        Infer the best types given a sample of `input_data` using a random sample size of `frac` with a minimum sample size of `10`.
+        Infer the best types of `input_data` by using a random sample subset of size `min_sample` from the input.
 
         Parameters:
             - `input_data` (list[list]): A list of lists containing the input data.
             - `min_sample` (int, optional): The minimum number of samples from the input data to use for inference. Defaults to 16.
+            - `resample` (bool, optional): If the argument for `input_data` is already a representative sample. Defaults to True, which resamples from data.
 
         Returns:
             - `list`: A list representing the best-matching inferred types for each column with each index corresponds to the inferred type based on the sampled data.
-        """    
+        """
         n_samples, n_cols = len(input_data), len(input_data[0])
-        n_subset = min(min_sample, n_samples)
-        rand_samples = random.sample(input_data, n_subset)
-        rand_dtypes = [list(set([SQLDataModel.infer_type(rand_samples[i][j]) for i in range(n_subset)])) for j in range(n_cols)]
+        if resample:
+            n_samples = min(min_sample, n_samples)
+            input_data = random.sample(input_data, n_samples)
+        rand_dtypes = [list(set([SQLDataModel.infer_type(input_data[i][j]) for i in range(n_samples)])) for j in range(n_cols)]
         parsed_dtypes = ['str' for _ in range(n_cols)] # default type
         for cid in range(n_cols):
             col_type_ocurx = rand_dtypes[cid]
@@ -1702,30 +1709,28 @@ class SQLDataModel:
             ) 
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows=n_samples,ordering="random"), **kwargs)
 
-    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, datetime_format:str="%Y-%m-%d %H:%M:%S", non_inferrable_dtype:Literal["str","int","float","datetime","date","bytes","bool"]="str") -> None:
+    def infer_dtypes(self, n_samples:int=16) -> None:
         """
-        Infer and set data types for columns based on random sampling of `n_samples` from the dataset if proportion of data types in returned sample equals or exceeds `infer_threshold` otherwise fallback to data type specified in `non_inferrable_dtype` argument.
-        Dateutil library required for datetime parsing, otherwise if module not found `datetime_format` will be used.
+        Infer and set data types for columns based on a random subset of `n_samples` from the current model. 
+        The `dateutil` library is required for complex date and datetime parsing, if the module is not found then `'%Y-%m-%d %H:%M:%S'` will be used.
+
         Parameters:
-            - `n_samples` (int): The number of random samples to use for data type inference.
-            - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
-            - `datetime_format` (str): The datetime format to use to try and parse datetime.date and datetime.datetime objects from if `dateutil` library not installed.
-            - `non_inferrable_dtype` (Literal["str","int","float","datetime","date","bytes","bool]): The default data type to assign when ties occur, or when no dtype can be inferred.
+            - `n_samples` (int): The number of random samples to use for data type inference. Default set to `16`.
         
         Raises:
-            - `TypeError`: If argument for `n_samples` is not of type `int` or `infer_threshold` is not of type `float`
-            - `ValueError`: If value for `infer_threshold` is not a valid range satisfying `0.0 < infer_threshold <= 1.0`
-            - `TypeError`: If `non_inferrable_dtype` is not one of "str", "int", "float", "datetime", "date", "bytes", "bool"
+            - `TypeError`: If argument for `n_samples` is not of type `int`.
+            - `ValueError`: If the current model contains zero columns from which to infer types from.
+            - `DimensionError`: If the current model contains insufficient rows to sample from.
 
         Returns:
-            - `None`
+            - `None`: Inferred column types are updated and `None` is returned.
 
         Notes:
             - If a single `str` instance is found in the samples, the corresponding column dtype will remain as `str` to avoid data loss.
             - Co-occurences of `int` & `float`, or `date` & `datetime` will favor the superset dtype after `infer_threshold` is met, so `float` and `datetime` respectively.
             - If a single `datetime` instance is found amongst a higher proportion of `date` dtypes, `datetime` will be used according to second rule.
             - If a single `float` instance is found amongst a higher proportion of `int` dtypes, `float` will be used according to second rule.
-            - Ties between dtypes are broken according to `non_inferrable_dtype`<`str`<`float`<`int`<`datetime`<`date`<`bytes`
+            - Ties between dtypes are broken according to `current type` < `str` < `float` < `int` < `datetime` < `date` < `bytes` < `None`
             - This method calls the `set_column_dtypes()` method once the column dtypes have been inferred if they differ from the current dtype.
 
         ---   
@@ -1774,91 +1779,43 @@ class SQLDataModel:
             print(f"{col}: {sdm.get_column_dtypes(col)}")
         
         # Outputs
+        ```
+        ```shell
         first: str
         last: str
         age: int
         service: float
         hire_date: datetime.date        
         ```
+        ---
+
+        Related:
+            - See `SQLDataModel.infer_type()` for type determination process.
+            - See `SQLDataModel.infer_types_from_sample()` for type voting scheme used for inference.
+
         """
         if not isinstance(n_samples, int):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid `n_samples` type '{type(n_samples).__name__}', `n_samples` argument must be of type 'int' for `infer_dtypes()` method")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_samples).__name__}', argument for `n_samples` must be of type 'int' representing number of samples to use for inference")
             )
-        if not isinstance(infer_threshold, float):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid `infer_threshold` type '{type(infer_threshold).__name__}', `infer_threshold` argument must be of type 'int' for `infer_dtypes()` method")
-            )        
-        if (infer_threshold <= 0.0) or (infer_threshold > 1.0):
+        if self.row_count < 1:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid row count '{self.row_count}', at least 1 row is required for sampling when using `infer_dtypes()`")
+                )
+        str_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
+        if len(str_columns) < 1:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid `infer_threshold` value '{infer_threshold}', expected value in range '0.0 < infer_threshold <= 1.0' for `infer_dtypes()` method")
-            )   
-        if non_inferrable_dtype not in ("str","int","float","datetime","date","bytes","bool"):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid `non_inferrable_dtype` type '{type(non_inferrable_dtype).__name__}', expected one of 'str','int','float','datetime','date','bytes' or 'bool' for `infer_dtypes()` method")
+                SQLDataModel.ErrorFormat(f"ValueError: zero inferrable columns '{len(str_columns)}', at least 1 column containing values of type 'str' is required to infer types from")
             )
-        str_dtype_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
-        fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_dtype_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
-        samples_dict = {col:tuple(row[j] for row in self.sql_db_conn.execute(fetch_str_dtype_stmt)) for j,col in enumerate(str_dtype_columns)}
-        inferred_dtypes = {k:non_inferrable_dtype for k in samples_dict.keys()}
-        dtype_labels = ("str", "int", "float", "datetime", "date", "bytes", "bool")
-        for s_header, s_samples in samples_dict.items():
-            count_checked, count_str, count_int, count_float, count_datetime, count_date, count_bytes, count_bool = 0,0,0,0,0,0,0,0
-            for s_item in s_samples:
-                if (s_item is None) or (s_item == ''):
-                    continue
-                count_checked += 1
-                try:
-                    s_type = literal_eval(s_item)
-                except:
-                    try:
-                        if _has_dateutil:
-                            dt_type = dateparser(s_item, fuzzy=False, fuzzy_with_tokens=False)
-                        else:
-                            dt_type = datetime.datetime.strptime(s_item, datetime_format)
-                        # both datetime.date and datetime.datetime are instances of date, only way it works is date is not instance of datetime.datetime
-                        if isinstance(dt_type,datetime.date):
-                            total_time_after_date = sum((dt_type.hour,dt_type.minute,dt_type.second))
-                            if total_time_after_date == 0:
-                                count_date += 1
-                            else:
-                                count_datetime += 1
-                    except:
-                        count_str += 1
-                    continue
-                if isinstance(s_type, bool):
-                    count_bool += 1
-                elif isinstance(s_type, int):
-                    count_int += 1
-                elif isinstance(s_type, float):
-                    if s_type.is_integer():
-                        count_int += 1
-                    else:
-                        count_float += 1
-                elif isinstance(s_type, bytes):
-                    count_bytes += 1
-                elif s_type is None:
-                    continue
-                else:
-                    count_str += 1
-            dtype_results = (count_str, count_int, count_float, count_datetime, count_date, count_bytes, count_bool)
-            max_number_dtypes_found = max(dtype_results)
-            if count_str != 0:
-                inferred_dtypes[s_header] = "str"
-                continue
-            if max_number_dtypes_found > 0:
-                dtype_maximum = dtype_labels[dtype_results.index(max_number_dtypes_found)]
-                dtype_maximum_ratio = round(max_number_dtypes_found/count_checked,2) if count_checked > 0 else 0.0
-                if dtype_maximum_ratio >= infer_threshold:
-                    if (dtype_maximum == "date") and (count_datetime != 0):
-                        inferred_dtypes[s_header] = "datetime"
-                    elif (dtype_maximum == "int") and (count_float != 0):
-                        inferred_dtypes[s_header] = "float"                        
-                    else:
-                        inferred_dtypes[s_header] = dtype_maximum
-        for column, dtype in inferred_dtypes.items():
-            if dtype != "str":
-                self.set_column_dtypes(column,dtype)
+        n_samples = min(n_samples, self.row_count)
+        row_targets = tuple(random.sample(self.indicies, n_samples))
+        row_targets = row_targets if len(row_targets) > 1 else f"({row_targets[0]})"
+        fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in {row_targets} """))
+        sample_data = self.sql_db_conn.execute(fetch_str_dtype_stmt).fetchall()
+        sample_types = SQLDataModel.infer_types_from_sample(input_data=sample_data, min_sample=n_samples, resample=False)
+        for col, dtype in zip(str_columns, sample_types):
+            if dtype != 'str':
+                self.set_column_dtypes(column=col, dtype=dtype)
 
 #############################################################################################################
 ############################################### class methods ###############################################
@@ -5678,8 +5635,7 @@ class SQLDataModel:
             raise IndexError(
                 SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None 
-        # print(f"{validated_rows = }\n{validated_columns = }")
-        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,include_index=False)
+        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,include_index=False) # toggle to retain prior indicies after getitem slicing
         return self.execute_fetch(sql_stmt_generated)
 
     def __setitem__(self, target_indicies, update_values) -> None:
@@ -7060,13 +7016,13 @@ class SQLDataModel:
                 )
         return {col:self.header_master[col][dtypes] for col in columns}
 
-    def set_column_dtypes(self, column:str|int, dtype:Literal['bool','bytes','date','datetime','float','int','str']) -> None:
+    def set_column_dtypes(self, column:str|int, dtype:Literal['bool','bytes','date','datetime','float','int','None','str']) -> None:
         """
         Casts the specified `column` into the provided python `dtype`. The datatype must be a valid convertable python datatype to map to an equivalent SQL datatype.
 
         Parameters:
             - `column` (str or int): The name or index of the column to be cast, must be current header or within range of current `column_count`
-            - `dtype` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'str']): The target python data type for the specified column.
+            - `dtype` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type for the specified column.
 
         Raises:
             - `TypeError`: If `column` is not of type 'str' or 'int'.
@@ -7114,9 +7070,9 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
             )
-        if dtype not in ('bool','bytes','date','datetime','float','int','str'):
+        if dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bool','bytes','date','datetime','float','int','str' use `get_column_dtypes()` to view current column datatypes")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bool','bytes','date','datetime','float','int','None','str' use `get_column_dtypes()` to view current column datatypes")
             )        
         if isinstance(column, int):
             try:
@@ -7131,7 +7087,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("bool","date","datetime","bytes") else f"""{dtype}(trim("{column}"))""" if dtype not in ("bool","bytes") else f"""cast(case when ("{column}" = 'False' or "{column}" = 0) then 0 else 1 end as {col_sql_dtype})""" if dtype != "bytes" else f"""cast(CASE WHEN (SUBSTR("{column}",1,2) = 'b''' AND SUBSTR("{column}",-1,1) ='''') THEN SUBSTR("{column}",3,LENGTH("{column}")-4) ELSE "{column}" END as {col_sql_dtype})"""
+        dyn_dtype_cast = f'cast("{column}" as {col_sql_dtype})' if dtype not in ('bool','bytes','datetime','date','None') else f'datetime("{column}")' if dtype == 'datetime' else f'date("{column}")' if dtype == 'date' else f"""cast(case "{column}" when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if dtype == 'bool' else f"""cast(CASE WHEN (SUBSTR("{column}",1,2) = 'b''' AND SUBSTR("{column}",-1,1) ='''') THEN SUBSTR("{column}",3,LENGTH("{column}")-3) ELSE "{column}" END as {col_sql_dtype})""" if dtype == 'bytes' else f"""nullif(trim(nullif("{column}",'None')),'')""" if dtype == 'None' else f'"{column}"'
         update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
         self.execute_transaction(update_col_sql)
         

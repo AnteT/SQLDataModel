@@ -47,6 +47,46 @@ def test_getitem():
     assert sdm[rand_row,rand_col_slice].data() == tuple([input_data[rand_row][i] for i in range(rand_col_slice.start,rand_col_slice.stop)]) # single row, column slice
 
 @pytest.mark.core
+def test_setitem():
+    """Tests the `__setitem__()` method by using all possible type combinations `row, column` indexing and confirms the expected output."""
+    grid_size = 10 # creates grid as (grid_size x grid_size)
+    sdm = SQLDataModel([[f"F" for _ in range(grid_size)] for _ in range(grid_size)]) # create the grid canvas
+    fill_char = 'X' # values to fill interior with
+    test_corners = [('top left', 'top right'),('bottom left', 'bottom right')] # corner values
+    test_indicies_and_values = [
+        [(0), tuple([f'0,{i}' for i in range(sdm.column_count)])] # rowwise updates
+        ,['col_0', [(f'{i},0',) for i in range(sdm.row_count)]] # columnwise updates
+        ,[(grid_size), tuple([f'{grid_size},{i}' for i in range(sdm.column_count)])] # new row
+        ,[f'col_{grid_size}', [(f'{i},{grid_size}',) for i in range(sdm.row_count + 1)]] # new column
+        ,[(slice(1,-1),slice(1,-1)), [tuple([fill_char for _ in range(sdm.column_count-1)]) for _ in range(sdm.row_count-1)]] # new interior values
+        ,[(0,0), test_corners[0][0]] # top left
+        ,[(0,-1), test_corners[0][-1]] # top right
+        ,[(-1,0), test_corners[-1][0]] # bottom left
+        ,[(-1,-1),test_corners[-1][-1]] # bottom right
+    ]
+    for t_pair in test_indicies_and_values:
+        t_idx, t_val = t_pair
+        sdm[t_idx] = t_val
+        assert t_val == sdm[t_idx].data()
+    num_checked, output_data = 0, sdm.data()
+    for x in range(grid_size + 1):
+        for y in range(grid_size + 1):
+            s_val = output_data[x][y]
+            if grid_size > x > 0 and 0 < y < grid_size:
+                assert s_val == fill_char
+                num_checked += 1
+                continue
+            if x in (0,grid_size) and y in (0,grid_size):
+                floor_it = lambda x: x if x < 1 else 1
+                x, y = floor_it(x), floor_it(y)
+                assert s_val == test_corners[x][y]
+                num_checked += 1
+            else:
+                assert s_val == f"{x},{y}"
+                num_checked += 1
+    assert num_checked == (sdm.row_count * sdm.column_count)
+
+@pytest.mark.core
 def test_headers(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(data=input_data, headers=input_headers)
@@ -394,4 +434,4 @@ def test_to_from_delimited(sample_data):
         dsv = sdm.to_csv(delimiter=delimiter)
         sdm = SQLDataModel.from_csv(dsv, delimiters=delimiter)
         output_data = sdm.data(include_headers=True)
-        assert input_data == output_data    
+        assert input_data == output_data
