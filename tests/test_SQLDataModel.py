@@ -103,6 +103,18 @@ def test_headers(sample_data):
     assert all([rename_headers[i] == out_headers[i] for i in range(len(rename_headers))])
 
 @pytest.mark.core
+def test_py_sql_dtypes():
+    input_data, input_headers = [['abcdefg', 12_345, b'bytes', 3.14159, datetime.date(1992,11,22), datetime.datetime(1978,1,3,7,23,59)]], ['strings','integers','binary','floats','date','datetime']
+    input_dtypes = {input_headers[i]:type(input_data[0][i]).__name__ for i in range(len(input_headers))}
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    output_dtypes = sdm.get_column_dtypes()
+    assert input_dtypes == output_dtypes
+    input_row = input_data[0]
+    output_row = sdm[0,:].data()
+    for i in range(len(input_row)):
+        assert type(input_row[i]) == type(output_row[i])
+
+@pytest.mark.core
 def test_set_display_properties(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(data=input_data, headers=input_headers)
@@ -270,16 +282,48 @@ def test_repr():
         assert output_repr_lines[i] == baseline_repr_lines[i]              
 
 @pytest.mark.core
-def test_dtypes():
-    input_data, input_headers = [['abcdefg', 12_345, b'bytes', 3.14159, datetime.date(1992,11,22), datetime.datetime(1978,1,3,7,23,59)]], ['strings','integers','binary','floats','date','datetime']
-    input_dtypes = {input_headers[i]:type(input_data[0][i]).__name__ for i in range(len(input_headers))}
-    sdm = SQLDataModel(data=input_data, headers=input_headers)
-    output_dtypes = sdm.get_column_dtypes()
-    assert input_dtypes == output_dtypes
-    input_row = input_data[0]
-    output_row = sdm[0,:].data()
-    for i in range(len(input_row)):
-        assert type(input_row[i]) == type(output_row[i])
+def test_set_column_dtypes():
+    correct_types = ['str','int','float','bool','date','bytes','None','datetime']
+    output_types = []
+    data, headers = [[1,'2','3.3','True','1989-11-09',"b'blob-like'",'None','2022-01-01 12:34:56']], ['str','int','float','bool','date','bytes','None','datetime'] # use headers to signify which type columns should be set to
+    sdm = SQLDataModel(data,headers,infer_types=False)
+    for i, name_type in enumerate(headers):
+        sdm.set_column_dtypes(i, name_type)
+        val = sdm[0,name_type].data() if name_type != 'bool' else bool(sdm[0,name_type].data())
+        output_types.append(type(val).__name__ if type(val).__name__ != 'NoneType' else 'None')
+    assert output_types == correct_types
+
+@pytest.mark.core
+def test_infer_types_from_data(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    input_types = [type(x).__name__ if type(x).__name__ != 'NoneType' else 'None' for x in input_data[0]]
+    stringified_data = [[str(x) for x in row] for row in input_data]
+    inferred_types = SQLDataModel.infer_types_from_sample(stringified_data)
+    assert inferred_types == input_types
+
+
+@pytest.mark.core
+def test_infer_types_init(sample_data):
+    typed_input, headers_input = sample_data[1:], tuple(sample_data[0])
+    string_input = [[str(x) for x in row] for row in typed_input]
+    sdm = SQLDataModel(string_input,headers_input,infer_types=True)
+    inferred_output = sdm.data(include_headers=True)
+    inferred_output, headers_output = inferred_output[1:], inferred_output[0]
+    assert headers_input == headers_output
+    for i in range(len(typed_input)):
+        assert typed_input[i] == inferred_output[i]
+
+@pytest.mark.core
+def test_infer_types_post_init(sample_data):
+    typed_input, headers_input = sample_data[1:], tuple(sample_data[0])
+    string_input = [[str(x) for x in row] for row in typed_input]
+    sdm = SQLDataModel(string_input,headers_input,infer_types=False)
+    sdm.infer_dtypes(n_samples=16)
+    inferred_output = sdm.data(include_headers=True)
+    inferred_output, headers_output = inferred_output[1:], inferred_output[0]
+    assert headers_input == headers_output
+    for i in range(len(typed_input)):
+        assert typed_input[i] == inferred_output[i]
 
 @pytest.mark.core
 def test_to_from_dict():
@@ -391,17 +435,6 @@ def test_to_from_sql(sample_data):
     assert input_headers == output_headers
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i]    
-
-@pytest.mark.core
-def test_infer_types(sample_data):
-    typed_input, headers_input = sample_data[1:], tuple(sample_data[0])
-    string_input = [[str(x) for x in row] for row in typed_input]
-    sdm = SQLDataModel(string_input,headers_input,infer_types=True)
-    inferred_output = sdm.data(include_headers=True)
-    inferred_output, headers_output = inferred_output[1:], inferred_output[0]
-    assert headers_input == headers_output
-    for i in range(len(typed_input)):
-        assert typed_input[i] == inferred_output[i]
 
 @pytest.mark.core
 def test_to_from_csv(sample_data):

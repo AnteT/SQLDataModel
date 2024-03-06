@@ -2,8 +2,8 @@ from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random
 from collections.abc import Generator, Callable, Iterator
 from collections import namedtuple
-from ast import literal_eval
 from typing import Literal, Any
+from ast import literal_eval
 import urllib.request
 
 from .exceptions import DimensionError, SQLProgrammingError
@@ -381,8 +381,9 @@ class SQLDataModel:
         self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
-        if infer_types:
-            inferred_dtypes = SQLDataModel.infer_types_from_sample(input_data=data)
+        if infer_types and self.row_count > 0:
+            inferred_dtypes = SQLDataModel.infer_types_from_data(input_data=random.sample(data, min(self.row_count, 16)))
+            print(f'{inferred_dtypes = }')
             headers_to_py_dtypes_dict = {self.headers[i]:inferred_dtypes[i+dyn_idx_offset] for i in range(self.column_count)}
         else:
             headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}        
@@ -398,7 +399,6 @@ class SQLDataModel:
         sql_insert_params = ','.join([f'cast(? as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})' if headers_to_py_dtypes_dict[col] not in ('bool','bytes','datetime','date','None') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else f"""cast(case ? when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if headers_to_py_dtypes_dict[col] == 'bool' else """cast(? as blob)""" if headers_to_py_dtypes_dict[col] == 'bytes' else "nullif(trim(nullif(?,'None')),'')" if headers_to_py_dtypes_dict[col] == 'None' else "?" for col in self.headers])
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
-        self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
         self.sql_db_conn.execute(sql_create_stmt)
         self._update_model_metadata()
         if not had_data:
@@ -495,13 +495,14 @@ class SQLDataModel:
         return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
     
     @staticmethod
-    def infer_type(obj:str, datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:
+    def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:    
         """
         Infer the data type of the input object.
 
         Parameters:
             - `obj` (str): The object for which the data type is to be inferred.
-            - `datetime_format` (str, optional): The format string for parsing datetime objects if dateutil is not available. Default is '%Y-%m-%d %H:%M:%S'.
+            - `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
+            - `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
 
         Returns:
             - `str`: The inferred data type name of the input object according to:
@@ -530,30 +531,43 @@ class SQLDataModel:
         if isinstance(obj, float):
             return 'int' if obj.is_integer() else 'float'
         try:
-            dt_obj = datetime.datetime.strptime(obj, datetime_format) if not _has_dateutil else dateparser(obj, fuzzy=False, fuzzy_with_tokens=False, ignoretz=True)
+            if _has_dateutil:
+                dt_obj = dateparser(obj, fuzzy=False, fuzzy_with_tokens=False, ignoretz=True)
+            else:
+                try:
+                    dt_obj = datetime.datetime.strptime(obj, datetime_format)
+                except:
+                    dt_obj = datetime.datetime.strptime(obj, date_format)
             return 'datetime' if dt_obj.time() != datetime.time.min else 'date'
         except:
             pass
         return 'str'
-        
+    
     @staticmethod
-    def infer_types_from_sample(input_data:list[list], min_sample:int=16, resample:bool=True) -> list[str]:
+    def infer_types_from_data(input_data:list[list], date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> list[str]:
         """
-        Infer the best types of `input_data` by using a random sample subset of size `min_sample` from the input.
+        Infer the best types of `input_data` by using a simple presence-based voting scheme. Sampling is assumed prior to function call, treating `input_data` as already a sampled subset from the original data.
 
         Parameters:
             - `input_data` (list[list]): A list of lists containing the input data.
-            - `min_sample` (int, optional): The minimum number of samples from the input data to use for inference. Defaults to 16.
-            - `resample` (bool, optional): If the argument for `input_data` is already a representative sample. Defaults to True, which resamples from data.
+            - `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
+            - `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
 
         Returns:
-            - `list`: A list representing the best-matching inferred types for each column with each index corresponds to the inferred type based on the sampled data.
-        """
-        n_samples, n_cols = len(input_data), len(input_data[0])
-        if resample:
-            n_samples = min(min_sample, n_samples)
-            input_data = random.sample(input_data, n_samples)
-        rand_dtypes = [list(set([SQLDataModel.infer_type(input_data[i][j]) for i in range(n_samples)])) for j in range(n_cols)]
+            - `list`: A list representing the best-matching inferred types for each column based on the sampled data.
+            
+        Notes:
+            - If multiple types are present in the samples, the most appropriate type is inferred based on certain rules.
+            - If a column contains both `date` and `datetime` instances, the type is inferred as `datetime`.
+            - If a column contains both `int` and `float` instances, the type is inferred as `float`.
+            - If a column contains only `str` instances or multiple types with no clear choice, the type remains as `str`.
+        
+        Related:
+            - See `SQLDataModel.infer_str_type()` for type determination process.
+
+        """        
+        n_rows, n_cols = len(input_data), len(input_data[0])
+        rand_dtypes = [list(set([SQLDataModel.infer_str_type(input_data[i][j], date_format=date_format, datetime_format=datetime_format) for i in range(n_rows)])) for j in range(n_cols)]
         parsed_dtypes = ['str' for _ in range(n_cols)] # default type
         for cid in range(n_cols):
             col_type_ocurx = rand_dtypes[cid]
@@ -1632,6 +1646,7 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid number of columns '{num_cols}', at least '1' column is required for the `describe()` method")
             )
+        self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation) # register stdev to calculate standard deviation in sqlite        
         has_numeric_dtype = any(map(lambda v: v in ('float','int','date','datetime'), [self.header_master[col][1] for col in desc_cols])) # ('float','int','date','datetime')
         headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in desc_cols]
         headers_select = """ "'metric'" as "metric",""" + ",".join(headers_select_literal)
@@ -1703,22 +1718,26 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: invalid `n_samples` value '{n_samples}', expected value in range '0.0 < n_samples <= 1.0' when using proportional value for `n_samples`")
                 )
             n_samples = round(self.row_count * n_samples)
+        n_samples = min(n_samples, self.row_count)
         if n_samples <= 0:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid `n_samples` value '{n_samples}', expected value within current row range '0 < n_samples <= {self.row_count}' when using integer value for `n_samples`")
             ) 
-        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows=n_samples,ordering="random"), **kwargs)
+        row_indicies = tuple(random.sample(self.indicies, n_samples))
+        return self.execute_fetch(self._generate_sql_stmt(rows=row_indicies), **kwargs)
 
-    def infer_dtypes(self, n_samples:int=16) -> None:
+    def infer_dtypes(self, n_samples:int=16, date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> None:
         """
         Infer and set data types for columns based on a random subset of `n_samples` from the current model. 
-        The `dateutil` library is required for complex date and datetime parsing, if the module is not found then `'%Y-%m-%d %H:%M:%S'` will be used.
+        The `dateutil` library is required for complex date and datetime parsing, if the module is not found then `date_format` and `datetime_format` will be used for dates and datetimes respectively.
 
         Parameters:
             - `n_samples` (int): The number of random samples to use for data type inference. Default set to `16`.
+            - `date_format` (str): The format string to use for parsing date values if `dateutil` library is not found. Default is `'%Y-%m-%d'`.
+            - `datetime_format` (str): The format string to use for parsing datetime values if `dateutil` library is not found. Default is `'%Y-%m-%d %H:%M:%S'`.
         
         Raises:
-            - `TypeError`: If argument for `n_samples` is not of type `int`.
+            - `TypeError`: If argument for `n_samples` is not of type `int` or if argument for `date_format` or `datetime_format` is not of type 'str'.
             - `ValueError`: If the current model contains zero columns from which to infer types from.
             - `DimensionError`: If the current model contains insufficient rows to sample from.
 
@@ -1752,8 +1771,14 @@ class SQLDataModel:
         # Create the model
         sdm = SQLDataModel(data, headers)
         
+        # Get current column dtypes for reference
+        dtypes_before = sdm.get_column_dtypes()
+
         # Infer and set data types based on 10 random samples
         sdm.infer_dtypes(n_samples=10)
+
+        # Get new column types for reference
+        dtypes_after = sdm.get_column_dtypes()
 
         # View updated model
         print(sdm)
@@ -1776,16 +1801,17 @@ class SQLDataModel:
 
         # View updated dtypes
         for col in sdm.headers:
-            print(f"{col}: {sdm.get_column_dtypes(col)}")
+            print(f"{col:<10} {dtypes_before[col]} -> {dtypes_after[col]}")
         
         # Outputs
         ```
         ```shell
-        first: str
-        last: str
-        age: int
-        service: float
-        hire_date: datetime.date        
+        first:      str -> str
+        last:       str -> str
+        age:        str -> int
+        service:    str -> float
+        hire_date:  str -> date 
+
         ```
         ---
 
@@ -1798,6 +1824,14 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_samples).__name__}', argument for `n_samples` must be of type 'int' representing number of samples to use for inference")
             )
+        if not isinstance(date_format, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(date_format).__name__}', argument for `date_format` must be of type 'str' representing date format to use if `dateutil` is not found")
+            )  
+        if not isinstance(datetime_format, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(datetime_format).__name__}', argument for `datetime_format` must be of type 'str' representing datetime format to use if `dateutil` is not found")
+            )                
         if self.row_count < 1:
             raise DimensionError(
                 SQLDataModel.ErrorFormat(f"DimensionError: invalid row count '{self.row_count}', at least 1 row is required for sampling when using `infer_dtypes()`")
@@ -1812,7 +1846,7 @@ class SQLDataModel:
         row_targets = row_targets if len(row_targets) > 1 else f"({row_targets[0]})"
         fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in {row_targets} """))
         sample_data = self.sql_db_conn.execute(fetch_str_dtype_stmt).fetchall()
-        sample_types = SQLDataModel.infer_types_from_sample(input_data=sample_data, min_sample=n_samples, resample=False)
+        sample_types = SQLDataModel.infer_types_from_data(input_data=sample_data, date_format=date_format, datetime_format=datetime_format)
         for col, dtype in zip(str_columns, sample_types):
             if dtype != 'str':
                 self.set_column_dtypes(column=col, dtype=dtype)
