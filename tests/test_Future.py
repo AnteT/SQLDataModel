@@ -8,7 +8,7 @@ from future.SQLDataModel_future import SQLDataModel
 @pytest.fixture
 def sample_data() -> tuple[list[list], list[str]]:
     """Returns sample data in format `(data, headers)` to use for testing."""
-    return data_generator(num_rows=120, float_precision=6, num_columns=8, seed=42, return_header_type='list', return_row_type='tuple', return_format='combined')
+    return data_generator(num_rows=120, float_precision=4, num_columns=8, seed=42, return_header_type='list', return_row_type='tuple', return_format='combined')
 
 @pytest.mark.core
 def test_init(sample_data):
@@ -390,36 +390,36 @@ def test_to_from_pickle(sample_data):
 
 @pytest.mark.core
 def test_to_from_text(sample_data):
-    input_data, input_headers = [tuple([str(j) for j in i]) for i in sample_data[1:]], sample_data[0]
+    input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(input_data, input_headers)
-    output_data, output_headers = SQLDataModel.from_text(sdm.to_text()).data(), sdm.get_headers()
+    output_data, output_headers = SQLDataModel.from_text(sdm.to_text(),infer_types=True).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i]
 
 @pytest.mark.core
 def test_to_from_markdown(sample_data):
-    input_data, input_headers = [tuple([str(j) for j in i]) for i in sample_data[1:]], sample_data[0]
+    input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(input_data, input_headers)
-    output_data, output_headers = SQLDataModel.from_markdown(sdm.to_markdown()).data(), sdm.get_headers()
+    output_data, output_headers = SQLDataModel.from_markdown(sdm.to_markdown(),infer_types=True).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i]
 
 @pytest.mark.core
 def test_to_from_latex(sample_data):
-    input_data, input_headers = [tuple([str(j) for j in i]) for i in sample_data[1:]], sample_data[0]
+    input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(input_data, input_headers)
-    output_data, output_headers = SQLDataModel.from_latex(sdm.to_latex()).data(), sdm.get_headers()
+    output_data, output_headers = SQLDataModel.from_latex(sdm.to_latex(),infer_types=True).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i]
 
 @pytest.mark.core
 def test_to_from_html(sample_data):
-    input_data, input_headers = [tuple([str(j) for j in i]) for i in sample_data[1:]], sample_data[0]
+    input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(input_data, input_headers)
-    output_data, output_headers = SQLDataModel.from_html(sdm.to_html()).data(), sdm.get_headers()
+    output_data, output_headers = SQLDataModel.from_html(sdm.to_html(),infer_types=True).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i]

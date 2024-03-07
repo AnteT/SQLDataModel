@@ -395,7 +395,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in `data` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
             ) from None
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
-        sql_insert_params = ','.join([f'cast(? as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})' if headers_to_py_dtypes_dict[col] not in ('bool','bytes','datetime','date','None') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else f"""cast(case ? when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if headers_to_py_dtypes_dict[col] == 'bool' else """cast(? as blob)""" if headers_to_py_dtypes_dict[col] == 'bytes' else "nullif(trim(nullif(?,'None')),'')" if headers_to_py_dtypes_dict[col] == 'None' else "?" for col in self.headers])
+        sql_insert_params = ','.join([f'''cast(nullif(nullif(?,'None'),'') as TEXT)''' if headers_to_py_dtypes_dict[col] in ('str','None','NoneType') else f"cast(nullif(?,'None') as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})" if headers_to_py_dtypes_dict[col] in ('int','float','bytes') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else "cast(case coalesce(?,'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)" if headers_to_py_dtypes_dict[col] == 'bool' else "nullif(?,'None')" for col in self.headers])
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         self.sql_db_conn.execute(sql_create_stmt)
@@ -2430,7 +2430,7 @@ class SQLDataModel:
         return SQLDataModel.from_dict(data_dict, **kwargs)
 
     @classmethod
-    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, **kwargs) -> SQLDataModel:
+    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, infer_types:bool=False, **kwargs) -> SQLDataModel:
         """
         Parses HTML table element from one of three possible sources: web page at url, local file at path, raw HTML string literal.
         If `table_identifier` is not specified, the first <table> element successfully parsed is returned, otherwise if `table_identifier` is a `str`, the parser will return the corresponding 'id' or 'name' HTML attribute that matches the identifier specified. 
@@ -2444,6 +2444,7 @@ class SQLDataModel:
                 - If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input
             - `encoding` (str): The encoding to use for reading HTML when `html_source` is considered a valid url or file path (default is 'utf-8').
             - `table_identifier` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
+            - `infer_types` (bool, optional): If column data types should be inferred in the return model. Default is False, meaning all columns are returned as 'str' types.
                 - If is `int`, identifier is treated as the indexed location of the <table> element on the page from top to bottom starting from zero and will return the corresponding position when encountered.
                 - If is `str`, identifier is treated as a target HTML 'id' or 'name' attribute to search for and will return the first case-insensitive match when encountered.
             - `**kwargs`: Additional keyword arguments to pass when using `urllib.request.urlopen` to fetch HTML from a URL.
@@ -2599,7 +2600,7 @@ class SQLDataModel:
             tparser.feed(c)
         data, headers = tparser.validate_table()
         tparser.close() 
-        return cls(data=data, headers=headers)
+        return cls(data=data, headers=headers, infer_types=infer_types)
 
     @classmethod
     def from_latex(cls, latex_source:str, table_identifier:int=1, encoding:str='utf-8', **kwargs) -> SQLDataModel:
