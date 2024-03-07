@@ -2,8 +2,8 @@ from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random
 from collections.abc import Generator, Callable, Iterator
 from collections import namedtuple
-from ast import literal_eval
 from typing import Literal, Any
+from ast import literal_eval
 import urllib.request
 
 from .exceptions import DimensionError, SQLProgrammingError
@@ -234,7 +234,7 @@ class SQLDataModel:
         - Use `SQLDataModel.set_display_color()` to modify the terminal color of the table, by default no color styling is applied.
         - Use `SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
     """
-    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master')
+    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies')
     
     def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=4, max_column_width:int=32, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=4, infer_types:bool=False):
         """
@@ -381,19 +381,23 @@ class SQLDataModel:
         self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
-        if infer_types:
-            inferred_dtypes = SQLDataModel.infer_types_from_sample(input_data=data)
+        if infer_types and self.row_count > 0:
+            inferred_dtypes = SQLDataModel.infer_types_from_data(input_data=random.sample(data, min(self.row_count, 16)))
             headers_to_py_dtypes_dict = {self.headers[i]:inferred_dtypes[i+dyn_idx_offset] for i in range(self.column_count)}
         else:
             headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}        
         if dtypes is not None:
-            [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if dtype in self.static_py_to_sql_map_dict]
-        headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
+            [(headers_to_py_dtypes_dict.__setitem__(col,dtype)) for col,dtype in dtypes.items() if col in self.headers and dtype in self.static_py_to_sql_map_dict]
+        try:
+            headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
+        except KeyError as e:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in `data` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
+            ) from None
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_params = ','.join([f'cast(? as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})' if headers_to_py_dtypes_dict[col] not in ('bool','bytes','datetime','date','None') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else f"""cast(case ? when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if headers_to_py_dtypes_dict[col] == 'bool' else """cast(? as blob)""" if headers_to_py_dtypes_dict[col] == 'bytes' else "nullif(trim(nullif(?,'None')),'')" if headers_to_py_dtypes_dict[col] == 'None' else "?" for col in self.headers])
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
-        self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation)
         self.sql_db_conn.execute(sql_create_stmt)
         self._update_model_metadata()
         if not had_data:
@@ -401,6 +405,7 @@ class SQLDataModel:
             ON "{self.sql_model}" WHEN (select count("{self.sql_idx}") from "{self.sql_model}") = 1 
             BEGIN update "{self.sql_model}" set "{self.sql_idx}" = 0 where "{self.sql_idx}" = 1; END;"""
             self.sql_db_conn.execute(trig_zero_init)
+            self.indicies = tuple()
             return
         if not had_idx:
             first_row_insert_stmt = f"""insert into "{self.sql_model}" ("{self.sql_idx}",{','.join([f'"{col}"' for col in self.headers])}) values (?,{sql_insert_params})"""
@@ -409,8 +414,11 @@ class SQLDataModel:
             except sqlite3.ProgrammingError as e:
                 raise SQLProgrammingError(
                     SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid or inconsistent data, failed with '{e}'")
-                ) from None                
+                ) from None   
+            self.indicies = tuple(range(self.row_count))
             data = data[1:] # remove first row from remaining data
+        else:
+            self.indicies = tuple([row[0] for row in data])
         try:
             self.sql_db_conn.executemany(sql_insert_stmt,data)
         except sqlite3.ProgrammingError as e:
@@ -486,13 +494,14 @@ class SQLDataModel:
         return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
     
     @staticmethod
-    def infer_type(obj:str, datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:
+    def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:    
         """
         Infer the data type of the input object.
 
         Parameters:
             - `obj` (str): The object for which the data type is to be inferred.
-            - `datetime_format` (str, optional): The format string for parsing datetime objects if dateutil is not available. Default is '%Y-%m-%d %H:%M:%S'.
+            - `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
+            - `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
 
         Returns:
             - `str`: The inferred data type name of the input object according to:
@@ -521,28 +530,43 @@ class SQLDataModel:
         if isinstance(obj, float):
             return 'int' if obj.is_integer() else 'float'
         try:
-            dt_obj = datetime.datetime.strptime(obj, datetime_format) if not _has_dateutil else dateparser(obj, fuzzy=False, fuzzy_with_tokens=False, ignoretz=True)
+            if _has_dateutil:
+                dt_obj = dateparser(obj, fuzzy=False, fuzzy_with_tokens=False, ignoretz=True)
+            else:
+                try:
+                    dt_obj = datetime.datetime.strptime(obj, datetime_format)
+                except:
+                    dt_obj = datetime.datetime.strptime(obj, date_format)
             return 'datetime' if dt_obj.time() != datetime.time.min else 'date'
         except:
             pass
         return 'str'
-        
+    
     @staticmethod
-    def infer_types_from_sample(input_data:list[list], min_sample:int=16) -> list[str]:
+    def infer_types_from_data(input_data:list[list], date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> list[str]:
         """
-        Infer the best types given a sample of `input_data` using a random sample size of `frac` with a minimum sample size of `10`.
+        Infer the best types of `input_data` by using a simple presence-based voting scheme. Sampling is assumed prior to function call, treating `input_data` as already a sampled subset from the original data.
 
         Parameters:
             - `input_data` (list[list]): A list of lists containing the input data.
-            - `min_sample` (int, optional): The minimum number of samples from the input data to use for inference. Defaults to 16.
+            - `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
+            - `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
 
         Returns:
-            - `list`: A list representing the best-matching inferred types for each column with each index corresponds to the inferred type based on the sampled data.
-        """    
-        n_samples, n_cols = len(input_data), len(input_data[0])
-        n_subset = min(min_sample, n_samples)
-        rand_samples = random.sample(input_data, n_subset)
-        rand_dtypes = [list(set([SQLDataModel.infer_type(rand_samples[i][j]) for i in range(n_subset)])) for j in range(n_cols)]
+            - `list`: A list representing the best-matching inferred types for each column based on the sampled data.
+            
+        Notes:
+            - If multiple types are present in the samples, the most appropriate type is inferred based on certain rules.
+            - If a column contains both `date` and `datetime` instances, the type is inferred as `datetime`.
+            - If a column contains both `int` and `float` instances, the type is inferred as `float`.
+            - If a column contains only `str` instances or multiple types with no clear choice, the type remains as `str`.
+        
+        Related:
+            - See `SQLDataModel.infer_str_type()` for type determination process.
+
+        """        
+        n_rows, n_cols = len(input_data), len(input_data[0])
+        rand_dtypes = [list(set([SQLDataModel.infer_str_type(input_data[i][j], date_format=date_format, datetime_format=datetime_format) for i in range(n_rows)])) for j in range(n_cols)]
         parsed_dtypes = ['str' for _ in range(n_cols)] # default type
         for cid in range(n_cols):
             col_type_ocurx = rand_dtypes[cid]
@@ -1621,6 +1645,7 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid number of columns '{num_cols}', at least '1' column is required for the `describe()` method")
             )
+        self.sql_db_conn.create_aggregate("stdev", 1, StandardDeviation) # register stdev to calculate standard deviation in sqlite        
         has_numeric_dtype = any(map(lambda v: v in ('float','int','date','datetime'), [self.header_master[col][1] for col in desc_cols])) # ('float','int','date','datetime')
         headers_select_literal = [f""" "'{col}'" as "{col}" """ for col in desc_cols]
         headers_select = """ "'metric'" as "metric",""" + ",".join(headers_select_literal)
@@ -1692,36 +1717,38 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: invalid `n_samples` value '{n_samples}', expected value in range '0.0 < n_samples <= 1.0' when using proportional value for `n_samples`")
                 )
             n_samples = round(self.row_count * n_samples)
+        n_samples = min(n_samples, self.row_count)
         if n_samples <= 0:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid `n_samples` value '{n_samples}', expected value within current row range '0 < n_samples <= {self.row_count}' when using integer value for `n_samples`")
             ) 
-        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows=n_samples,ordering="random"), **kwargs)
+        row_indicies = tuple(random.sample(self.indicies, n_samples))
+        return self.execute_fetch(self._generate_sql_stmt(rows=row_indicies), **kwargs)
 
-    def infer_dtypes(self, n_samples:int=10, infer_threshold:float=0.5, datetime_format:str="%Y-%m-%d %H:%M:%S", non_inferrable_dtype:Literal["str","int","float","datetime","date","bytes","bool"]="str") -> None:
+    def infer_dtypes(self, n_samples:int=16, date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> None:
         """
-        Infer and set data types for columns based on random sampling of `n_samples` from the dataset if proportion of data types in returned sample equals or exceeds `infer_threshold` otherwise fallback to data type specified in `non_inferrable_dtype` argument.
-        Dateutil library required for datetime parsing, otherwise if module not found `datetime_format` will be used.
+        Infer and set data types for columns based on a random subset of `n_samples` from the current model. 
+        The `dateutil` library is required for complex date and datetime parsing, if the module is not found then `date_format` and `datetime_format` will be used for dates and datetimes respectively.
+
         Parameters:
-            - `n_samples` (int): The number of random samples to use for data type inference.
-            - `infer_threshold` (float): The threshold by which a dtype is selected should count_dtype/count_samples exceed value, default set to 50% of 5 possible dtypes.
-            - `datetime_format` (str): The datetime format to use to try and parse datetime.date and datetime.datetime objects from if `dateutil` library not installed.
-            - `non_inferrable_dtype` (Literal["str","int","float","datetime","date","bytes","bool]): The default data type to assign when ties occur, or when no dtype can be inferred.
+            - `n_samples` (int): The number of random samples to use for data type inference. Default set to `16`.
+            - `date_format` (str): The format string to use for parsing date values if `dateutil` library is not found. Default is `'%Y-%m-%d'`.
+            - `datetime_format` (str): The format string to use for parsing datetime values if `dateutil` library is not found. Default is `'%Y-%m-%d %H:%M:%S'`.
         
         Raises:
-            - `TypeError`: If argument for `n_samples` is not of type `int` or `infer_threshold` is not of type `float`
-            - `ValueError`: If value for `infer_threshold` is not a valid range satisfying `0.0 < infer_threshold <= 1.0`
-            - `TypeError`: If `non_inferrable_dtype` is not one of "str", "int", "float", "datetime", "date", "bytes", "bool"
+            - `TypeError`: If argument for `n_samples` is not of type `int` or if argument for `date_format` or `datetime_format` is not of type 'str'.
+            - `ValueError`: If the current model contains zero columns from which to infer types from.
+            - `DimensionError`: If the current model contains insufficient rows to sample from.
 
         Returns:
-            - `None`
+            - `None`: Inferred column types are updated and `None` is returned.
 
         Notes:
             - If a single `str` instance is found in the samples, the corresponding column dtype will remain as `str` to avoid data loss.
             - Co-occurences of `int` & `float`, or `date` & `datetime` will favor the superset dtype after `infer_threshold` is met, so `float` and `datetime` respectively.
             - If a single `datetime` instance is found amongst a higher proportion of `date` dtypes, `datetime` will be used according to second rule.
             - If a single `float` instance is found amongst a higher proportion of `int` dtypes, `float` will be used according to second rule.
-            - Ties between dtypes are broken according to `non_inferrable_dtype`<`str`<`float`<`int`<`datetime`<`date`<`bytes`
+            - Ties between dtypes are broken according to `current type` < `str` < `float` < `int` < `datetime` < `date` < `bytes` < `None`
             - This method calls the `set_column_dtypes()` method once the column dtypes have been inferred if they differ from the current dtype.
 
         ---   
@@ -1743,8 +1770,14 @@ class SQLDataModel:
         # Create the model
         sdm = SQLDataModel(data, headers)
         
+        # Get current column dtypes for reference
+        dtypes_before = sdm.get_column_dtypes()
+
         # Infer and set data types based on 10 random samples
         sdm.infer_dtypes(n_samples=10)
+
+        # Get new column types for reference
+        dtypes_after = sdm.get_column_dtypes()
 
         # View updated model
         print(sdm)
@@ -1767,94 +1800,55 @@ class SQLDataModel:
 
         # View updated dtypes
         for col in sdm.headers:
-            print(f"{col}: {sdm.get_column_dtypes(col)}")
+            print(f"{col:<10} {dtypes_before[col]} -> {dtypes_after[col]}")
         
         # Outputs
-        first: str
-        last: str
-        age: int
-        service: float
-        hire_date: datetime.date        
         ```
+        ```shell
+        first:      str -> str
+        last:       str -> str
+        age:        str -> int
+        service:    str -> float
+        hire_date:  str -> date 
+
+        ```
+        ---
+
+        Related:
+            - See `SQLDataModel.infer_type()` for type determination process.
+            - See `SQLDataModel.infer_types_from_sample()` for type voting scheme used for inference.
+
         """
         if not isinstance(n_samples, int):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid `n_samples` type '{type(n_samples).__name__}', `n_samples` argument must be of type 'int' for `infer_dtypes()` method")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_samples).__name__}', argument for `n_samples` must be of type 'int' representing number of samples to use for inference")
             )
-        if not isinstance(infer_threshold, float):
+        if not isinstance(date_format, str):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid `infer_threshold` type '{type(infer_threshold).__name__}', `infer_threshold` argument must be of type 'int' for `infer_dtypes()` method")
-            )        
-        if (infer_threshold <= 0.0) or (infer_threshold > 1.0):
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(date_format).__name__}', argument for `date_format` must be of type 'str' representing date format to use if `dateutil` is not found")
+            )  
+        if not isinstance(datetime_format, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(datetime_format).__name__}', argument for `datetime_format` must be of type 'str' representing datetime format to use if `dateutil` is not found")
+            )                
+        if self.row_count < 1:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid row count '{self.row_count}', at least 1 row is required for sampling when using `infer_dtypes()`")
+                )
+        str_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
+        if len(str_columns) < 1:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid `infer_threshold` value '{infer_threshold}', expected value in range '0.0 < infer_threshold <= 1.0' for `infer_dtypes()` method")
-            )   
-        if non_inferrable_dtype not in ("str","int","float","datetime","date","bytes","bool"):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid `non_inferrable_dtype` type '{type(non_inferrable_dtype).__name__}', expected one of 'str','int','float','datetime','date','bytes' or 'bool' for `infer_dtypes()` method")
+                SQLDataModel.ErrorFormat(f"ValueError: zero inferrable columns '{len(str_columns)}', at least 1 column containing values of type 'str' is required to infer types from")
             )
-        str_dtype_columns = [col for col in self.headers if self.header_master[col][1] == 'str']
-        fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_dtype_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" order by random() limit {n_samples}) """))
-        samples_dict = {col:tuple(row[j] for row in self.sql_db_conn.execute(fetch_str_dtype_stmt)) for j,col in enumerate(str_dtype_columns)}
-        inferred_dtypes = {k:non_inferrable_dtype for k in samples_dict.keys()}
-        dtype_labels = ("str", "int", "float", "datetime", "date", "bytes", "bool")
-        for s_header, s_samples in samples_dict.items():
-            count_checked, count_str, count_int, count_float, count_datetime, count_date, count_bytes, count_bool = 0,0,0,0,0,0,0,0
-            for s_item in s_samples:
-                if (s_item is None) or (s_item == ''):
-                    continue
-                count_checked += 1
-                try:
-                    s_type = literal_eval(s_item)
-                except:
-                    try:
-                        if _has_dateutil:
-                            dt_type = dateparser(s_item, fuzzy=False, fuzzy_with_tokens=False)
-                        else:
-                            dt_type = datetime.datetime.strptime(s_item, datetime_format)
-                        # both datetime.date and datetime.datetime are instances of date, only way it works is date is not instance of datetime.datetime
-                        if isinstance(dt_type,datetime.date):
-                            total_time_after_date = sum((dt_type.hour,dt_type.minute,dt_type.second))
-                            if total_time_after_date == 0:
-                                count_date += 1
-                            else:
-                                count_datetime += 1
-                    except:
-                        count_str += 1
-                    continue
-                if isinstance(s_type, bool):
-                    count_bool += 1
-                elif isinstance(s_type, int):
-                    count_int += 1
-                elif isinstance(s_type, float):
-                    if s_type.is_integer():
-                        count_int += 1
-                    else:
-                        count_float += 1
-                elif isinstance(s_type, bytes):
-                    count_bytes += 1
-                elif s_type is None:
-                    continue
-                else:
-                    count_str += 1
-            dtype_results = (count_str, count_int, count_float, count_datetime, count_date, count_bytes, count_bool)
-            max_number_dtypes_found = max(dtype_results)
-            if count_str != 0:
-                inferred_dtypes[s_header] = "str"
-                continue
-            if max_number_dtypes_found > 0:
-                dtype_maximum = dtype_labels[dtype_results.index(max_number_dtypes_found)]
-                dtype_maximum_ratio = round(max_number_dtypes_found/count_checked,2) if count_checked > 0 else 0.0
-                if dtype_maximum_ratio >= infer_threshold:
-                    if (dtype_maximum == "date") and (count_datetime != 0):
-                        inferred_dtypes[s_header] = "datetime"
-                    elif (dtype_maximum == "int") and (count_float != 0):
-                        inferred_dtypes[s_header] = "float"                        
-                    else:
-                        inferred_dtypes[s_header] = dtype_maximum
-        for column, dtype in inferred_dtypes.items():
-            if dtype != "str":
-                self.set_column_dtypes(column,dtype)
+        n_samples = min(n_samples, self.row_count)
+        row_targets = tuple(random.sample(self.indicies, n_samples))
+        row_targets = row_targets if len(row_targets) > 1 else f"({row_targets[0]})"
+        fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in {row_targets} """))
+        sample_data = self.sql_db_conn.execute(fetch_str_dtype_stmt).fetchall()
+        sample_types = SQLDataModel.infer_types_from_data(input_data=sample_data, date_format=date_format, datetime_format=datetime_format)
+        for col, dtype in zip(str_columns, sample_types):
+            if dtype != 'str':
+                self.set_column_dtypes(column=col, dtype=dtype)
 
 #############################################################################################################
 ############################################### class methods ###############################################
@@ -5674,9 +5668,7 @@ class SQLDataModel:
             raise IndexError(
                 SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None 
-        # print(f"{validated_rows = }\n{validated_columns = }")
-        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,include_index=False)
-        # print(f"sql_stmt_generated:\n{sql_stmt_generated.replace("\\'","'")}")
+        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,include_index=False) # toggle to retain prior indicies after getitem slicing
         return self.execute_fetch(sql_stmt_generated)
 
     def __setitem__(self, target_indicies, update_values) -> None:
@@ -5733,7 +5725,7 @@ class SQLDataModel:
                 ) from None
         # normal update values process where target update values is not another SQLDataModel object:
         if isinstance(target_indicies, str) and target_indicies not in self.headers:
-            validated_rows, validated_columns = tuple(range(self.row_count)), [target_indicies]
+            validated_rows, validated_columns = self.indicies, [target_indicies]
         else:
             try:
                 validated_rows, validated_columns = self.validate_indicies(target_indicies)
@@ -7057,13 +7049,13 @@ class SQLDataModel:
                 )
         return {col:self.header_master[col][dtypes] for col in columns}
 
-    def set_column_dtypes(self, column:str|int, dtype:Literal['bool','bytes','date','datetime','float','int','str']) -> None:
+    def set_column_dtypes(self, column:str|int, dtype:Literal['bool','bytes','date','datetime','float','int','None','str']) -> None:
         """
         Casts the specified `column` into the provided python `dtype`. The datatype must be a valid convertable python datatype to map to an equivalent SQL datatype.
 
         Parameters:
             - `column` (str or int): The name or index of the column to be cast, must be current header or within range of current `column_count`
-            - `dtype` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'str']): The target python data type for the specified column.
+            - `dtype` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type for the specified column.
 
         Raises:
             - `TypeError`: If `column` is not of type 'str' or 'int'.
@@ -7111,9 +7103,9 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
             )
-        if dtype not in ('bool','bytes','date','datetime','float','int','str'):
+        if dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bool','bytes','date','datetime','float','int','str' use `get_column_dtypes()` to view current column datatypes")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bool','bytes','date','datetime','float','int','None','str' use `get_column_dtypes()` to view current column datatypes")
             )        
         if isinstance(column, int):
             try:
@@ -7128,7 +7120,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        dyn_dtype_cast = f"""cast("{column}" as {col_sql_dtype})""" if dtype not in ("bool","date","datetime","bytes") else f"""{dtype}(trim("{column}"))""" if dtype not in ("bool","bytes") else f"""cast(case when ("{column}" = 'False' or "{column}" = 0) then 0 else 1 end as {col_sql_dtype})""" if dtype != "bytes" else f"""cast(CASE WHEN (SUBSTR("{column}",1,2) = 'b''' AND SUBSTR("{column}",-1,1) ='''') THEN SUBSTR("{column}",3,LENGTH("{column}")-4) ELSE "{column}" END as {col_sql_dtype})"""
+        dyn_dtype_cast = f'cast("{column}" as {col_sql_dtype})' if dtype not in ('bool','bytes','datetime','date','None') else f'datetime("{column}")' if dtype == 'datetime' else f'date("{column}")' if dtype == 'date' else f"""cast(case "{column}" when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if dtype == 'bool' else f"""cast(CASE WHEN (SUBSTR("{column}",1,2) = 'b''' AND SUBSTR("{column}",-1,1) ='''') THEN SUBSTR("{column}",3,LENGTH("{column}")-3) ELSE "{column}" END as {col_sql_dtype})""" if dtype == 'bytes' else f"""nullif(trim(nullif("{column}",'None')),'')""" if dtype == 'None' else f'"{column}"'
         update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
         self.execute_transaction(update_col_sql)
         
@@ -7759,7 +7751,7 @@ class SQLDataModel:
 
     def _update_model_metadata(self, update_row_meta:bool=False) -> None:
         """
-        Generates and updates metadata information about the columns and optionally the rows in the SQLDataModel instance based on the current model. 
+        Generates and updates metadata information about the columns and optionally the rows in the `SQLDataModel` instance based on the current model. 
 
         Parameters:
             - `update_row_meta` (bool, optional): If True, updates row metadata information; otherwise, retrieves column metadata only (default).
@@ -7768,6 +7760,7 @@ class SQLDataModel:
             - `self.header_master`: Master dictionary of column metadata.
             - `self.headers`: List of current model headers, order retained.
             - `self.column_count`: Number of columns in current model.
+                - `self.indicies`: Optionally updated, represents current valid row indicies.
                 - `self.row_count`: Optionally updated, represents current row count.
             
         Returns:
@@ -7836,22 +7829,14 @@ class SQLDataModel:
         print(f"cols before: {num_cols_before}, cols after: {num_cols_after}")
         ```
         """        
-        if update_row_meta:
-            fetch_metadata = f"""select "_ordered_name","_ordered_type","_is_regular_column","_def_alignment" from (
-                select '_rowmeta' as "_ordered_name", 0 as "_ordered_type", 0 as "_is_regular_column", count("{self.sql_idx}") as "_def_alignment" from "{self.sql_model}"
-                union all
-                select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') 
-            ) order by "_ordered_name"='_rowmeta' desc, {",".join([f'"_ordered_name"="{col}" desc' for col in self.headers])}"""
-        else:
-            fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
+        fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
-        if update_row_meta:
-            self.row_count = metadata[0][-1]
-            metadata = metadata[1:]
         header_master = {m[0]:(m[1], self.static_sql_to_py_map_dict[m[1]],True if m[2] == 0 else False,m[3]) for m in metadata}
         self.headers = list(dict.fromkeys([k for k,v in header_master.items() if v[2]]))
         self.column_count = len(self.headers)
         self.header_master = header_master # format: 'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')
+        if update_row_meta:
+            self._update_indicies()
 
     def _generate_sql_stmt(self, columns:list[str]=None, rows:int|slice|tuple=None, include_index:bool=True) -> str:
         """
@@ -7916,7 +7901,23 @@ class SQLDataModel:
         fetch_stmt = " ".join(("select",f'"{self.sql_idx}",' if include_index else '',columns_str,f'from "{self.sql_model}"', ordering_str, f"limit {n_rows}"))
         return fetch_stmt
 
-    def _get_valid_indicies(self) -> tuple:
+    def _update_indicies(self) -> None:
+        """
+        Updates the `indicies` and `row_count` properties of the `SQLDataModel` instance representing the current valid row indicies and count.
+
+        Returns:
+            - `None`: The `self.indicies` and `self.row_count` propety is updated with the current indicies as a tuple.
+
+        Note:
+            - This method is called internally any time the `row_count` property is subject to change, or data manipulation requires updating the current values.
+            - There is no reason to call this method manually unless the model has been changed outside of the standard instance methods.
+
+        """
+        fetch_stmt = f"""select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc"""
+        self.indicies = tuple([x[0] for x in self.sql_db_conn.execute(fetch_stmt).fetchall()])
+        self.row_count = len(self.indicies)
+    
+    def get_indicies(self) -> tuple:
         """
         Returns the current valid row indicies for the `SQLDataModel` instance.
 
@@ -7937,7 +7938,7 @@ class SQLDataModel:
         sdm = SQLDataModel(data, headers)
 
         # Get current valid indicies
-        valid_indicies = sdm._get_valid_indicies()
+        valid_indicies = sdm.get_indicies()
 
         # View results
         print(valid_indicies)
@@ -7952,8 +7953,7 @@ class SQLDataModel:
             - Primary use is to confirm valid model indexing when starting index != 0 or filtering changes minimum/maximum indexes.
 
         """
-        fetch_stmt = f"""select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc"""
-        return tuple([x[0] for x in self.sql_db_conn.execute(fetch_stmt).fetchall()])
+        return self.indicies
 
     def _update_rows_and_columns_with_values(self, rows_to_update:tuple[int]=None, columns_to_update:list[str]=None, values_to_update:list[tuple]=None) -> None:
         """
@@ -7996,7 +7996,7 @@ class SQLDataModel:
         """
         update_sql_script = None
         # this is the problem, even if the indicies are 2-7, this will generate 0:5 since the rowcount is 5 regardless of min and max indicies
-        rows_to_update = rows_to_update if rows_to_update is not None else tuple(range(self.row_count))
+        rows_to_update = rows_to_update if rows_to_update is not None else self.indicies # use all rows if none specified, courtesy of new `indicies` property
         columns_to_update = columns_to_update if columns_to_update is not None else self.headers
         if not isinstance(values_to_update, (tuple,list)):
             values_to_update = (values_to_update,)
@@ -8168,47 +8168,32 @@ class SQLDataModel:
         ### single row index ###
         if isinstance(indicies, int):
             row_index = indicies
-            if row_index < 0:
-                row_index = self.row_count + row_index
-            if row_index < 0:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}'")
-                )
-            # modified to row index > row count to allow new rows to be inserted when row index == current row count
-            if row_index > self.row_count:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}'")
-                )
+            try:
+                row_index = self.indicies[row_index] # TODO: RIMOD
+            except IndexError:
+                if row_index != max(self.indicies): # auto add escape, ok to be out of range
+                    raise IndexError(
+                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within currend model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                    ) from None
             return (row_index, self.headers)
         ### single row slice index ###
         if isinstance(indicies, slice):
-            row_slice = indicies
-            start_idx = row_slice.start if row_slice.start is not None else 0
-            stop_idx = row_slice.stop if row_slice.stop is not None else self.row_count
-            start_idx = start_idx if start_idx >= 0 else self.row_count + start_idx
-            stop_idx = stop_idx if stop_idx > 0 else self.row_count + stop_idx
-            if start_idx < 0:
+            try:
+                rows_in_scope = self.indicies[indicies]
+            except ValueError:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows indexed, provided row index returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
+                ) from None
+            if (num_rows_in_scope := len(rows_in_scope)) < 1:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
-            if stop_idx <= start_idx:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{start_idx-stop_idx}', provided row index returns no valid rows within current model range of '0:{self.row_count}'")
-                )
-            if row_slice.step is None:
-                return (slice(start_idx,stop_idx), self.headers)
-            else:
-                rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_slice.step)]
-                if (num_rows_in_scope := len(rows_in_scope)) < 1:
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                    )
-                return (rows_in_scope, self.headers)
+            return (rows_in_scope, self.headers)
         ### single set of row indicies ###
         if isinstance(indicies, set):
             if (len_set := len(indicies)) < 1:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
             return (tuple(indicies), self.headers)
         ### columns by str or list of str ###
@@ -8244,17 +8229,12 @@ class SQLDataModel:
         if isinstance(row_indicies, set):
             row_indicies = tuple(row_indicies)        
         if isinstance(row_indicies, int):
-            if row_indicies < 0:
-                row_indicies = self.row_count + row_indicies
-            if row_indicies < 0:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '0:{self.row_count}'")
-                )
-            if row_indicies >= self.row_count:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_indicies}' is outside of current model row indicies of '0:{self.row_count}'")
-                )
-            validated_row_indicies = row_indicies
+            try:
+                validated_row_indicies = self.indicies[row_indicies] # TODO: RIMOD
+            except IndexError:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_indicies}', index must be within currend model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                ) from None
         elif isinstance(row_indicies, tuple): # tuple of disconnected row indicies
             if not all(isinstance(row, int) for row in row_indicies):
                 raise TypeError(
@@ -8263,33 +8243,25 @@ class SQLDataModel:
             min_row_idx, max_row_idx = min(row_indicies), max(row_indicies)
             if min_row_idx < 0:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
             if max_row_idx >= self.row_count:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
             validated_row_indicies = row_indicies
         else: # is slice
-            start_idx = 0 if row_indicies.start is None else row_indicies.start if row_indicies.start >= 0 else (self.row_count + row_indicies.start)
-            stop_idx = self.row_count if row_indicies.stop is None else row_indicies.stop if row_indicies.stop >= 0 else (self.row_count + row_indicies.stop)
-            if start_idx < 0:
+            try:
+                rows_in_scope = self.indicies[row_indicies]
+            except ValueError:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{start_idx}' outside of current model range of '0:{self.row_count}'")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows indexed, provided row index returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
+                ) from None
+            if (num_rows_in_scope := len(rows_in_scope)) < 1:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
-            if stop_idx <= start_idx:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows '{stop_idx - start_idx}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                )    
-            if row_indicies.step is None:
-                validated_row_indicies = slice(start_idx, stop_idx)
-            else:
-                rows_in_scope = tuple(range(self.row_count))[slice(start_idx,stop_idx,row_indicies.step)]
-                if (num_rows_in_scope := len(rows_in_scope)) < 1:
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                    )
-                validated_row_indicies = rows_in_scope
+            validated_row_indicies = rows_in_scope
         ### then columns ###
         if not isinstance(col_indicies, (int,slice,tuple,str,list)):
             raise TypeError(

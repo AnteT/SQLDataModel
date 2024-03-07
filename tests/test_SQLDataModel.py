@@ -298,7 +298,7 @@ def test_infer_types_from_data(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     input_types = [type(x).__name__ if type(x).__name__ != 'NoneType' else 'None' for x in input_data[0]]
     stringified_data = [[str(x) for x in row] for row in input_data]
-    inferred_types = SQLDataModel.infer_types_from_sample(stringified_data)
+    inferred_types = SQLDataModel.infer_types_from_data(stringified_data)
     assert inferred_types == input_types
 
 
