@@ -2929,7 +2929,7 @@ class SQLDataModel:
         found_table = False
         tables_found = 0
         table_column_count = -1
-        pattern1, pattern2 = r'\|-*\|', r'-+\|-+\|-+'
+        md_pattern = r'\|?:?-+:?\|:?-+:?\|?'
         markdown_source = markdown_source.replace('\\|','&vert;') # replace escaped pipes with wrapped unicode representation
         for md_line in markdown_source.splitlines():
             if in_table:
@@ -2944,7 +2944,7 @@ class SQLDataModel:
                     table = None
                     in_table = False
             if not in_table:
-                if re.search(pattern1,md_line.replace(':','').replace(' ','')) or re.search(pattern2,md_line.replace(':','').replace(' ','')):
+                if re.search(md_pattern,md_line.replace(' ','')):
                     in_table = True
                     table_column_count = len(md_line.strip().strip('|').split('|'))
                     headers = [cell.strip() for cell in prev_line.strip().strip('|').split('|')]
