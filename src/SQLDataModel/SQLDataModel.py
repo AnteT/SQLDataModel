@@ -2944,7 +2944,7 @@ class SQLDataModel:
                     table = None
                     in_table = False
             if not in_table:
-                if re.search(pattern1,md_line.replace(':','')) or re.search(pattern2,md_line.replace(':','')):
+                if re.search(pattern1,md_line.replace(':','').replace(' ','')) or re.search(pattern2,md_line.replace(':','').replace(' ','')):
                     in_table = True
                     table_column_count = len(md_line.strip().strip('|').split('|'))
                     headers = [cell.strip() for cell in prev_line.strip().strip('|').split('|')]
