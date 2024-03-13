@@ -38,152 +38,158 @@ except ModuleNotFoundError:
 
 class SQLDataModel:
     """
-    ### SQLDataModel 
+    ------------
+    SQLDataModel
+    ------------
+
     Primary class for the package of the same name. Its meant to provide a fast & light-weight alternative to the common pandas, numpy and sqlalchemy setup for moving data in a source/destination agnostic manner. It is not an ORM, any modifications outside of basic joins, group bys and table alteration requires knowledge of SQL. The primary use-case envisaged by the package is one where a table needs to be ETL'd from location A to destination B with arbitrary modifications made if needed:
     
-    ---
+    Summary
+    -------
 
-    #### Summary
         - Extract your data from SQL, websites or HTML, parquet, JSON, CSV, pandas, numpy, pickle, python dictionaries, lists, etc.
         - Transform your data using raw SQL or any number of built-in methods covering some of the most used pandas data methods.
         - Load your data to any number of sources including popular SQL databases, CSV files, JSON, HTML, parquet, pickle, etc.
     
-    ---
+    Usage
+    -----
 
-    #### Usage
-    ```python
-    from SQLDataModel import SQLDataModel
-    
-    # Lets grab a random table from Wikipedia
-    sdm = SQLDataModel.from_html("https://en.wikipedia.org/wiki/FIFA_World_Cup", table_identifier=6)
+    .. code-block:: python
 
-    # Lets see what we found
-    print(sdm)
-    ```
-    ```shell
-    ┌───────────────┬──────┬──────┬──────────┬──────────┬──────┬──────┬───────┐
-    │ Confederation │  AFC │  CAF │ CONCACAF │ CONMEBOL │  OFC │ UEFA │ Total │
-    ├───────────────┼──────┼──────┼──────────┼──────────┼──────┼──────┼───────┤
-    │ Teams         │   43 │   49 │       46 │       89 │    4 │  258 │   489 │
-    │ Top 16        │    9 │   11 │       15 │       37 │    1 │   99 │   172 │
-    │ Top 8         │    2 │    4 │        5 │       36 │    0 │  105 │   152 │
-    │ Top 4         │    1 │    1 │        1 │       23 │    0 │   62 │    88 │
-    │ Top 2         │    0 │    0 │        0 │       15 │    0 │   29 │    44 │
-    │ 4th           │    1 │    1 │        0 │        5 │    0 │   15 │    22 │
-    │ 3rd           │    0 │    0 │        1 │        3 │    0 │   18 │    22 │
-    │ 2nd           │    0 │    0 │        0 │        5 │    0 │   17 │    22 │
-    │ 1st           │    0 │    0 │        0 │       10 │    0 │   12 │    22 │
-    └───────────────┴──────┴──────┴──────────┴──────────┴──────┴──────┴───────┘
-    [9 rows x 8 columns]
-    ```
+        from SQLDataModel import SQLDataModel
+        
+        # Lets grab a random table from Wikipedia
+        sdm = SQLDataModel.from_html("https://en.wikipedia.org/wiki/FIFA_World_Cup", table_identifier=6)
 
-    ---
+        # Lets see what we found
+        print(sdm)
 
-    #### Example
+    This would output:
 
+    .. code-block:: shell
 
-    ```python
-    from SQLDataModel import SQLDataModel
+        ┌───────────────┬──────┬──────┬──────────┬──────────┬──────┬──────┬───────┐
+        │ Confederation │  AFC │  CAF │ CONCACAF │ CONMEBOL │  OFC │ UEFA │ Total │
+        ├───────────────┼──────┼──────┼──────────┼──────────┼──────┼──────┼───────┤
+        │ Teams         │   43 │   49 │       46 │       89 │    4 │  258 │   489 │
+        │ Top 16        │    9 │   11 │       15 │       37 │    1 │   99 │   172 │
+        │ Top 8         │    2 │    4 │        5 │       36 │    0 │  105 │   152 │
+        │ Top 4         │    1 │    1 │        1 │       23 │    0 │   62 │    88 │
+        │ Top 2         │    0 │    0 │        0 │       15 │    0 │   29 │    44 │
+        │ 4th           │    1 │    1 │        0 │        5 │    0 │   15 │    22 │
+        │ 3rd           │    0 │    0 │        1 │        3 │    0 │   18 │    22 │
+        │ 2nd           │    0 │    0 │        0 │        5 │    0 │   17 │    22 │
+        │ 1st           │    0 │    0 │        0 │       10 │    0 │   12 │    22 │
+        └───────────────┴──────┴──────┴──────────┴──────────┴──────┴──────┴───────┘
+        [9 rows x 8 columns]
 
-    # For example, setup a source connection
-    source_db_conn = pyodbc.connect(...)
+    Example::
 
-    # A destination connection
-    destination_db_conn = sqlite3.connect(...)
+        from SQLDataModel import SQLDataModel
 
-    # Grab your source table
-    sdm = SQLDataModel.from_sql("select * from source_table", source_db_conn)
+        # For example, setup a source connection
+        source_db_conn = pyodbc.connect(...)
 
-    # Modify it however you want, whether through plain SQL
-    sdm = sdm.execute_fetch('select "whatever", "i", "want" from "wherever_i_want" where "what_i_need" is not null ')
+        # A destination connection
+        destination_db_conn = sqlite3.connect(...)
 
-    # Or through any number of built-in methods like filtering
-    sdm = sdm[sdm['create_date'] >= '2023-01-01']
+        # Grab your source table
+        sdm = SQLDataModel.from_sql("select * from source_table", source_db_conn)
 
-    # Or creating new columns
-    sdm['new_date'] = datetime.now()
+        # Modify it however you want, whether through plain SQL
+        sdm = sdm.execute_fetch('select "whatever", "i", "want" from "wherever_i_want" where "what_i_need" is not null ')
 
-    # Or modifying existing ones
-    sdm['salary'] = sdm['salary'] * 2
+        # Or through any number of built-in methods like filtering
+        sdm = sdm[sdm['create_date'] >= '2023-01-01']
 
-    # Or applying functions
-    sdm['user_id'] = sdm['user_id'].apply(lambda x: x**2)
+        # Or creating new columns
+        sdm['new_date'] = datetime.now()
 
-    # Or deduplicating
-    sdm = sdm.deduplicate(subset=['user_id','user_name'])
+        # Or modifying existing ones
+        sdm['salary'] = sdm['salary'] * 2
 
-    # Or iterate through it row-by-row and modify it
-    for idx, row in sdm.iter_tuples(include_index=True):
-        if row['number'] % 2 == 0:
-            row[idx,'odd_even'] = 'even'
-        else:
-            row[idx,'odd_even'] = 'odd'
+        # Or applying functions
+        sdm['user_id'] = sdm['user_id'].apply(lambda x: x**2)
 
-    # Or join it using any of the standard join operations
-    sdm = sdm_left.merge(sdm_right, how='left', left_on='id', right_on='id')
+        # Or deduplicating
+        sdm = sdm.deduplicate(subset=['user_id','user_name'])
 
-    # Or group or aggregate the data:
-    sdm_agg = sdm.group_by(["first", "last", "position"])            
+        # Or iterate through it row-by-row and modify it
+        for idx, row in sdm.iter_tuples(include_index=True):
+            if row['number'] % 2 == 0:
+                row[idx,'odd_even'] = 'even'
+            else:
+                row[idx,'odd_even'] = 'odd'
+
+        # Or join it using any of the standard join operations
+        sdm = sdm_left.merge(sdm_right, how='left', left_on='id', right_on='id')
+
+        # Or group or aggregate the data:
+        sdm_agg = sdm.group_by(["first", "last", "position"])            
 
 
-    # Or have your data imported and described for you
-    sdm = SQLDataModel.from_parquet('titanic.parquet').describe()
+        # Or have your data imported and described for you
+        sdm = SQLDataModel.from_parquet('titanic.parquet').describe()
 
-    # View result
-    print(sdm)
-    ```
-    ```shell
-    ┌────────┬─────────────┬──────────┬────────┬────────┬───────┬────────┐
-    │ metric │ passengerid │ survived │ pclass │    sex │   age │   fare │
-    ├────────┼─────────────┼──────────┼────────┼────────┼───────┼────────┤
-    │ count  │         891 │      891 │    891 │    891 │   714 │    891 │
-    │ unique │         891 │        2 │      3 │      2 │    88 │    248 │
-    │ top    │         891 │        0 │      3 │   male │    24 │   8.05 │
-    │ freq   │           1 │      549 │    491 │    577 │    30 │     43 │
-    │ mean   │         446 │        0 │      2 │    NaN │  29.7 │   32.2 │
-    │ std    │         257 │        0 │      0 │    NaN │ 14.53 │  49.69 │
-    │ min    │           1 │        0 │      1 │ female │  0.42 │      0 │
-    │ p25    │         223 │        0 │      2 │    NaN │     6 │    7.9 │
-    │ p50    │         446 │        0 │      3 │    NaN │    24 │  14.45 │
-    │ p75    │         669 │        1 │      3 │    NaN │    35 │     31 │
-    │ max    │         891 │        1 │      3 │   male │    80 │ 512.33 │
-    │ dtype  │         int │      int │    int │    str │ float │  float │
-    └────────┴─────────────┴──────────┴────────┴────────┴───────┴────────┘
-    [12 rows x 7 columns]
-    ```
-    ```python
+        # View result
+        print(sdm)
 
-    # Load it to your destination database:
-    sdm.to_sql("new_table", destination_db_conn)
+    This would output:
+        
+    .. code-block:: shell
 
-    # Or any number of formats including:
-    sdm.to_csv("output.csv")
-    sdm.to_html("output.html")
-    sdm.to_json("output.json")
-    sdm.to_latex("output.tex")
-    sdm.to_markdown("output.md")
-    sdm.to_parquet("output.parquet")
-    sdm.to_pickle("output.sdm")
-    sdm.to_text("output.txt")
-    sdm.to_local_db("output.db")
+        ┌────────┬─────────────┬──────────┬────────┬────────┬───────┬────────┐
+        │ metric │ passengerid │ survived │ pclass │    sex │   age │   fare │
+        ├────────┼─────────────┼──────────┼────────┼────────┼───────┼────────┤
+        │ count  │         891 │      891 │    891 │    891 │   714 │    891 │
+        │ unique │         891 │        2 │      3 │      2 │    88 │    248 │
+        │ top    │         891 │        0 │      3 │   male │    24 │   8.05 │
+        │ freq   │           1 │      549 │    491 │    577 │    30 │     43 │
+        │ mean   │         446 │        0 │      2 │    NaN │  29.7 │   32.2 │
+        │ std    │         257 │        0 │      0 │    NaN │ 14.53 │  49.69 │
+        │ min    │           1 │        0 │      1 │ female │  0.42 │      0 │
+        │ p25    │         223 │        0 │      2 │    NaN │     6 │    7.9 │
+        │ p50    │         446 │        0 │      3 │    NaN │    24 │  14.45 │
+        │ p75    │         669 │        1 │      3 │    NaN │    35 │     31 │
+        │ max    │         891 │        1 │      3 │   male │    80 │ 512.33 │
+        │ dtype  │         int │      int │    int │    str │ float │  float │
+        └────────┴─────────────┴──────────┴────────┴────────┴───────┴────────┘
+        [12 rows x 7 columns]
 
-    # Reload it back again from more formats:
-    sdm = SQLDataModel.from_csv("output.csv")
-    sdm = SQLDataModel.from_dict(py_dict)
-    sdm = SQLDataModel.from_html("output.html")
-    sdm = SQLDataModel.from_json("output.json")
-    sdm = SQLDataModel.from_latex("output.tex")
-    sdm = SQLDataModel.from_markdown("output.md")
-    sdm = SQLDataModel.from_numpy(np_arr)
-    sdm = SQLDataModel.from_pandas(pd_df)
-    sdm = SQLDataModel.from_parquet("output.parquet")
-    sdm = SQLDataModel.from_pickle("output.sdm")
-    sdm = SQLDataModel.from_sql("output", sqlite3.connect('output.db'))
+    Move data quickly from one source or format to another:
 
-    ```
-    ---
+    .. code-block:: python
 
-    #### Data Formats
+        # Load it to your destination database:
+        sdm.to_sql("new_table", destination_db_conn)
+
+        # Or any number of formats including:
+        sdm.to_csv("output.csv")
+        sdm.to_html("output.html")
+        sdm.to_json("output.json")
+        sdm.to_latex("output.tex")
+        sdm.to_markdown("output.md")
+        sdm.to_parquet("output.parquet")
+        sdm.to_pickle("output.sdm")
+        sdm.to_text("output.txt")
+        sdm.to_local_db("output.db")
+
+        # Reload it back again from more formats:
+        sdm = SQLDataModel.from_csv("output.csv")
+        sdm = SQLDataModel.from_dict(py_dict)
+        sdm = SQLDataModel.from_html("output.html")
+        sdm = SQLDataModel.from_json("output.json")
+        sdm = SQLDataModel.from_latex("output.tex")
+        sdm = SQLDataModel.from_markdown("output.md")
+        sdm = SQLDataModel.from_numpy(np_arr)
+        sdm = SQLDataModel.from_pandas(pd_df)
+        sdm = SQLDataModel.from_parquet("output.parquet")
+        sdm = SQLDataModel.from_pickle("output.sdm")
+        sdm = SQLDataModel.from_sql("output", sqlite3.connect('output.db'))
+
+    Data Formats
+    ------------
+
     SQLDataModel can be constructed from, or exported to, many different formats including:
         - CSV: extract from and and write to comma separated value files.
         - HTML: extract from the web, .html files, or from raw hmtl strings and write to .html files.
@@ -206,33 +212,33 @@ class SQLDataModel:
             - lists: convert to and from python `list` objects.
             - namedtuples: convert to and from python `namedtuples` objects.
 
-    ---
+    Pretty Printing
+    ---------------
 
-    #### Pretty Printing
     SQLDataModel also pretty prints your table in any color you specify, use `SQLDataModel.set_display_color(t_color)` and provide either a hex value or a tuple of rgb and print the table, example output:
-    ```shell
-    ┌───┬─────────────────────┬────────────┬─────────────┬────────┬─────────┐
-    │   │ full_name           │ date       │ country     │    pin │ service │
-    ├───┼─────────────────────┼────────────┼─────────────┼────────┼─────────┤
-    │ 0 │ Pamela Berg         │ 2024-09-15 │ New Zealand │   3010 │    3.02 │
-    │ 1 │ Mason Hoover        │ 2024-01-23 │ Australia   │   6816 │    5.01 │
-    │ 2 │ Veda Suarez         │ 2023-09-04 │ Ukraine     │   1175 │    4.65 │
-    │ 3 │ Guinevere Cleveland │ 2024-03-22 │ New Zealand │   4962 │    3.81 │
-    │ 4 │ Vincent Mccoy       │ 2023-09-16 │ France      │   4446 │    2.95 │
-    │ 5 │ Holmes Kemp         │ 2024-11-13 │ Germany     │   9396 │    4.61 │
-    │ 6 │ Donna Mays          │ 2023-06-06 │ Costa Rica  │   8153 │    5.34 │
-    │ 7 │ Rama Galloway       │ 2023-09-22 │ Italy       │   3384 │    3.87 │
-    │ 8 │ Lucas Rodriquez     │ 2024-03-16 │ New Zealand │   3278 │    2.73 │
-    │ 9 │ Hunter Donaldson    │ 2023-06-30 │ Belgium     │   1593 │    4.58 │
-    └───┴─────────────────────┴────────────┴─────────────┴────────┴─────────┘
-    ```
 
-    ---
+    .. code-block:: shell
 
-    #### Notes
+        ┌───┬─────────────────────┬────────────┬─────────────┬────────┬─────────┐
+        │   │ full_name           │ date       │ country     │    pin │ service │
+        ├───┼─────────────────────┼────────────┼─────────────┼────────┼─────────┤
+        │ 0 │ Pamela Berg         │ 2024-09-15 │ New Zealand │   3010 │    3.02 │
+        │ 1 │ Mason Hoover        │ 2024-01-23 │ Australia   │   6816 │    5.01 │
+        │ 2 │ Veda Suarez         │ 2023-09-04 │ Ukraine     │   1175 │    4.65 │
+        │ 3 │ Guinevere Cleveland │ 2024-03-22 │ New Zealand │   4962 │    3.81 │
+        │ 4 │ Vincent Mccoy       │ 2023-09-16 │ France      │   4446 │    2.95 │
+        │ 5 │ Holmes Kemp         │ 2024-11-13 │ Germany     │   9396 │    4.61 │
+        │ 6 │ Donna Mays          │ 2023-06-06 │ Costa Rica  │   8153 │    5.34 │
+        │ 7 │ Rama Galloway       │ 2023-09-22 │ Italy       │   3384 │    3.87 │
+        │ 8 │ Lucas Rodriquez     │ 2024-03-16 │ New Zealand │   3278 │    2.73 │
+        │ 9 │ Hunter Donaldson    │ 2023-06-30 │ Belgium     │   1593 │    4.58 │
+        └───┴─────────────────────┴────────────┴─────────────┴────────┴─────────┘
+    
+    Note:
         - No additional dependencies are installed with this package, however you will obviously need to have pandas or numpy to create pandas or numpy objects.
         - Use `SQLDataModel.set_display_color()` to modify the terminal color of the table, by default no color styling is applied.
         - Use `SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
+
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies')
     
@@ -241,52 +247,49 @@ class SQLDataModel:
         Initializes a new instance of `SQLDataModel`.
 
         Parameters:
-            - `data` (list[list]): The data to populate the model. Should be a list of lists or a list of tuples.
-            - `headers` (list[str]): The column headers for the model. If not provided, default headers will be used.
-            - `dtypes` (dict): A dictionary specifying the data types for each column. Format: {'column': 'dtype'}.
-            - `display_max_rows` (int): The maximum number of rows to display. If not provided, all rows will be displayed.
-            - `min_column_width` (int): The minimum width for each column. Default is 4.
-            - `max_column_width` (int): The maximum width for each column. Default is 32.
-            - `column_alignment` (str): The alignment for columns ('dynamic', 'left', 'center', 'right'). Default is 'dynamic'.
-            - `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
-            - `display_index` (bool): Whether to display row indices. Default is True.
-            - `display_float_precision` (int): The number of decimal places to display for float values. Default is 2.
-            - `infer_types` (bool): Whether to infer the data types based on a randomly selected sample. Default is False, using first row to derive the corresponding type.
+            `data` (list[list]): The data to populate the model. Should be a list of lists or a list of tuples.
+            `headers` (list[str]): The column headers for the model. If not provided, default headers will be used.
+            `dtypes` (dict): A dictionary specifying the data types for each column. Format: {'column': 'dtype'}.
+            `display_max_rows` (int): The maximum number of rows to display. If not provided, all rows will be displayed.
+            `min_column_width` (int): The minimum width for each column. Default is 4.
+            `max_column_width` (int): The maximum width for each column. Default is 32.
+            `column_alignment` (str): The alignment for columns ('dynamic', 'left', 'center', 'right'). Default is 'dynamic'.
+            `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
+            `display_index` (bool): Whether to display row indices. Default is True.
+            `display_float_precision` (int): The number of decimal places to display for float values. Default is 2.
+            `infer_types` (bool): Whether to infer the data types based on a randomly selected sample. Default is False, using first row to derive the corresponding type.
 
         Raises:
-            - `ValueError`: If `data` and `headers` are not provided, or if `data` is of insufficient length.
-            - `TypeError`: If `data` or `headers` is not a valid type (list or tuple), or if `dtypes` is not a dictionary.
-            - `DimensionError`: If the length of `headers` does not match the implied column count from the data.
-            - `SQLProgrammingError`: If there's an issue with executing SQL statements during initialization.
+            `ValueError`: If `data` and `headers` are not provided, or if `data` is of insufficient length.
+            `TypeError`: If `data` or `headers` is not a valid type (list or tuple), or if `dtypes` is not a dictionary.
+            `DimensionError`: If the length of `headers` does not match the implied column count from the data.
+            `SQLProgrammingError`: If there's an issue with executing SQL statements during initialization.
 
-        ---
+        Example::
 
-        Example:
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # Create sample data
+            data = [('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
 
-        # Create sample data
-        data = [('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
-
-        # Create the model with custom headers
-        sdm = SQLDataModel(data,headers=['Name','Age','Sex'])
+            # Create the model with custom headers
+            sdm = SQLDataModel(data,headers=['Name','Age','Sex'])
+            
+            # Display the model
+            print(model)
         
+        This would output:
 
-        # Display the model
-        print(model)
-        ```
-        ```shell
-        ┌────────┬──────┬──────┐
-        │ Name   │  Age │ Sex  │
-        ├────────┼──────┼──────┤
-        │ Alice  │   20 │ F    │
-        │ Bob    │   25 │ M    │
-        │ Gerald │   30 │ M    │
-        └────────┴──────┴──────┘
-        [3 rows x 3 columns]
-        ```
-        ---
+        .. code-block:: shell
+
+            ┌────────┬──────┬──────┐
+            │ Name   │  Age │ Sex  │
+            ├────────┼──────┼──────┤
+            │ Alice  │   20 │ F    │
+            │ Bob    │   25 │ M    │
+            │ Gerald │   30 │ M    │
+            └────────┴──────┴──────┘
+            [3 rows x 3 columns]
 
         Notes:
             - If `data` is not provided, an empty model is created with headers, at least one of `data`, `headers` or `dtypes` are required to instantiate the model.
@@ -439,16 +442,19 @@ class SQLDataModel:
         Formats an error message with ANSI color coding.
 
         Parameters:
-            - `error`: The error message to be formatted.
+            `error`: The error message to be formatted.
 
         Returns:
-            - `str`: The modified string with ANSI color coding, highlighting the error type in bold red.
+            `str`: The modified string with ANSI color coding, highlighting the error type in bold red.
 
-        Example:
-        ```python
-        formatted_error = SQLDataModel.ErrorFormat("ValueError: Invalid value provided.")
-        print(formatted_error)
-        ```
+        Example::
+            
+            # Format the error message
+            formatted_error = SQLDataModel.ErrorFormat("ValueError: Invalid value provided.")
+            
+            # Should display a colored string to display along with error or exception
+            print(formatted_error)
+        
         """
         error_type, error_description = error.split(':',1)
         return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""
@@ -459,16 +465,19 @@ class SQLDataModel:
         Formats a warning message with ANSI color coding.
 
         Parameters:
-            - `warn`: The warning message to be formatted.
+            `warn`: The warning message to be formatted.
 
         Returns:
-            - `str`: The modified string with ANSI color coding, highlighting the class name in bold yellow.
+            `str`: The modified string with ANSI color coding, highlighting the class name in bold yellow.
 
-        Example:
-        ```python
-        formatted_warning = WarnFormat("DeprecationWarning: This method is deprecated.")
-        print(formatted_warning)
-        ```
+        Example::
+        
+            # Warning to format
+            formatted_warning = WarnFormat("DeprecationWarning: This method is deprecated.")
+            
+            # Styled message to pass with error or exception
+            print(formatted_warning)
+        
         """
         warned_by, warning_description = warn.split(':',1)
         return f"""\r\033[1m\033[38;2;246;221;109m{warned_by}:\033[0m\033[39m\033[49m{warning_description}"""
@@ -479,16 +488,19 @@ class SQLDataModel:
         Formats a success message with ANSI color coding.
 
         Parameters:
-            - `success`: The success message to be formatted.
+            `success`: The success message to be formatted.
 
         Returns:
-            - `str`: The modified string with ANSI color coding, highlighting the success source in bold green.
+            `str`: The modified string with ANSI color coding, highlighting the success source in bold green.
 
-        Example:
-        ```python
-        formatted_success = SuccessFormat("FileCreated: The operation was successful with new file created.")
-        print(formatted_success)
-        ```
+        Example::
+        
+            # Message to format
+            formatted_success = SuccessFormat("FileCreated: The operation was successful with new file created.")
+            
+            # Styled message to pass with error or exception            
+            print(formatted_success)
+
         """ 
         success_by, success_description = success.split(':',1)
         return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
@@ -499,20 +511,22 @@ class SQLDataModel:
         Infer the data type of the input object.
 
         Parameters:
-            - `obj` (str): The object for which the data type is to be inferred.
-            - `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
-            - `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
+            `obj` (str): The object for which the data type is to be inferred.
+            `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
+            `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
 
         Returns:
-            - `str`: The inferred data type name of the input object according to:
-                - `'str'`: If the input object is a string, or cannot be parsed as another data type.
-                - `'date'`: If the input object represents a date without time information.
-                - `'datetime'`: If the input object represents a datetime with both date and time information.
-                - `'int'`: If the input object represents an integer.
-                - `'float'`: If the input object represents a floating-point number.
-                - `'bool'`: If the input object represents a boolean value.
-                - `'bytes'`: If the input object represents a binary array.
-                - `'None'`: If the input object is None, empty, or not a string.
+            `str`: The inferred data type.
+        
+        Inference:
+            - `'str'`: If the input object is a string, or cannot be parsed as another data type.
+            - `'date'`: If the input object represents a date without time information.
+            - `'datetime'`: If the input object represents a datetime with both date and time information.
+            - `'int'`: If the input object represents an integer.
+            - `'float'`: If the input object represents a floating-point number.
+            - `'bool'`: If the input object represents a boolean value.
+            - `'bytes'`: If the input object represents a binary array.
+            - `'None'`: If the input object is None, empty, or not a string.
 
         Notes:
             - This method attempts to infer the data type of the input object by evaluating its content.
@@ -548,12 +562,12 @@ class SQLDataModel:
         Infer the best types of `input_data` by using a simple presence-based voting scheme. Sampling is assumed prior to function call, treating `input_data` as already a sampled subset from the original data.
 
         Parameters:
-            - `input_data` (list[list]): A list of lists containing the input data.
-            - `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
-            - `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
+            `input_data` (list[list]): A list of lists containing the input data.
+            `date_format` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
+            `datetime_format` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
 
         Returns:
-            - `list`: A list representing the best-matching inferred types for each column based on the sampled data.
+            `list`: A list representing the best-matching inferred types for each column based on the sampled data.
             
         Notes:
             - If multiple types are present in the samples, the most appropriate type is inferred based on certain rules.
@@ -562,7 +576,7 @@ class SQLDataModel:
             - If a column contains only `str` instances or multiple types with no clear choice, the type remains as `str`.
         
         Related:
-            - See `SQLDataModel.infer_str_type()` for type determination process.
+            - See :meth:`SQLDataModel.infer_str_type` for type determination process.
 
         """        
         n_rows, n_cols = len(input_data), len(input_data[0])
@@ -593,11 +607,11 @@ class SQLDataModel:
         Formats SQLite SELECT clauses based on column parameters to provide preformatted fetches, providing most of the formatting for `repr` output.
 
         Parameters:
-            - `column` (str): The name of the column.
-            - `dtype` (str): The data type of the column ('float', 'int', 'index', or other).
-            - `max_pad_width` (int): The maximum width to pad the output.
-            - `float_precision` (int, optional): The precision for floating-point numbers (default is 4).
-            - `alignment` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
+            `column` (str): The name of the column.
+            `dtype` (str): The data type of the column ('float', 'int', 'index', or other).
+            `max_pad_width` (int): The maximum width to pad the output.
+            `float_precision` (int, optional): The precision for floating-point numbers (default is 4).
+            `alignment` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
 
         Returns:
             `str`: The formatted SELECT clause for SQLite.
@@ -657,34 +671,33 @@ class SQLDataModel:
         Rename duplicate column names in a given list by appending an underscore and a numerical suffix.
 
         Parameters:
-            - `headers` (list): A list of column names that require parsing for duplicates.
+            `headers` (list): A list of column names that require parsing for duplicates.
 
         Yields:
-            - `Generator`: A generator object that yields the original or modified column names.
+            `Generator`: A generator object that yields the original or modified column names.
 
-        Basic Usage:
-            - `headers_str = ",".join([f'"{col}" as "{alias}"' for col, alias in zip(headers, alias_duplicates(headers))])`
+        Usage:
+            `headers_str = ",".join([f'"{col}" as "{alias}"' for col, alias in zip(headers, alias_duplicates(headers))])`
 
-        Example:
+        Example::
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            from SQLDataModel import SQLDataModel
 
-        # Original list of column names with duplicates
-        original_headers = ['ID', 'Name', 'Amount', 'Name', 'Date', 'Amount']
+            # Original list of column names with duplicates
+            original_headers = ['ID', 'Name', 'Amount', 'Name', 'Date', 'Amount']
 
-        # Use the static method to return a generator for the duplicates
-        renamed_generator = SQLDataModel.alias_duplicates(original_headers)
+            # Use the static method to return a generator for the duplicates
+            renamed_generator = SQLDataModel.alias_duplicates(original_headers)
 
-        # Obtain the modified column names
-        modified_headers = list(renamed_generator)
+            # Obtain the modified column names
+            modified_headers = list(renamed_generator)
 
-        # View modified column names
-        print(modified_headers)
+            # View modified column names
+            print(modified_headers)
 
-        # Output
-        modified_headers = ['ID', 'Name', 'Amount', 'Name_2', 'Date', 'Amount_2']
-        ```
+            # Output
+            modified_headers = ['ID', 'Name', 'Amount', 'Name_2', 'Date', 'Amount_2']
+        
         """        
         dupes = {}
         for col in headers:
@@ -701,46 +714,45 @@ class SQLDataModel:
         Parses raw JSON data and flattens it into a dictionary with optional normalization.
 
         Parameters:
-            - `json_source` (dict | list): The raw JSON data to be parsed.
-            - `flatten_rows` (bool): If True, the data will be normalized into columns and rows. If False,
+            `json_source` (dict | list): The raw JSON data to be parsed.
+            `flatten_rows` (bool): If True, the data will be normalized into columns and rows. If False,
             columns will be concatenated from each row using the specified `key_prefix`.
-            - `level_sep` (str): Separates nested levels from other levels and used to concatenate prefix to column.
-            - `key_prefix` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
+            `level_sep` (str): Separates nested levels from other levels and used to concatenate prefix to column.
+            `key_prefix` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
 
         Returns:
-            - `dict`: A flattened dictionary representing the parsed JSON data.
+            `dict`: A flattened dictionary representing the parsed JSON data.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
         
-        # Sample JSON
-        json_source = [{
-            "alpha": "A",
-            "value": 1
-        },  
-        {
-            "alpha": "B",
-            "value": 2
-        },
-        {
-            "alpha": "C",
-            "value": 3
-        }]
+            from SQLDataModel import SQLDataModel
+        
+            # Sample JSON
+            json_source = [{
+                "alpha": "A",
+                "value": 1
+            },  
+            {
+                "alpha": "B",
+                "value": 2
+            },
+            {
+                "alpha": "C",
+                "value": 3
+            }]
 
-        # Flatten JSON with normalization
-        flattened_data = flatten_json(json_data, flatten_rows=True)
+            # Flatten JSON with normalization
+            flattened_data = flatten_json(json_data, flatten_rows=True)
 
-        # Format of result
-        flattened_data = {"alpha": ['A','B','C'], "value": [1, 2, 3]}
+            # Format of result
+            flattened_data = {"alpha": ['A','B','C'], "value": [1, 2, 3]}
 
-        # Alternatively, flatten columns without rows and adding a prefix
-        flattened_data = flatten_json(raw_input,key_prefix='row_',flatten_rows=False)
+            # Alternatively, flatten columns without rows and adding a prefix
+            flattened_data = flatten_json(raw_input,key_prefix='row_',flatten_rows=False)
 
-        # Format of result
-        flattened_data = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
+            # Format of result
+            flattened_data = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
 
-        ```
         """
         if isinstance(json_source, dict):
             json_source = [json_source]
@@ -780,46 +792,43 @@ class SQLDataModel:
         Renames a column in the `SQLDataModel` at the specified index or using the old column name with the provided value in `new_column_name`.
 
         Parameters:
-            - `column` (int|str): The index or current str value of the column to be renamed.
-            - `new_column_name` (str): The new name as a str value for the specified column.
+            `column` (int|str): The index or current str value of the column to be renamed.
+            `new_column_name` (str): The new name as a str value for the specified column.
 
         Raises:
-            - `TypeError`: If the `column` or `new_column_name` parameters are invalid types.
-            - `IndexError`: If the provided column index is outside the current column range.
-            - `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
+            `TypeError`: If the `column` or `new_column_name` parameters are invalid types.
+            `IndexError`: If the provided column index is outside the current column range.
+            `SQLProgrammingError`: If there is an issue with the SQL execution during the column renaming.
 
         Note:
             - The method allows renaming a column identified by its index in the SQLDataModel.
             - Handles negative indices by adjusting them relative to the end of the column range.
             - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
 
-        ---
-            
-        Example:
+        Example::
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            from SQLDataModel import SQLDataModel
 
-        headers = ['idx', 'first', 'last', 'age']
-        data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
-        ]
+            headers = ['idx', 'first', 'last', 'age']
+            data = [
+                (0, 'john', 'smith', 27)
+                ,(1, 'sarah', 'west', 29)
+                ,(2, 'mike', 'harlin', 36)
+                ,(3, 'pat', 'douglas', 42)
+            ]
 
-        # Create the model with sample data
-        sdm = SQLDataModel(data,headers)
+            # Create the model with sample data
+            sdm = SQLDataModel(data,headers)
 
-        # Example: Rename the column at index 1 to 'first_name'
-        sdm.rename_column(1, 'first_name')
+            # Example: Rename the column at index 1 to 'first_name'
+            sdm.rename_column(1, 'first_name')
 
-        # Get current values
-        new_headers = sdm.get_headers()
+            # Get current values
+            new_headers = sdm.get_headers()
 
-        # Outputs ['first_name', 'last', 'age']
-        print(new_headers)
-        ```
+            # Outputs ['first_name', 'last', 'age']
+            print(new_headers)
+
         """
         if not isinstance(column, (int,str)):
             raise TypeError(
@@ -857,52 +866,52 @@ class SQLDataModel:
         If inplace is True, the method updates the existing SQLDataModel; otherwise, it returns a new `SQLDataModel` with the replacements applied.
 
         Parameters:
-            - `pattern` (str): The substring or regular expression pattern to search for in each column.
-            - `replacement` (str): The string to replace the matched pattern with.
-            - `inplace` (bool, optional): If True, modifies the current SQLDataModel instance in-place. Default is False.
-            - **kwargs: Additional keyword arguments to be passed to the `execute_fetch` method when not in-place.
+            `pattern` (str): The substring or regular expression pattern to search for in each column.
+            `replacement` (str): The string to replace the matched pattern with.
+            `inplace` (bool, optional): If True, modifies the current SQLDataModel instance in-place. Default is False.
+            **kwargs: Additional keyword arguments to be passed to the `execute_fetch` method when not in-place.
         
         Raises:
-            - `TypeError`: If the `pattern` or `replacement` parameters are invalid types.
+            `TypeError`: If the `pattern` or `replacement` parameters are invalid types.
 
         Returns:
-            - `SQLDataModel`: If inplace=True, modifies the current instance in-place and returns None. Otherwise, returns a new SQLDataModel
+            `SQLDataModel`: If inplace=True, modifies the current instance in-place and returns None. Otherwise, returns a new SQLDataModel
             with the specified replacements applied.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+            
+            from SQLDataModel import SQLDataModel
 
-        headers = ['first', 'last', 'age', 'service']
-        data = [
-            ('John', 'Smith', 27, 1.22),
-            ('Sarah', 'West', 39, 0.7),
-            ('Mike', 'Harlin', 36, 3),
-            ('Pat', 'Douglas', 42, 11.5)
-        ]        
+            headers = ['first', 'last', 'age', 'service']
+            data = [
+                ('John', 'Smith', 27, 1.22),
+                ('Sarah', 'West', 39, 0.7),
+                ('Mike', 'Harlin', 36, 3),
+                ('Pat', 'Douglas', 42, 11.5)
+            ]        
 
-        # Create the model
-        sdm = SQLDataModel(data, headers,display_float_precision=2, display_index=False)
+            # Create the model
+            sdm = SQLDataModel(data, headers,display_float_precision=2, display_index=False)
 
-        # Replace 'John' in the 'first' column
-        sdm['first'] = sdm['first'].replace("John","Jane")
+            # Replace 'John' in the 'first' column
+            sdm['first'] = sdm['first'].replace("John","Jane")
+            
+            # View model
+            print(sdm)
+
+        This will output:
+        .. code-block:: shell
+
+            ┌───────┬─────────┬──────┬─────────┐
+            │ first │ last    │  age │ service │
+            ├───────┼─────────┼──────┼─────────┤
+            │ Jane  │ Smith   │   27 │    1.22 │
+            │ Sarah │ West    │   39 │    0.70 │
+            │ Mike  │ Harlin  │   36 │    3.00 │
+            │ Pat   │ Douglas │   42 │   11.50 │
+            └───────┴─────────┴──────┴─────────┘   
+            [4 rows x 4 columns] 
         
-        # View model
-        print(sdm)
-
-        # Output    
-        ```
-        ```shell
-        ┌───────┬─────────┬──────┬─────────┐
-        │ first │ last    │  age │ service │
-        ├───────┼─────────┼──────┼─────────┤
-        │ Jane  │ Smith   │   27 │    1.22 │
-        │ Sarah │ West    │   39 │    0.70 │
-        │ Mike  │ Harlin  │   36 │    3.00 │
-        │ Pat   │ Douglas │   42 │   11.50 │
-        └───────┴─────────┴──────┴─────────┘   
-        [4 rows x 4 columns] 
-        ```
         """
         if not isinstance(pattern, str):
             raise TypeError(
@@ -927,19 +936,19 @@ class SQLDataModel:
         Returns:
             `list`: A list of strings representing the headers.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+        
+            from SQLDataModel import SQLDataModel
 
-        # Create model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+            # Create model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
-        # Get current model headers
-        headers = sdm.get_headers()
+            # Get current model headers
+            headers = sdm.get_headers()
 
-        # Display values
-        print(headers) # outputs: ['First Name', 'Last Name', 'Salary']
-        ```
+            # Display values
+            print(headers) # outputs: ['First Name', 'Last Name', 'Salary']
+        
         """
         return self.headers
     
@@ -955,20 +964,20 @@ class SQLDataModel:
             `None`
 
         Raises:
-            - `TypeError`: If the `new_headers` type is not a valid type (list or tuple).
-            - `DimensionError`: If the length of `new_headers` does not match the column count.
-            - `TypeError`: If the type of the first element in `new_headers` is not a valid type (str, int, or float).
+            `TypeError`: If the `new_headers` type is not a valid type (list or tuple).
+            `DimensionError`: If the length of `new_headers` does not match the column count.
+            `TypeError`: If the type of the first element in `new_headers` is not a valid type (str, int, or float).
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+            
+            from SQLDataModel import SQLDataModel
 
-        # Create model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+            # Create model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
-        # Set new headers
-        sdm.set_headers(['First_Name', 'Last_Name', 'Payment'])
-        ```
+            # Set new headers
+            sdm.set_headers(['First_Name', 'Last_Name', 'Payment'])
+        
         """
         if not isinstance(new_headers, (list,tuple)):
             raise TypeError(
@@ -998,34 +1007,34 @@ class SQLDataModel:
     def normalize_headers(self, apply_function:Callable=None) -> None:
         """
         Reformats the current `SQLDataModel` headers into an uncased normalized form using alphanumeric characters only.
-        Wraps `.set_headers()`.
+        Wraps :meth:`SQLDataModel.set_headers()`.
 
         Parameters:
-            - `apply_function` (Callable, optional): Specify an alternative normalization pattern. When `None`, the pattern
+            `apply_function` (Callable, optional): Specify an alternative normalization pattern. When `None`, the pattern
                 `'[^0-9a-z _]+'` will be used on uncased values.
 
         Returns:
-            None
+            `None`
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+            
+            from SQLDataModel import SQLDataModel
 
-        # Create model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+            # Create model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
-        # Use default normalization scheme, uncased and strips invalid SQL identifiers
-        sdm.normalize_headers()
+            # Use default normalization scheme, uncased and strips invalid SQL identifiers
+            sdm.normalize_headers()
 
-        # Get renamed headers after default normalization
-        sdm.get_headers() # now outputs ['first_name', 'last_name', 'salary']
+            # Get renamed headers after default normalization
+            sdm.get_headers() # now outputs ['first_name', 'last_name', 'salary']
 
-        # Or use custom renaming scheme
-        sdm.normalize_headers(lambda x: x.upper())
+            # Or use custom renaming scheme
+            sdm.normalize_headers(lambda x: x.upper())
 
-        # Get renamed headers again
-        sdm.get_headers() # now outputs ['FIRST_NAME', 'LAST_NAME', 'SALARY']
-        ```
+            # Get renamed headers again
+            sdm.get_headers() # now outputs ['FIRST_NAME', 'LAST_NAME', 'SALARY']
+        
         """
         if apply_function is None:
             apply_function = lambda x: "_".join(x.strip() for x in re.sub('[^0-9a-z_]+', '', x.lower().replace(" ","_")).split('_') if x !='')
@@ -1038,21 +1047,21 @@ class SQLDataModel:
         Retrieves the current value of the `display_max_rows` property, which determines the maximum rows displayed for `SQLDataModel`.
 
         Returns:
-            - `int|None`: The current value of the 'display_max_rows' property.
+            `int|None`: The current value of the 'display_max_rows' property.
 
-        Example:
-        ```python
-        # Example usage:
+        Example::
 
-        # Create model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Create model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Get current value
-        display_max_rows = sdm.get_display_max_rows()
+            # Get current value
+            display_max_rows = sdm.get_display_max_rows()
 
-        # By default any display will be limited to 1000 rows max
-        print(display_max_rows) # 1000
-        ```
+            # By default any display will be limited to 1000 rows max
+            print(display_max_rows) # 1000
+        
+        Note:
+            - This does not affect the actual number of rows in the model, only the maximum **displayed**.
         """
         return self.display_max_rows
     
@@ -1062,25 +1071,28 @@ class SQLDataModel:
         Modifying this attribute does not change the actual number of rows stored in `SQLDataModel`, only the number of rows displayed.
 
         Parameters:
-            - `rows` (int): The maximum number of rows to display.
+            `rows` (int): The maximum number of rows to display.
 
         Raises:
-            - `TypeError`: If the provided argument is not `None` or is not an integer.
-            - `IndexError`: If the provided value is an integer less than or equal to 0.
+            `TypeError`: If the provided argument is not `None` or is not an integer.
+            `IndexError`: If the provided value is an integer less than or equal to 0.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+        
+            from SQLDataModel import SQLDataModel
 
-        # Create model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Create model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Any call to `print` or `repr` will be restricted to 500 max rows
-        sdm.set_display_max_rows(500)
+            # Any call to `print` or `repr` will be restricted to 500 max rows
+            sdm.set_display_max_rows(500)
 
-        # Alternatively, auto-detect dimensions by setting to `None`
-        sdm.set_display_max_rows(None)
-        ```
+            # Alternatively, auto-detect dimensions by setting to `None`
+            sdm.set_display_max_rows(None)
+        
+        Note:
+            - This does not affect the actual number of rows in the model, only the maximum **displayed**.
+
         """
         if not isinstance(rows, (int,type(None))):
             raise TypeError(
@@ -1099,19 +1111,19 @@ class SQLDataModel:
         Returns:
             int: The current value of the `min_column_width` property.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+            
+            from SQLDataModel import SQLDataModel
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Get and save the current value
-        min_width = sdm.get_min_column_width()
+            # Get and save the current value
+            min_width = sdm.get_min_column_width()
 
-        # Output
-        print(min_width)  # 6
-        ```
+            # Output
+            print(min_width)  # 6
+        
         """
         return self.min_column_width
     
@@ -1120,31 +1132,28 @@ class SQLDataModel:
         Set `min_column_width` as the minimum number of characters per column when `repr` or `print` is called.
 
         Parameters:
-            - `width` (int): The minimum width for each column.
+            `width` (int): The minimum width for each column.
 
         Returns:
-            - `None`: Sets the `min_column_width` property.
+            `None`: Sets the `min_column_width` property.
 
         Note:
             - If `min_column_width` is set to a value below the current `max_column_width` property, the maximum width will override the minimum width.
             - The minimum required width is `2`, when `min_column_width < 2`, `2` will be used regardless of the `width` provided.
 
-        ---
+        Example::
 
-        Example:
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Set a new minimum column width value
+            sdm.set_min_column_width(8)
 
-        # Set a new minimum column width value
-        sdm.set_min_column_width(8)
-
-        # Check updated value
-        print(sdm.get_min_column_width) # 8
-        ```
+            # Check updated value
+            print(sdm.get_min_column_width) # 8
+        
         """
         self.min_column_width = width if width >= 2 else 2
 
@@ -1155,19 +1164,19 @@ class SQLDataModel:
         Returns:
             int: The current value of the `max_column_width` property.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+        
+            from SQLDataModel import SQLDataModel
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Get the current max column width value
-        max_width = sdm.get_max_column_width()
+            # Get the current max column width value
+            max_width = sdm.get_max_column_width()
 
-        # Output
-        print(max_width)  # 32
-        ```
+            # Output
+            print(max_width)  # 32
+        
         """
         return self.max_column_width
     
@@ -1176,28 +1185,25 @@ class SQLDataModel:
         Set `max_column_width` as the maximum number of characters per column when `repr` or `print` is called.
 
         Parameters:
-            - `width` (int): The maximum width for each column.
+            `width` (int): The maximum width for each column.
 
         Returns:
-            - `None`: Sets the `max_column_width` property.
+            `None`: Sets the `max_column_width` property.
 
         Note:
             - If `max_column_width` is set to a value below the current `min_column_width` property, the maximum width will override the minimum width.
             - The minimum required width is `2`, when `max_column_width < 2`, `2` will be used regardless of the `width` provided.
 
-        ---
+        Example::
 
-        Example:
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
-
-        # Change the max column width for the table representation
-        sdm.set_max_column_width(20)
-        ```
+            # Change the max column width for the table representation
+            sdm.set_max_column_width(20)
+        
         """
         self.max_column_width = width if width >= 2 else 2
 
@@ -1206,29 +1212,23 @@ class SQLDataModel:
         Returns the current `column_alignment` property value, `dynamic` by default.
 
         Returns:
-            - `str`: The current value of the `column_alignment` property.
+            `str`: The current value of the `column_alignment` property.
 
-        ---
+        Example::
 
-        Example:
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Get the current alignment value
+            alignment = sdm.get_column_alignment()
 
-        # Get the current alignment value
-        alignment = sdm.get_column_alignment()
-
-        # Outputs 'dynamic'
-        print(alignment)
-        ```
-
-        ---
+            # Outputs 'dynamic'
+            print(alignment)
 
         Related:
-            - :meth:`~SQLDataModel.SQLDataModel.set_column_alignment()`
+            - See :meth:`SQLDataModel.set_column_alignment` to configure table alignment
         
         """
         return self.column_alignment
@@ -1239,71 +1239,70 @@ class SQLDataModel:
         Default behavior set to `'dynamic'`, which right-aligns numeric data types, left-aligns all other types, with headers matching value alignment.
         
         Parameters:
-            - `alignment` (str): The column alignment setting to use.
-                - `'dynamic'`: Default behavior, dynamically aligns columns based on column data types.
-                - `'left'`: Left-align all column values.
-                - `'center'`: Center-align all column values.
-                - `'right'`: Right-align all column values.
+            `alignment` (str): The column alignment setting to use.
+                `'dynamic'`: Default behavior, dynamically aligns columns based on column data types.
+                `'left'`: Left-align all column values.
+                `'center'`: Center-align all column values.
+                `'right'`: Right-align all column values.
         
         Raises:
-            - `TypeError`: If the argument for alignment is not of type 'str'.
-            - `ValueError`: If the provided alignment is not one of 'dynamic', 'left', 'center', 'right'.
+            `TypeError`: If the argument for alignment is not of type 'str'.
+            `ValueError`: If the provided alignment is not one of 'dynamic', 'left', 'center', 'right'.
 
-        ---
+        Example::
 
-        Example:
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Set to right-align
+            sdm.set_column_alignment('right')
 
-        # Set to right-align
-        sdm.set_column_alignment('right')
+            # Output
+            print(sdm)
+        
+        This will output:
 
-        # Output
-        print(sdm)
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┬─────────┐
-        │   │  first │    last │    age │ service │
-        ├───┼────────┼─────────┼────────┼─────────┤
-        │ 0 │   john │   smith │     27 │    1.22 │
-        │ 1 │  sarah │    west │     39 │    0.70 │
-        │ 2 │   mike │  harlin │     36 │    3.00 │
-        │ 3 │    pat │ douglas │     42 │   11.50 │
-        └───┴────────┴─────────┴────────┴─────────┘        
-        ```
-        ```python
-        # Set to left-align
-        sdm.set_column_alignment('left')
+        .. code-block:: shell
 
-        # Output
-        print(sdm)
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┬─────────┐
-        │   │ first  │ last    │ age    │ service │
-        ├───┼────────┼─────────┼────────┼─────────┤
-        │ 0 │ john   │ smith   │  27    │  1.22   │
-        │ 1 │ sarah  │ west    │  39    │  0.70   │
-        │ 2 │ mike   │ harlin  │  36    │  3.00   │
-        │ 3 │ pat    │ douglas │  42    │  11.50  │
-        └───┴────────┴─────────┴────────┴─────────┘        
-        ```
+            ┌───┬────────┬─────────┬────────┬─────────┐
+            │   │  first │    last │    age │ service │
+            ├───┼────────┼─────────┼────────┼─────────┤
+            │ 0 │   john │   smith │     27 │    1.22 │
+            │ 1 │  sarah │    west │     39 │    0.70 │
+            │ 2 │   mike │  harlin │     36 │    3.00 │
+            │ 3 │    pat │ douglas │     42 │   11.50 │
+            └───┴────────┴─────────┴────────┴─────────┘        
 
-        ---
+        .. code-block:: python
+            
+            # Set to left-align
+            sdm.set_column_alignment('left')
+
+            # Output
+            print(sdm)
+
+        This will output:
+
+        .. code-block:: shell
+            
+            ┌───┬────────┬─────────┬────────┬─────────┐
+            │   │ first  │ last    │ age    │ service │
+            ├───┼────────┼─────────┼────────┼─────────┤
+            │ 0 │ john   │ smith   │  27    │  1.22   │
+            │ 1 │ sarah  │ west    │  39    │  0.70   │
+            │ 2 │ mike   │ harlin  │  36    │  3.00   │
+            │ 3 │ pat    │ douglas │  42    │  11.50  │
+            └───┴────────┴─────────┴────────┴─────────┘        
 
         Notes:
             - The options for 'left' and 'right' mirror the '<' and '>' f-string formatters, respectively.
             - When using 'center', if the column contents cannot be perfectly centralized, the left side will be favored.
             - Use 'dynamic' to return to default column alignment, which is right-aligned for numeric types and left-aligned for others.
 
-        ---
-
         Related:
-            - :meth:`~SQLDataModel.SQLDataModel.get_column_alignment()`
+            - :meth:`SQLDataModel.get_column_alignment` to return the current setting for column alignment.
 
         """
         if not isinstance(alignment, str):
@@ -1323,21 +1322,21 @@ class SQLDataModel:
         whether or not the `SQLDataModel` index will be shown in print or repr calls.
 
         Returns:
-            - `bool`: The current value of the `display_index` property.
+            `bool`: The current value of the `display_index` property.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+        
+            from SQLDataModel import SQLDataModel
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Get the current value for displaying the index
-        display_index = sdm.get_display_index()
+            # Get the current value for displaying the index
+            display_index = sdm.get_display_index()
 
-        # Outputs `True`
-        print(display_index)
-        ```
+            # Outputs `True`
+            print(display_index)
+        
         """
         return self.display_index
 
@@ -1347,19 +1346,22 @@ class SQLDataModel:
         `SQLDataModel` index value in print or repr calls, default set to include.
 
         Parameters:
-            - `display_index` (bool): A boolean value (True | False) to determine whether
+            `display_index` (bool): A boolean value (True | False) to determine whether
             to include the index in print or repr calls.
 
         Raises:
-            - `TypeError`: If the provided argument is not a boolean value.
+            `TypeError`: If the provided argument is not a boolean value.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
 
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
-        sdm.set_display_index(False)
-        ```
+            from SQLDataModel import SQLDataModel
+
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+
+            # Disable displaying index
+            sdm.set_display_index(False)
+
         """
         if not isinstance(display_index, bool):
             raise TypeError(
@@ -1372,31 +1374,24 @@ class SQLDataModel:
         Returns the shape of the data as a tuple of `(rows x columns)`.
 
         Returns:
-            - `tuple[int]`: A tuple representing the number of rows and columns in the SQLDataModel.
-        ---
+            `tuple[int]`: A tuple representing the number of rows and columns in the SQLDataModel.
 
-        Example:
+        Example::
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            from SQLDataModel import SQLDataModel
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-        # Get shape
-        shape = sdm.get_shape()
+            # Get shape
+            shape = sdm.get_shape()
 
-        # View output
-        print(shape)
-        ```
-        ```shell
-        (10, 3)
-        ```
-        ---
+            # Tuple of (rows, columns)
+            print(shape)
 
         Notes:
             - If an empty model is initialized, the `rowcount` will be 0 until the first row is inserted.
-            - Using the __getitem__ syntax of `sdm[row, col]` returns a new model instance with the corresponding shape.
+            - Using the :meth:`SQLDataModel.__getitem__` syntax of `sdm[row, col]` returns a new model instance with the corresponding shape.
         """
         return (self.row_count,self.column_count)
     
@@ -1406,7 +1401,7 @@ class SQLDataModel:
         in the `repr` method for the `SQLDataModel`. Default value is set to 4 decimal places of precision.
 
         Returns:
-            - `int`: The current float display precision.
+            `int`: The current float display precision.
 
         Note:
             - The float display precision is the number of decimal places to include when displaying real numbers
@@ -1423,57 +1418,53 @@ class SQLDataModel:
         if the precision limit exceeds the specified maximum width.
 
         Parameters:
-            - `float_precision` (int): The desired float display precision to be used for real number values.
+            `float_precision` (int): The desired float display precision to be used for real number values.
 
         Raises:
-            - `TypeError`: If the `float_precision` argument is not of type 'int'.
-            - `ValueError`: If the `float_precision` argument is a negative value, as it must be a valid f-string precision identifier.
-        ---
+            `TypeError`: If the `float_precision` argument is not of type 'int'.
+            `ValueError`: If the `float_precision` argument is a negative value, as it must be a valid f-string precision identifier.
 
-        Example:
+        Example::
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            from SQLDataModel import SQLDataModel
 
-        headers = ['idx', 'first', 'last', 'age', 'service_time']
-        data = [
-            (0, 'john', 'smith', 27, 1.22)
-            ,(1, 'sarah', 'west', 0.7)
-            ,(2, 'mike', 'harlin', 3)
-            ,(3, 'pat', 'douglas', 11.5)
-        ]
+            headers = ['idx', 'first', 'last', 'age', 'service_time']
+            data = [
+                (0, 'john', 'smith', 27, 1.22)
+                ,(1, 'sarah', 'west', 0.7)
+                ,(2, 'mike', 'harlin', 3)
+                ,(3, 'pat', 'douglas', 11.5)
+            ]
 
-        # Create the model with sample data
-        sdm = SQLDataModel(data,headers)
+            # Create the model with sample data
+            sdm = SQLDataModel(data,headers)
 
-        # Example: Set the float display precision to 2
-        sdm.set_display_float_precision(2)
+            # Example: Set the float display precision to 2
+            sdm.set_display_float_precision(2)
 
-        # View model
-        print(sdm)
+            # View model
+            print(sdm)
 
-        # Outputs:
-        ```
-        ```shell
-        ┌───┬────────┬─────────┬────────┬──────────────┐
-        │   │ first  │ last    │    age │ service_time │
-        ├───┼────────┼─────────┼────────┼──────────────┤
-        │ 0 │ john   │ smith   │     27 │         2.10 │
-        │ 1 │ sarah  │ west    │     29 │         0.80 │
-        │ 2 │ mike   │ harlin  │     36 │         1.30 │
-        │ 3 │ pat    │ douglas │     42 │         7.02 │
-        └───┴────────┴─────────┴────────┴──────────────┘
-        ```
+        This will output:
+        
+        .. code-block:: shell
 
-        ```python
+            ┌───┬────────┬─────────┬────────┬──────────────┐
+            │   │ first  │ last    │    age │ service_time │
+            ├───┼────────┼─────────┼────────┼──────────────┤
+            │ 0 │ john   │ smith   │     27 │         2.10 │
+            │ 1 │ sarah  │ west    │     29 │         0.80 │
+            │ 2 │ mike   │ harlin  │     36 │         1.30 │
+            │ 3 │ pat    │ douglas │     42 │         7.02 │
+            └───┴────────┴─────────┴────────┴──────────────┘
 
-        # Get the updated float display precision
-        updated_precision = sdm.get_display_float_precision()
+        .. code-block:: python
 
-        # Outputs 2
-        print(updated_precision)
-        ```
-        ---
+            # Get the updated float display precision
+            updated_precision = sdm.get_display_float_precision()
+
+            # Outputs 2
+            print(updated_precision)
 
         Note:
             - The `display_float_precision` attribute only affects the precision for displaying real or floating point values.
@@ -1494,10 +1485,10 @@ class SQLDataModel:
         Generates descriptive statistics for columns in the `SQLDataModel` instance based on column dtype including count, unique values, top value, frequency, mean, standard deviation, minimum, 25th, 50th, 75th percentiles, maximum and dtype for specified column.
 
         Parameters:
-            - `exclude_columns` (str | list, optional): Columns to exclude from the analysis. Default is None.
-            - `exclude_dtypes` (list[Literal["str", "int", "float", "date", "datetime", "bool"]], optional): Data types to exclude from the analysis. Default is None.
-            - `ignore_na` (bool, optional): If True, ignores NA like values ('NA', ' ', 'None') when computing statistics. Default is True.
-            - `**kwargs`: Additional keyword arguments to be passed to the `execute_fetch` method.
+            `exclude_columns` (str | list, optional): Columns to exclude from the analysis. Default is None.
+            `exclude_dtypes` (list[Literal["str", "int", "float", "date", "datetime", "bool"]], optional): Data types to exclude from the analysis. Default is None.
+            `ignore_na` (bool, optional): If True, ignores NA like values ('NA', ' ', 'None') when computing statistics. Default is True.
+            `**kwargs`: Additional keyword arguments to be passed to the `execute_fetch` method.
 
         Statistics:
             - count: Total number of non-null values for specified column
@@ -1531,9 +1522,9 @@ class SQLDataModel:
                 - dtypes can be excluded by using `exclude_dtypes` parameter
 
         Returns:
-            - `SQLDataModel`: A new SQLDataModel containing a comprehensive set of descriptive statistics for selected columns.
+            `SQLDataModel`: A new SQLDataModel containing a comprehensive set of descriptive statistics for selected columns.
 
-        Notes:
+        Note:
             - Standard deviation is calculated using uncorrected sample standard deviation for numeric dtypes, and timediff in days for datetime dtypes
             - Ties in unique, top and freq columns are broken arbitrarily as determined by first ordering of values prior to calling `describe()`
             - Ties encountered when binning for p25, p50, p75 will favor lower bins for data that cannot be quartered cleanly
@@ -1541,92 +1532,95 @@ class SQLDataModel:
             - Using `ignore_na=True` only affects inclusion of 'NA like' values such as empty strings
             - Floating point precision determined by `display_float_precision` attribute
         
-        Examples:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+            
+            from SQLDataModel import SQLDataModel
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('employees.csv')
+            # Create the model
+            sdm = SQLDataModel.from_csv('employees.csv')
 
-        # View all 10 rows
-        print(sdm)
+            # View all 10 rows
+            print(sdm)
 
-        # Output
-        ```
-        ```shell
-        ┌───┬──────────────────┬────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
-        │   │ name             │ hire_date  │ country     │ service_years │    age │ last_update         │
-        ├───┼──────────────────┼────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
-        │ 0 │ Pamela Berg      │ 2007-06-06 │ New Zealand │          3.02 │     56 │ 2023-08-12 17:13:46 │
-        │ 1 │ Mason Hoover     │ 2009-04-19 │ Australia   │          5.01 │     41 │ 2023-05-18 01:29:44 │
-        │ 2 │ Veda Suarez      │ 2007-07-02 │ Ukraine     │          4.65 │     26 │ 2023-12-09 15:38:01 │
-        │ 3 │ John Smith       │ 2017-08-12 │ New Zealand │          3.81 │     35 │ 2023-03-10 18:23:56 │
-        │ 4 │ Xavier McCoy     │ 2021-04-03 │ France      │          2.95 │     42 │ 2023-09-27 11:39:08 │
-        │ 5 │ John Smith       │ 2020-10-11 │ Germany     │          4.61 │     56 │ 2023-12-09 18:41:52 │
-        │ 6 │ Abigail Mays     │ 2021-07-25 │ Costa Rica  │          5.34 │     50 │ 2023-02-11 16:43:07 │
-        │ 7 │ Rama Galloway    │ 2009-02-09 │ Italy       │          3.87 │     24 │ 2023-03-13 16:08:48 │
-        │ 8 │ Lucas Rodriquez  │ 2018-06-19 │ New Zealand │          2.73 │     28 │ 2023-03-17 01:45:22 │
-        │ 9 │ Hunter Donaldson │ 2015-12-18 │ Belgium     │          4.58 │     43 │ 2023-04-06 03:22:54 │
-        └───┴──────────────────┴────────────┴─────────────┴───────────────┴────────┴─────────────────────┘      
-        [10 rows x 6 columns]  
-        ```
-        ```python
-        # Generate statistics
-        sdm_described = sdm.describe()
+        This will output:
+        
+        .. code-block:: shell
+            
+            ┌───┬──────────────────┬────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
+            │   │ name             │ hire_date  │ country     │ service_years │    age │ last_update         │
+            ├───┼──────────────────┼────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
+            │ 0 │ Pamela Berg      │ 2007-06-06 │ New Zealand │          3.02 │     56 │ 2023-08-12 17:13:46 │
+            │ 1 │ Mason Hoover     │ 2009-04-19 │ Australia   │          5.01 │     41 │ 2023-05-18 01:29:44 │
+            │ 2 │ Veda Suarez      │ 2007-07-02 │ Ukraine     │          4.65 │     26 │ 2023-12-09 15:38:01 │
+            │ 3 │ John Smith       │ 2017-08-12 │ New Zealand │          3.81 │     35 │ 2023-03-10 18:23:56 │
+            │ 4 │ Xavier McCoy     │ 2021-04-03 │ France      │          2.95 │     42 │ 2023-09-27 11:39:08 │
+            │ 5 │ John Smith       │ 2020-10-11 │ Germany     │          4.61 │     56 │ 2023-12-09 18:41:52 │
+            │ 6 │ Abigail Mays     │ 2021-07-25 │ Costa Rica  │          5.34 │     50 │ 2023-02-11 16:43:07 │
+            │ 7 │ Rama Galloway    │ 2009-02-09 │ Italy       │          3.87 │     24 │ 2023-03-13 16:08:48 │
+            │ 8 │ Lucas Rodriquez  │ 2018-06-19 │ New Zealand │          2.73 │     28 │ 2023-03-17 01:45:22 │
+            │ 9 │ Hunter Donaldson │ 2015-12-18 │ Belgium     │          4.58 │     43 │ 2023-04-06 03:22:54 │
+            └───┴──────────────────┴────────────┴─────────────┴───────────────┴────────┴─────────────────────┘      
+            [10 rows x 6 columns]  
+        
+        .. code-block:: python
 
-        # View stats
-        print(sdm_described)
+            # Generate statistics
+            sdm_described = sdm.describe()
 
-        # Output
-        ```
-        ```shell
-        ┌────────┬──────────────┬─────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
-        │ metric │         name │   hire_date │     country │ service_years │    age │         last_update │
-        ├────────┼──────────────┼─────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
-        │ count  │           10 │          10 │          10 │            10 │     10 │                  10 │
-        │ unique │            9 │          10 │           8 │            10 │      9 │                  10 │
-        │ top    │   John Smith │  2021-07-25 │ New Zealand │          5.34 │     56 │ 2023-12-09 18:41:52 │
-        │ freq   │            2 │           1 │           3 │             1 │      2 │                   1 │
-        │ mean   │          NaN │  2014-11-24 │         NaN │          4.06 │     40 │ 2023-06-16 19:18:39 │
-        │ std    │          NaN │ 2164.4 days │         NaN │          0.92 │     11 │         117.58 days │
-        │ min    │ Abigail Mays │  2007-06-06 │   Australia │          2.73 │     24 │ 2023-02-11 16:43:07 │
-        │ p25    │          NaN │  2009-02-09 │         NaN │          3.02 │     28 │ 2023-03-13 16:08:48 │
-        │ p50    │          NaN │  2017-08-12 │         NaN │          4.58 │     42 │ 2023-05-18 01:29:44 │
-        │ p75    │          NaN │  2020-10-11 │         NaN │          4.65 │     50 │ 2023-09-27 11:39:08 │
-        │ max    │ Xavier McCoy │  2021-07-25 │     Ukraine │          5.34 │     56 │ 2023-12-09 18:41:52 │
-        │ dtype  │          str │        date │         str │         float │    int │            datetime │
-        └────────┴──────────────┴─────────────┴─────────────┴───────────────┴────────┴─────────────────────┘
-        [12 rows x 7 columns]    
-        ```
-        ```python
-        # Set filters to exclude all str dtypes and the 'hire_date' column:
-        sdm_describe = sdm.describe(exclude_dtypes=['str'], exclude_columns=['hire_date'])
+            # View stats
+            print(sdm_described)
 
-        # View statistics
-        print(sdm_described)
+        This will output:
+        
+        .. code-block:: shell
 
-        # Output
-        ```
-        ```shell
-        ┌────────┬───────────────┬────────┬─────────────────────┐
-        │ metric │ service_years │    age │         last_update │
-        ├────────┼───────────────┼────────┼─────────────────────┤
-        │ count  │            10 │     10 │                  10 │
-        │ unique │            10 │      9 │                  10 │
-        │ top    │          5.34 │     56 │ 2023-10-28 05:42:43 │
-        │ freq   │             1 │      2 │                   1 │
-        │ mean   │          4.06 │     40 │ 2023-08-11 23:18:12 │
-        │ std    │          0.92 │     11 │          73.15 days │
-        │ min    │          2.73 │     24 │ 2023-04-07 23:56:06 │
-        │ p25    │          3.02 │     28 │ 2023-06-02 14:36:19 │
-        │ p50    │          4.58 │     42 │ 2023-09-09 19:18:38 │
-        │ p75    │          4.65 │     50 │ 2023-10-09 19:34:55 │
-        │ max    │          5.34 │     56 │ 2023-10-28 05:42:43 │
-        │ dtype  │         float │    int │            datetime │
-        └────────┴───────────────┴────────┴─────────────────────┘
-        [12 rows x 4 columns]
-        ```
-        ---
+            ┌────────┬──────────────┬─────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
+            │ metric │         name │   hire_date │     country │ service_years │    age │         last_update │
+            ├────────┼──────────────┼─────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
+            │ count  │           10 │          10 │          10 │            10 │     10 │                  10 │
+            │ unique │            9 │          10 │           8 │            10 │      9 │                  10 │
+            │ top    │   John Smith │  2021-07-25 │ New Zealand │          5.34 │     56 │ 2023-12-09 18:41:52 │
+            │ freq   │            2 │           1 │           3 │             1 │      2 │                   1 │
+            │ mean   │          NaN │  2014-11-24 │         NaN │          4.06 │     40 │ 2023-06-16 19:18:39 │
+            │ std    │          NaN │ 2164.4 days │         NaN │          0.92 │     11 │         117.58 days │
+            │ min    │ Abigail Mays │  2007-06-06 │   Australia │          2.73 │     24 │ 2023-02-11 16:43:07 │
+            │ p25    │          NaN │  2009-02-09 │         NaN │          3.02 │     28 │ 2023-03-13 16:08:48 │
+            │ p50    │          NaN │  2017-08-12 │         NaN │          4.58 │     42 │ 2023-05-18 01:29:44 │
+            │ p75    │          NaN │  2020-10-11 │         NaN │          4.65 │     50 │ 2023-09-27 11:39:08 │
+            │ max    │ Xavier McCoy │  2021-07-25 │     Ukraine │          5.34 │     56 │ 2023-12-09 18:41:52 │
+            │ dtype  │          str │        date │         str │         float │    int │            datetime │
+            └────────┴──────────────┴─────────────┴─────────────┴───────────────┴────────┴─────────────────────┘
+            [12 rows x 7 columns]    
+        
+        .. code-block:: python
+
+            # Set filters to exclude all str dtypes and the 'hire_date' column:
+            sdm_describe = sdm.describe(exclude_dtypes=['str'], exclude_columns=['hire_date'])
+
+            # View statistics
+            print(sdm_described)
+        
+        This will output:
+
+        .. code-block:: shell
+
+            ┌────────┬───────────────┬────────┬─────────────────────┐
+            │ metric │ service_years │    age │         last_update │
+            ├────────┼───────────────┼────────┼─────────────────────┤
+            │ count  │            10 │     10 │                  10 │
+            │ unique │            10 │      9 │                  10 │
+            │ top    │          5.34 │     56 │ 2023-10-28 05:42:43 │
+            │ freq   │             1 │      2 │                   1 │
+            │ mean   │          4.06 │     40 │ 2023-08-11 23:18:12 │
+            │ std    │          0.92 │     11 │          73.15 days │
+            │ min    │          2.73 │     24 │ 2023-04-07 23:56:06 │
+            │ p25    │          3.02 │     28 │ 2023-06-02 14:36:19 │
+            │ p50    │          4.58 │     42 │ 2023-09-09 19:18:38 │
+            │ p75    │          4.65 │     50 │ 2023-10-09 19:34:55 │
+            │ max    │          5.34 │     56 │ 2023-10-28 05:42:43 │
+            │ dtype  │         float │    int │            datetime │
+            └────────┴───────────────┴────────┴─────────────────────┘
+            [12 rows x 4 columns]
 
         Warnings:
             - Generally, do not rely on `SQLDataModel` to do statistics, use `NumPy` or a real library instead
@@ -1675,37 +1669,40 @@ class SQLDataModel:
         Return a random sample of size `n_samples` as a new `SQLDataModel`.
 
         Parameters:
-            - `n_samples` (float | int): Number of rows or proportion of rows to sample. Default set to `0.05`, proportional to 5% of the current `row_count`
+            `n_samples` (float | int): Number of rows or proportion of rows to sample. Default set to `0.05`, proportional to 5% of the current `row_count`
                 - If `n_samples` is an integer, it represents the exact number of rows to sample where `0 < n_samples <= row_count`.
                 - If `n_samples` is a float, it represents the proportion of rows to sample where `0.0 < n_samples <= 1.0`.
 
         Returns:
-            - `SQLDataModel`: A new SQLDataModel instance containing the sampled rows.
+            `SQLDataModel`: A new SQLDataModel instance containing the sampled rows.
 
         Raises:
-            - `TypeError`: If the `n_samples` parameter is not of type 'int' or 'float'.
-            - `ValueError`: If the `n_samples` value is invalid or out of range.
+            `TypeError`: If the `n_samples` parameter is not of type 'int' or 'float'.
+            `ValueError`: If the `n_samples` value is invalid or out of range.
 
         This method generates a random sample of rows from the current SQLDataModel. The number of rows to sample
         can be specified either as an integer representing the exact number of rows or as a float representing
         the proportion of rows to sample. The sampled rows are returned as a new SQLDataModel instance.
 
-        Examples:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
 
-        # Create the model
-        sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Amount'])
-        
-        # Example 1: Sample 10 random rows
-        sample_result = sdm.sample(n_samples=10)
+            from SQLDataModel import SQLDataModel
 
-        # Create the model
-        sdm2 = SQLDataModel.from_csv('another_example.csv', headers=['Code', 'Description', 'Price'])
-        
-        # Example 2: Sample 20% of rows
-        sample_result2 = sdm2.sample(n_samples=0.2)
-        ```
+            # Create the model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Amount'])
+            
+            # Example 1: Sample 10 random rows
+            sample_result = sdm.sample(n_samples=10)
+
+            # Create the model
+            sdm2 = SQLDataModel.from_csv('another_example.csv', headers=['Code', 'Description', 'Price'])
+            
+            # Example 2: Sample 20% of rows
+            sample_result2 = sdm2.sample(n_samples=0.2)
+
+        Note:
+            - If the current model's `rowcount` value is less than the sample size, the current row count will be used instead.
+
         """
         if not isinstance(n_samples, (float,int)):
             raise TypeError(
@@ -1731,92 +1728,89 @@ class SQLDataModel:
         The `dateutil` library is required for complex date and datetime parsing, if the module is not found then `date_format` and `datetime_format` will be used for dates and datetimes respectively.
 
         Parameters:
-            - `n_samples` (int): The number of random samples to use for data type inference. Default set to `16`.
-            - `date_format` (str): The format string to use for parsing date values if `dateutil` library is not found. Default is `'%Y-%m-%d'`.
-            - `datetime_format` (str): The format string to use for parsing datetime values if `dateutil` library is not found. Default is `'%Y-%m-%d %H:%M:%S'`.
+            `n_samples` (int): The number of random samples to use for data type inference. Default set to `16`.
+            `date_format` (str): The format string to use for parsing date values if `dateutil` library is not found. Default is `'%Y-%m-%d'`.
+            `datetime_format` (str): The format string to use for parsing datetime values if `dateutil` library is not found. Default is `'%Y-%m-%d %H:%M:%S'`.
         
         Raises:
-            - `TypeError`: If argument for `n_samples` is not of type `int` or if argument for `date_format` or `datetime_format` is not of type 'str'.
-            - `ValueError`: If the current model contains zero columns from which to infer types from.
-            - `DimensionError`: If the current model contains insufficient rows to sample from.
+            `TypeError`: If argument for `n_samples` is not of type `int` or if argument for `date_format` or `datetime_format` is not of type 'str'.
+            `ValueError`: If the current model contains zero columns from which to infer types from.
+            `DimensionError`: If the current model contains insufficient rows to sample from.
 
         Returns:
-            - `None`: Inferred column types are updated and `None` is returned.
+            `None`: Inferred column types are updated and `None` is returned.
 
-        Notes:
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+
+            # Sample data of `str` containing probable datatypes
+            headers = ['first', 'last', 'age', 'service', 'hire_date']
+            data = [
+                ('John', 'Smith', '27', '1.22', '2023-02-01'),
+                ('Sarah', 'West', '39', '0.7', '2023-10-01'),
+                ('Mike', 'Harlin', '36', '3.9', '2020-08-27'),
+                ('Pat', 'Douglas', '42', '11.5', '2015-11-06'),
+                ('Kelly', 'Lee', '32', '8.0', '2016-09-18')
+            ]     
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+            
+            # Get current column dtypes for reference
+            dtypes_before = sdm.get_column_dtypes()
+
+            # Infer and set data types based on 10 random samples
+            sdm.infer_dtypes(n_samples=10)
+
+            # View updated model
+            print(sdm)
+
+        This will output data with dtypes correctly aligned:
+        
+        .. code-block:: shell
+            
+            ┌───────┬─────────┬──────┬─────────┬────────────┐
+            │ first │ last    │  age │ service │ hire_date  │
+            ├───────┼─────────┼──────┼─────────┼────────────┤
+            │ John  │ Smith   │   27 │    1.22 │ 2023-02-01 │
+            │ Sarah │ West    │   39 │    0.70 │ 2023-10-01 │
+            │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │
+            │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │
+            │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │
+            └───────┴─────────┴──────┴─────────┴────────────┘
+            [5 rows x 5 columns]
+        
+        .. code-block:: python
+
+            # Get new column types to confirm
+            dtypes_after = sdm.get_column_dtypes()
+
+            # View updated dtypes
+            for col in sdm.headers:
+                print(f"{col:<10} {dtypes_before[col]} -> {dtypes_after[col]}")
+        
+        This will output:
+            
+        .. code-block:: shell
+
+            first:      str -> str
+            last:       str -> str
+            age:        str -> int
+            service:    str -> float
+            hire_date:  str -> date 
+
+        Related:
+            - See :meth:`SQLDataModel.infer_str_type` for type determination process.
+            - See :meth:`SQLDataModel.infer_types_from_data` for type voting scheme used for inference.
+
+        Note:
             - If a single `str` instance is found in the samples, the corresponding column dtype will remain as `str` to avoid data loss.
             - Co-occurences of `int` & `float`, or `date` & `datetime` will favor the superset dtype after `infer_threshold` is met, so `float` and `datetime` respectively.
             - If a single `datetime` instance is found amongst a higher proportion of `date` dtypes, `datetime` will be used according to second rule.
             - If a single `float` instance is found amongst a higher proportion of `int` dtypes, `float` will be used according to second rule.
             - Ties between dtypes are broken according to `current type` < `str` < `float` < `int` < `datetime` < `date` < `bytes` < `None`
             - This method calls the `set_column_dtypes()` method once the column dtypes have been inferred if they differ from the current dtype.
-
-        ---   
-
-        Examples:
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Sample data of `str` containing probable datatypes
-        headers = ['first', 'last', 'age', 'service', 'hire_date']
-        data = [
-            ('John', 'Smith', '27', '1.22', '2023-02-01'),
-            ('Sarah', 'West', '39', '0.7', '2023-10-01'),
-            ('Mike', 'Harlin', '36', '3.9', '2020-08-27'),
-            ('Pat', 'Douglas', '42', '11.5', '2015-11-06'),
-            ('Kelly', 'Lee', '32', '8.0', '2016-09-18')
-        ]     
-
-        # Create the model
-        sdm = SQLDataModel(data, headers)
-        
-        # Get current column dtypes for reference
-        dtypes_before = sdm.get_column_dtypes()
-
-        # Infer and set data types based on 10 random samples
-        sdm.infer_dtypes(n_samples=10)
-
-        # Get new column types for reference
-        dtypes_after = sdm.get_column_dtypes()
-
-        # View updated model
-        print(sdm)
-
-        # Numeric dtypes correctly aligned
-        ```
-        ```shell
-        ┌───────┬─────────┬──────┬─────────┬────────────┐
-        │ first │ last    │  age │ service │ hire_date  │
-        ├───────┼─────────┼──────┼─────────┼────────────┤
-        │ John  │ Smith   │   27 │    1.22 │ 2023-02-01 │
-        │ Sarah │ West    │   39 │    0.70 │ 2023-10-01 │
-        │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │
-        │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │
-        │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │
-        └───────┴─────────┴──────┴─────────┴────────────┘
-        [5 rows x 5 columns]
-        ```
-        ```python
-
-        # View updated dtypes
-        for col in sdm.headers:
-            print(f"{col:<10} {dtypes_before[col]} -> {dtypes_after[col]}")
-        
-        # Outputs
-        ```
-        ```shell
-        first:      str -> str
-        last:       str -> str
-        age:        str -> int
-        service:    str -> float
-        hire_date:  str -> date 
-
-        ```
-        ---
-
-        Related:
-            - See `SQLDataModel.infer_type()` for type determination process.
-            - See `SQLDataModel.infer_types_from_sample()` for type voting scheme used for inference.
 
         """
         if not isinstance(n_samples, int):
@@ -1861,39 +1855,39 @@ class SQLDataModel:
         By default, no particular `dtype` is assigned given the flexibility of sqlite3 when it comes to column datatypes, however one can be enforced in the schema be providing a valid datatype identifier to the `dtype` keyword argument.
 
         Parameters:
-            - `n_rows` (int): The number of rows for the new SQLDataModel.
-            - `n_cols` (int): The number of columns for the new SQLDataModel.
-            - `dtype` (str) (optional): A valid python or SQL datatype to initialize the n-dimensional model with
+            `n_rows` (int): The number of rows for the new SQLDataModel.
+            `n_cols` (int): The number of columns for the new SQLDataModel.
+            `dtype` (str) (optional): A valid python or SQL datatype to initialize the n-dimensional model with
 
         Raises:
-            - `TypeError`: If `n_rows` is not of type 'int' or if `n_cols` is not of type 'int'.
-            - `ValueError`: If `dtype` is not a valid python or SQL convertible datatype to initialize the model with.
+            `TypeError`: If `n_rows` is not of type 'int' or if `n_cols` is not of type 'int'.
+            `ValueError`: If `dtype` is not a valid python or SQL convertible datatype to initialize the model with.
 
         Returns:
-            - `SQLDataModel`: Instance with the specified number of rows and columns, initialized with by `dtype` fill values or with `None` values (default).
+            `SQLDataModel`: Instance with the specified number of rows and columns, initialized with by `dtype` fill values or with `None` values (default).
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Define shape
-        n_rows, n_cols = 10, 3
-
-        # Create an empty SQLDataModel with 10 rows and 3 columns
-        sdm = SQLDataModel.from_shape(n_rows, n_cols)
-
-        # Assign rows
-        for row in range(n_rows):
-            sdm[row] = ('john', 'smith', 29)
+        Example::
         
-        # Assign specific cells
-        for row in range(n_rows):
-            for col in range(n_cols):
-                sdm[row, col] = f"cell at index {row}, {col}"
+            from SQLDataModel import SQLDataModel
+
+            # Define shape
+            n_rows, n_cols = 10, 3
+
+            # Create an empty SQLDataModel with 10 rows and 3 columns
+            sdm = SQLDataModel.from_shape(n_rows, n_cols)
+
+            # Assign rows
+            for row in range(n_rows):
+                sdm[row] = ('john', 'smith', 29)
+            
+            # Assign specific cells
+            for row in range(n_rows):
+                for col in range(n_cols):
+                    sdm[row, col] = f"cell at index {row}, {col}"
+            
+            # Assign headers if needed
+            sdm.set_headers(['first', 'last', 'age'])
         
-        # Assign headers if needed
-        sdm.set_headers(['first', 'last', 'age'])
-        ```
         """
         if not isinstance(n_rows, int):
             raise TypeError(
@@ -1929,69 +1923,69 @@ class SQLDataModel:
         Returns a new `SQLDataModel` generated from the provided CSV source, which can be either a file path or a raw delimited string.
 
         Parameters:
-            - `csv_source` (str): The path to the CSV file or a raw delimited string.
-            - `infer_types` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
-            - `encoding` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
-            - `delimiters` (str, optional): Possible delimiters. Default is ` `, `\\t`, `;`, `|`, `:` or `,` (space, tab, semicolon, pipe, colon or comma).
-            - `quotechar` (str, optional): The character used for quoting fields. Default is '"'.
-            - `headers` (List[str], optional): List of column headers. If None, the first row of the CSV source is assumed to contain headers.
-            - `**kwargs`: Additional keyword arguments to be passed to the SQLDataModel constructor.
+            `csv_source` (str): The path to the CSV file or a raw delimited string.
+            `infer_types` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
+            `encoding` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
+            `delimiters` (str, optional): Possible delimiters. Default is ` `, `\\t`, `;`, `|`, `:` or `,` (space, tab, semicolon, pipe, colon or comma).
+            `quotechar` (str, optional): The character used for quoting fields. Default is '"'.
+            `headers` (List[str], optional): List of column headers. If None, the first row of the CSV source is assumed to contain headers.
+            `**kwargs`: Additional keyword arguments to be passed to the SQLDataModel constructor.
 
         Returns:
             `SQLDataModel`: The SQLDataModel object created from the provided CSV source.
 
         Raises:
-            - `ValueError`: If no delimiter is found in `csv_source` or if parsing with delimiter does not yield valid tabular data.
-            - `Exception`: If an error occurs while attempting to read from or process the provided CSV source.
-
-        ---
+            `ValueError`: If no delimiter is found in `csv_source` or if parsing with delimiter does not yield valid tabular data.
+            `Exception`: If an error occurs while attempting to read from or process the provided CSV source.
 
         Examples:
 
-        #### From CSV File
-        ```python
-        from SQLDataModel import SQLDataModel
+        From CSV File
+        -------------
 
-        # CSV file path or raw CSV string
-        csv_source = "/path/to/data.csv"
+        .. code-block:: python
 
-        # Create the model using the CSV file, providing custom headers
-        sdm = SQLDataModel.from_csv(csv_source, headers=['ID', 'Name', 'Value'])
-        ```
+            from SQLDataModel import SQLDataModel
+
+            # CSV file path or raw CSV string
+            csv_source = "/path/to/data.csv"
+
+            # Create the model using the CSV file, providing custom headers
+            sdm = SQLDataModel.from_csv(csv_source, headers=['ID', 'Name', 'Value'])
+
+        From Delimited Source
+        ---------------------
+
+        .. code-block:: python
+
+            from SQLDataModel import SQLDataModel
+
+            # Space delimited data
+            data = '''
+            A B C
+            1a 1b 1c
+            2a 2b 2c
+            3a 3b 3c
+            '''
+
+            # Create the model
+            sdm = SQLDataModel.from_csv(data)
+
+            # View result
+            print(sdm)
         
-        ---
+        This will output:
 
-        #### From Delimited Source
-        ```python
-        from SQLDataModel import SQLDataModel
+        .. code-block:: shell
 
-        # Space delimited data
-        data = '''
-        A B C
-        1a 1b 1c
-        2a 2b 2c
-        3a 3b 3c
-        '''
-
-        # Create the model
-        sdm = SQLDataModel.from_csv(data)
-
-        # View result
-        print(sdm)
-
-        ```
-        ```shell
-        ┌──────┬──────┬──────┐
-        │ A    │ B    │ C    │
-        ├──────┼──────┼──────┤
-        │ 1a   │ 1b   │ 1c   │
-        │ 2a   │ 2b   │ 2c   │
-        │ 3a   │ 3b   │ 3c   │
-        └──────┴──────┴──────┘
-        [3 rows x 3 columns]
-        ```
-
-        ---
+            ┌──────┬──────┬──────┐
+            │ A    │ B    │ C    │
+            ├──────┼──────┼──────┤
+            │ 1a   │ 1b   │ 1c   │
+            │ 2a   │ 2b   │ 2c   │
+            │ 3a   │ 3b   │ 3c   │
+            └──────┴──────┴──────┘
+            [3 rows x 3 columns]
 
         Note:
             - If `csv_source` is delimited by characters other than those specified, provide the delimiter to `delimiters`.
@@ -2044,74 +2038,76 @@ class SQLDataModel:
         Convenience method to infer the source of `data` and return the appropriate constructor method to generate a new `SQLDataModel` instance.
 
         Parameters:
-            - `data` (Any, required): The input data from which to create the SQLDataModel object. Constructor methods are called according `type(data)`:
-                - `dict`: If all values are python datatypes, passed as `dtypes` to constructor, otherwise as `data` to `SQLDataModel.from_dict()`.
-                - `list`: If single dimension, passed as `headers` to constructor, otherwise as `data` containing list of lists.
-                - `tuple`: Same as with list, if single dimension passed as `headers`, otherwise as `data` containing tuple of lists.
-                - `numpy.ndarray`: passed to `SQLDataModel.from_numpy()` as array data.
-                - `pandas.DataFrame`: passed to `SQLDataModel.from_pandas()` as dataframe data.
-                - `str`: If starts with 'http', passed to `SQLDataModel.from_html()` as url, otherwise based on extension if valid system filepath:
-                    - `'.csv'`: passed to `SQLDataModel.from_csv()` as csv source data.
-                    - `'.html'`: passed to `SQLDataModel.from_html()` as html source data.
-                    - `'.json'`: passed to `SQLDataModel.from_json()` as json source data.
-                    - `'.md'`: passed to `SQLDataModel.from_markdown()` as markdown source data.
-                    - `'.parquet'`: passed to `SQLDataModel.from_parquet()` as parquet source data.
-                    - `'.pkl'`: passed to `SQLDataModel.from_pickle()` as pickle source data.
-                    - `'.sdm'`: passed to `SQLDataModel.from_pickle()` as pickle source data.
-                    - `'.tex'`: passed to `SQLDataModel.from_latex()` as latex source data.
-                    - `'.tsv'`: passed to `SQLDataModel.from_csv()` as csv source data.
-                    - `'.txt'`: passed to `SQLDataModel.from_text()` as text source data.
-            - `**kwargs`: Additional keyword arguments to be passed to the constructor method, see init method for arguments.
+            `data` (Any, required): The input data from which to create the SQLDataModel object. 
+            `**kwargs`: Additional keyword arguments to be passed to the constructor method, see init method for arguments.
+            
+        Constructor methods are called according to the input type:
+            - `dict`: If all values are python datatypes, passed as `dtypes` to constructor, otherwise as `data` to :meth:`SQLDataModel.from_dict()`.
+            - `list`: If single dimension, passed as `headers` to constructor, otherwise as `data` containing list of lists.
+            - `tuple`: Same as with list, if single dimension passed as `headers`, otherwise as `data` containing tuple of lists.
+            - `numpy.ndarray`: passed to :meth:`SQLDataModel.from_numpy()` as array data.
+            - `pandas.DataFrame`: passed to :meth:`SQLDataModel.from_pandas()` as dataframe data.
+            - `str`: If starts with 'http', passed to :meth:`SQLDataModel.from_html()` as url.
+        
+        If input is file path:
+            - `'.csv'`: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
+            - `'.html'`: passed to :meth:`SQLDataModel.from_html()` as html source data.
+            - `'.json'`: passed to :meth:`SQLDataModel.from_json()` as json source data.
+            - `'.md'`: passed to :meth:`SQLDataModel.from_markdown()` as markdown source data.
+            - `'.parquet'`: passed to :meth:`SQLDataModel.from_parquet()` as parquet source data.
+            - `'.pkl'`: passed to :meth:`SQLDataModel.from_pickle()` as pickle source data.
+            - `'.sdm'`: passed to :meth:`SQLDataModel.from_pickle()` as pickle source data.
+            - `'.tex'`: passed to :meth:`SQLDataModel.from_latex()` as latex source data.
+            - `'.tsv'`: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
+            - `'.txt'`: passed to :meth:`SQLDataModel.from_text()` as text source data.
 
         Returns:
-            - `SQLDataModel`: The SQLDataModel object created from the provided data.
+            `SQLDataModel`: The SQLDataModel object created from the provided data.
 
         Raises:
-            - `TypeError`: If the type of `data` is not supported.
-            - `ValueError`: If the file extension is not found, unsupported, or if the SQL extension is not supported.
-            - `Exception`: If an OS related error occurs during file read operations if `data` is a filepath.
+            `TypeError`: If the type of `data` is not supported.
+            `ValueError`: If the file extension is not found, unsupported, or if the SQL extension is not supported.
+            `Exception`: If an OS related error occurs during file read operations if `data` is a filepath.
 
-        Examples:
+        Example::
 
-        ---
+            from SQLDataModel import SQLDataModel
+
+            # Create SQLDataModel from a CSV file
+            sdm_csv = SQLDataModel.from_data("data.csv", headers=['ID', 'Name', 'Value'])
+
+            # Create SQLDataModel from a dictionary
+            sdm_dict = SQLDataModel.from_data({"ID": int, "Name": str, "Value": float})
+
+            # Create SQLDataModel from a list of tuples
+            sdm_list = SQLDataModel.from_data([(1, 'Alice', 100.0), (2, 'Bob', 200.0)], headers=['ID', 'Name', 'Value'])
+
+            # Create SQLDataModel from raw string literal
+            delimited_literal = '''
+            A, B, C
+            1, 2, 3
+            4, 5, 6
+            7, 8, 9
+            '''
+
+            # Create the model by having correct constructor inferred
+            sdm = SQLDataModel.from_data(delimited_literal)
+
+            # View output
+            print(sdm)
+        
+        This will output:
+        
+        .. code-block:: shell
             
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Create SQLDataModel from a CSV file
-        sdm_csv = SQLDataModel.from_data("data.csv", headers=['ID', 'Name', 'Value'])
-
-        # Create SQLDataModel from a dictionary
-        sdm_dict = SQLDataModel.from_data({"ID": int, "Name": str, "Value": float})
-
-        # Create SQLDataModel from a list of tuples
-        sdm_list = SQLDataModel.from_data([(1, 'Alice', 100.0), (2, 'Bob', 200.0)], headers=['ID', 'Name', 'Value'])
-
-        # Create SQLDataModel from raw string literal
-        delimited_literal = '''
-        A, B, C
-        1, 2, 3
-        4, 5, 6
-        7, 8, 9
-        '''
-
-        # Create the model by having correct constructor inferred
-        sdm = SQLDataModel.from_data(delimited_literal)
-
-        # View output
-        print(sdm)
-        ```
-        ```shell
-        ┌────┬────┬────┐
-        │ A  │ B  │ C  │
-        ├────┼────┼────┤
-        │ 1  │ 2  │ 3  │
-        │ 4  │ 5  │ 6  │
-        │ 7  │ 8  │ 9  │
-        └────┴────┴────┘
-        [3 rows x 3 columns]
-        ```
-        ---
+            ┌────┬────┬────┐
+            │ A  │ B  │ C  │
+            ├────┼────┼────┤
+            │ 1  │ 2  │ 3  │
+            │ 4  │ 5  │ 6  │
+            │ 7  │ 8  │ 9  │
+            └────┴────┴────┘
+            [3 rows x 3 columns]
 
         Note:
             - This method attempts to infer the correct method to call based on `data` argument, if one cannot be inferred an exception is raised.
@@ -2200,41 +2196,42 @@ class SQLDataModel:
         Create a new `SQLDataModel` instance from the provided dictionary.
 
         Parameters:
-            - `data` (dict): The dictionary or list of dictionaries to convert to SQLDataModel.
+            `data` (dict): The dictionary or list of dictionaries to convert to SQLDataModel.
             If keys are of type int, they will be used as row indexes; otherwise, keys will be used as headers.
-            - `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
+            `**kwargs`: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
             `SQLDataModel`: The SQLDataModel object created from the provided dictionary.
 
         Raises:
-            - `TypeError`: If the provided dictionary values are not of type 'list', 'tuple', or 'dict'.
-            - `ValueError`: If the provided data appears to be a list of dicts but is empty.
+            `TypeError`: If the provided dictionary values are not of type 'list', 'tuple', or 'dict'.
+            `ValueError`: If the provided data appears to be a list of dicts but is empty.
 
-        Example:
-        ```python
-        from SQLDataModel import SQLDataModel
+        Example::
+            
+            from SQLDataModel import SQLDataModel
 
-        # Sample data
-        data_dict = {1: [10, 'A'], 2: [20, 'B'], 3: [30, 'C']}
+            # Sample data
+            data_dict = {1: [10, 'A'], 2: [20, 'B'], 3: [30, 'C']}
 
-        # Create the model
-        sdm_obj = SQLDataModel.from_dict(data_dict)
+            # Create the model
+            sdm_obj = SQLDataModel.from_dict(data_dict)
 
-        # View output
-        print(sdm_obj)
-        ```
-        ```shell
-        ┌───┬───────┬───────┐
-        │   │ col_0 │ col_1 │
-        ├───┼───────┼───────┤
-        │ 1 │    10 │ A     │
-        │ 2 │    20 │ B     │
-        │ 3 │    30 │ C     │
-        └───┴───────┴───────┘
-        [3 rows x 2 columns]
-        ```
-        ---
+            # View output
+            print(sdm_obj)
+        
+        This will output:
+        
+        .. code-block:: shell
+            
+            ┌───┬───────┬───────┐
+            │   │ col_0 │ col_1 │
+            ├───┼───────┼───────┤
+            │ 1 │    10 │ A     │
+            │ 2 │    20 │ B     │
+            │ 3 │    30 │ C     │
+            └───┴───────┴───────┘
+            [3 rows x 2 columns]
 
         Note:
             - The method determines the structure of the SQLDataModel based on the format of the provided dictionary.
@@ -2278,137 +2275,138 @@ class SQLDataModel:
         Creates a new `SQLDataModel` instance from JSON file path or JSON-like source, flattening if required.
 
         Parameters:
-            - `json_source` (str | list | dict): The JSON source. If a string, it can represent a file path or a JSON-like object.
-            - `encoding` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
-            - `**kwargs`: Additional keyword arguments to pass to the `SQLDataModel` constructor.
+            `json_source` (str | list | dict): The JSON source. If a string, it can represent a file path or a JSON-like object.
+            `encoding` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
+            `**kwargs`: Additional keyword arguments to pass to the `SQLDataModel` constructor.
 
         Returns:
-            - `SQLDataModel`: A new SQLDataModel instance created from the JSON source.
+            `SQLDataModel`: A new SQLDataModel instance created from the JSON source.
 
         Raises:
-            - `TypeError`: If the `json_source` argument is not of type 'str', 'list', or 'dict'.
-            - `OSError`: If related exception occurs when trying to open and read from `json_source` as file path.
+            `TypeError`: If the `json_source` argument is not of type 'str', 'list', or 'dict'.
+            `OSError`: If related exception occurs when trying to open and read from `json_source` as file path.
 
-        Examples:
+        Example::
 
-        ---
+        From JSON String Literal
+        ------------------------
 
-        #### Example 1: From JSON String Literal
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # Sample JSON string
+            json_data = '''[{
+                "id": 1,
+                "color": "red",
+                "value": "#f00"
+                },
+                {   
+                "id": 2,
+                "color": "green",
+                "value": "#0f0"
+                },
+                {
+                "id": 3,
+                "color": "blue",
+                "value": "#00f"
+            }]'''   
 
-        # Sample JSON string
-        json_data = '''[{
-              "id": 1,
-              "color": "red",
-              "value": "#f00"
-            },
-            {   
-              "id": 2,
-              "color": "green",
-              "value": "#0f0"
+            # Create the model
+            sdm = SQLDataModel.from_json(json_data)
+
+            # View result
+            print(sdm)
+        
+        This will output:
+
+        .. code-block:: shell
+
+            ┌──────┬───────┬───────┐
+            │   id │ color │ value │
+            ├──────┼───────┼───────┤
+            │    1 │ red   │ #f00  │
+            │    2 │ green │ #0f0  │
+            │    3 │ blue  │ #00f  │
+            └──────┴───────┴───────┘
+            [3 rows x 3 columns]
+
+
+        From JSON-like Object
+        ---------------------
+
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
+
+            # JSON-like sample
+            json_data = [{
+                "alpha": "A",
+                "value": "1"
+            },  
+            {
+                "alpha": "B",
+                "value": "2"
             },
             {
-              "id": 3,
-              "color": "blue",
-              "value": "#00f"
-        }]'''   
+                "alpha": "C",
+                "value": "3"
+            }]
 
-        # Create the model
-        sdm = SQLDataModel.from_json(json_data)
+            # Create the model
+            sdm = SQLDataModel.from_json(json_data)
 
-        # View result
-        print(sdm)
-
-        ```
-        ```shell
-        ┌──────┬───────┬───────┐
-        │   id │ color │ value │
-        ├──────┼───────┼───────┤
-        │    1 │ red   │ #f00  │
-        │    2 │ green │ #0f0  │
-        │    3 │ blue  │ #00f  │
-        └──────┴───────┴───────┘
-        [3 rows x 3 columns]
-
-        ```
-
-        ---
-
-        #### Example 2: From JSON-like Object
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # JSON-like sample
-        json_data = [{
-            "alpha": "A",
-            "value": "1"
-        },  
-        {
-            "alpha": "B",
-            "value": "2"
-        },
-        {
-            "alpha": "C",
-            "value": "3"
-        }]
-
-        # Create the model
-        sdm = SQLDataModel.from_json(json_data)
-
-        # Output
-        print(sdm)
-        ```
-        ```shell
-        ┌───────┬───────┐
-        │ alpha │ value │
-        ├───────┼───────┤
-        │ A     │ 1     │
-        │ B     │ 2     │
-        │ C     │ 3     │
-        └───────┴───────┘
-        [3 rows x 2 columns]
-
-        ```
-
-        ---
-
-        #### Example 3: From JSON file
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # JSON file path
-        json_data = 'data/json-sample.json'
-
-        # Create the model
-        sdm = SQLDataModel.from_json(json_data, encoding='latin-1')
-
-        # View output
-        print(sdm)
-        ```
-
-        ```shell
-        ┌──────┬────────┬───────┬─────────┐
-        │   id │ color  │ value │ notes   │
-        ├──────┼────────┼───────┼─────────┤
-        │    1 │ red    │ #f00  │ primary │
-        │    2 │ green  │ #0f0  │         │
-        │    3 │ blue   │ #00f  │ primary │
-        │    4 │ cyan   │ #0ff  │         │
-        │    5 │ yellow │ #ff0  │         │
-        │    5 │ black  │ #000  │         │
-        └──────┴────────┴───────┴─────────┘
-        [6 rows x 4 columns]
-
-        ```
+            # Output
+            print(sdm)
         
-        ---
+        This will output:
 
-        Notes:
-            - If `json_source` is deeply-nested it will be flattened according to the staticmethod `flatten_json()`
+        .. code-block:: shell
+            
+            ┌───────┬───────┐
+            │ alpha │ value │
+            ├───────┼───────┤
+            │ A     │ 1     │
+            │ B     │ 2     │
+            │ C     │ 3     │
+            └───────┴───────┘
+            [3 rows x 2 columns]
+
+
+        From JSON file
+        --------------
+
+        .. code-block:: python
+
+            from SQLDataModel import SQLDataModel
+
+            # JSON file path
+            json_data = 'data/json-sample.json'
+
+            # Create the model
+            sdm = SQLDataModel.from_json(json_data, encoding='latin-1')
+
+            # View output
+            print(sdm)
+
+        This will output:
+
+        .. code-block:: shell
+            
+            ┌──────┬────────┬───────┬─────────┐
+            │   id │ color  │ value │ notes   │
+            ├──────┼────────┼───────┼─────────┤
+            │    1 │ red    │ #f00  │ primary │
+            │    2 │ green  │ #0f0  │         │
+            │    3 │ blue   │ #00f  │ primary │
+            │    4 │ cyan   │ #0ff  │         │
+            │    5 │ yellow │ #ff0  │         │
+            │    5 │ black  │ #000  │         │
+            └──────┴────────┴───────┴─────────┘
+            [6 rows x 4 columns]
+
+        Note:
+            - If `json_source` is deeply-nested it will be flattened according to the staticmethod :meth:`SQLDataModel.flatten_json`
             - If `json_source` is a JSON-like string object that is not an array, it will be wrapped according as an array.
         
         """
@@ -2438,134 +2436,139 @@ class SQLDataModel:
         By default, the first <table> element found is returned if `table_identifier` is not specified.
 
         Parameters:
-            - `html_source` (str): The HTML source, which can be a URL, a valid path to an HTML file, or a raw HTML string.
-                - If starts with 'http', the argument is considered a url and the table will be parsed from returned the web request
-                - If is a valid file path, the argument is considered a local file and the table will be parsed from its html
-                - If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input
-            - `encoding` (str): The encoding to use for reading HTML when `html_source` is considered a valid url or file path (default is 'utf-8').
-            - `table_identifier` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
-            - `infer_types` (bool, optional): If column data types should be inferred in the return model. Default is False, meaning all columns are returned as 'str' types.
+            `html_source` (str): The HTML source, which can be a URL, a valid path to an HTML file, or a raw HTML string.
+                If starts with 'http', the argument is considered a url and the table will be parsed from returned the web request.
+                If is a valid file path, the argument is considered a local file and the table will be parsed from its html.
+                If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input.
+            `encoding` (str): The encoding to use for reading HTML when `html_source` is considered a valid url or file path (default is 'utf-8').
+            `table_identifier` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
+            `infer_types` (bool, optional): If column data types should be inferred in the return model. Default is False, meaning all columns are returned as 'str' types.
                 - If is `int`, identifier is treated as the indexed location of the <table> element on the page from top to bottom starting from zero and will return the corresponding position when encountered.
                 - If is `str`, identifier is treated as a target HTML 'id' or 'name' attribute to search for and will return the first case-insensitive match when encountered.
-            - `**kwargs`: Additional keyword arguments to pass when using `urllib.request.urlopen` to fetch HTML from a URL.
+            `**kwargs`: Additional keyword arguments to pass when using `urllib.request.urlopen` to fetch HTML from a URL.
 
         Returns:
-            - `SQLDataModel`: A new `SQLDataModel` instance containing the data from the parsed HTML table.
+            `SQLDataModel`: A new `SQLDataModel` instance containing the data from the parsed HTML table.
 
         Raises:
-            - `TypeError`: If `html_source` is not of type `str` representing a possible url, filepath or raw HTML stream.
-            - `HTTPError`: Raised from `urllib` when `html_source` is considered a url and an HTTP exception occurs.
-            - `URLError`: Raised from `urllib` when `html_source` is considered a url and a URL exception occurs.
-            - `ValueError`: If no <table> elements are found or if the targeted `table_identifier` is not found.
-            - `OSError`: Related exceptions that may be raised when `html_source` is considered a file path.
+            `TypeError`: If `html_source` is not of type `str` representing a possible url, filepath or raw HTML stream.
+            `HTTPError`: Raised from `urllib` when `html_source` is considered a url and an HTTP exception occurs.
+            `URLError`: Raised from `urllib` when `html_source` is considered a url and a URL exception occurs.
+            `ValueError`: If no <table> elements are found or if the targeted `table_identifier` is not found.
+            `OSError`: Related exceptions that may be raised when `html_source` is considered a file path.
 
-        Examples:
+        Examples::
 
-        ---
+        From Website URL
+        ----------------
 
-        #### Example 1: From Website URL:
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # From URL
+            url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
+            
+            # Lets get the 94th table from the 1998 World Cup
+            sdm = SQLDataModel.from_html(url, table_identifier=94)
 
-        # From URL
-        url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
+            # View result:
+            print(sdm)
         
-        # Lets get the 94th table from the 1998 World Cup
-        sdm = SQLDataModel.from_html(url, table_identifier=94)
+        This will output:
 
-        # View result:
-        print(sdm)
-        ```
-        ```shell
-        ┌────┬─────────────┬────┬────┬────┬────┬────┬────┬────┬─────┬──────┐
-        │  R │ Team        │ G  │  P │  W │  D │  L │ GF │ GA │ GD  │ Pts. │
-        ├────┼─────────────┼────┼────┼────┼────┼────┼────┼────┼─────┼──────┤
-        │  1 │ France      │ C  │  7 │  6 │  1 │  0 │ 15 │  2 │ +13 │   19 │
-        │  2 │ Brazil      │ A  │  7 │  4 │  1 │  2 │ 14 │ 10 │ +4  │   13 │
-        │  3 │ Croatia     │ H  │  7 │  5 │  0 │  2 │ 11 │  5 │ +6  │   15 │
-        │  4 │ Netherlands │ E  │  7 │  3 │  3 │  1 │ 13 │  7 │ +6  │   12 │
-        │  5 │ Italy       │ B  │  5 │  3 │  2 │  0 │  8 │  3 │ +5  │   11 │
-        │  6 │ Argentina   │ H  │  5 │  3 │  1 │  1 │ 10 │  4 │ +6  │   10 │
-        │  7 │ Germany     │ F  │  5 │  3 │  1 │  1 │  8 │  6 │ +2  │   10 │
-        │  8 │ Denmark     │ C  │  5 │  2 │  1 │  2 │  9 │  7 │ +2  │    7 │
-        └────┴─────────────┴────┴────┴────┴────┴────┴────┴────┴─────┴──────┘
-        [8 rows x 11 columns]
-        ```  
+        .. code-block:: shell
+            
+            ┌────┬─────────────┬────┬────┬────┬────┬────┬────┬────┬─────┬──────┐
+            │  R │ Team        │ G  │  P │  W │  D │  L │ GF │ GA │ GD  │ Pts. │
+            ├────┼─────────────┼────┼────┼────┼────┼────┼────┼────┼─────┼──────┤
+            │  1 │ France      │ C  │  7 │  6 │  1 │  0 │ 15 │  2 │ +13 │   19 │
+            │  2 │ Brazil      │ A  │  7 │  4 │  1 │  2 │ 14 │ 10 │ +4  │   13 │
+            │  3 │ Croatia     │ H  │  7 │  5 │  0 │  2 │ 11 │  5 │ +6  │   15 │
+            │  4 │ Netherlands │ E  │  7 │  3 │  3 │  1 │ 13 │  7 │ +6  │   12 │
+            │  5 │ Italy       │ B  │  5 │  3 │  2 │  0 │  8 │  3 │ +5  │   11 │
+            │  6 │ Argentina   │ H  │  5 │  3 │  1 │  1 │ 10 │  4 │ +6  │   10 │
+            │  7 │ Germany     │ F  │  5 │  3 │  1 │  1 │  8 │  6 │ +2  │   10 │
+            │  8 │ Denmark     │ C  │  5 │  2 │  1 │  2 │  9 │  7 │ +2  │    7 │
+            └────┴─────────────┴────┴────┴────┴────┴────┴────┴────┴─────┴──────┘
+            [8 rows x 11 columns]
 
-        ---
+        From Local File 
+        ---------------
 
-        #### Example 2: From Local File 
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # From HTML file
+            sdm = SQLDataModel.from_html('path/to/file.html')
 
-        # From HTML file
-        sdm = SQLDataModel.from_html('path/to/file.html')
+            # View output
+            print(sdm)
 
-        # View output
-        print(sdm)
-        ```
-        ```shell
-        ┌─────────────┬────────┬──────┐
-        │ Team        │ Points │ Rank │
-        ├─────────────┼────────┼──────┤
-        │ Brazil      │ 63.7   │ 1    │
-        │ England     │ 50.7   │ 2    │
-        │ Spain       │ 50.0   │ 3    │
-        │ Germany [a] │ 49.3   │ 4    │
-        │ Mexico      │ 47.3   │ 5    │
-        │ France      │ 46.0   │ 6    │
-        │ Italy       │ 44.3   │ 7    │
-        │ Argentina   │ 44.0   │ 8    │
-        └─────────────┴────────┴──────┘
-        [8 rows x 3 columns]
-        ```
+        This will output:
+
+        .. code-block:: shell
+            
+            ┌─────────────┬────────┬──────┐
+            │ Team        │ Points │ Rank │
+            ├─────────────┼────────┼──────┤
+            │ Brazil      │ 63.7   │ 1    │
+            │ England     │ 50.7   │ 2    │
+            │ Spain       │ 50.0   │ 3    │
+            │ Germany [a] │ 49.3   │ 4    │
+            │ Mexico      │ 47.3   │ 5    │
+            │ France      │ 46.0   │ 6    │
+            │ Italy       │ 44.3   │ 7    │
+            │ Argentina   │ 44.0   │ 8    │
+            └─────────────┴────────┴──────┘
+            [8 rows x 3 columns]
+
+        From Raw HTML
+        -------------
+
+        .. code-block:: python
         
-        ---
+            from SQLDataModel import SQLDataModel
 
-        #### Example 3: From Raw HTML
+            # Raw HTML
+            raw_html = 
+            '''<table id="find-me">
+                <tr>
+                    <th>Col 1</th>
+                    <th>Col 2</th>
+                </tr>    
+                <tr>
+                    <td>A</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>B</td>
+                    <td>2</td>
+                </tr>
+                <tr>
+                    <td>C</td>
+                    <td>3</td>
+                </tr>                
+            </table>'''
 
-        ```python
-        from SQLDataModel import SQLDataModel
+            # Create the model and search for id attribute
+            sdm = SQLDataModel.from_html(raw_html, table_identifier="find-me")
 
-        # Raw HTML
-        raw_html = 
-        '''<table id="find-me">
-            <tr>
-                <th>Col 1</th>
-                <th>Col 2</th>
-            </tr>    
-            <tr>
-                <td>A</td>
-                <td>1</td>
-            </tr>
-            <tr>
-                <td>B</td>
-                <td>2</td>
-            </tr>
-            <tr>
-                <td>C</td>
-                <td>3</td>
-            </tr>                
-        </table>'''
+            # View output
+            print(sdm)
+        
+        This will output:
 
-        # Create the model and search for id attribute
-        sdm = SQLDataModel.from_html(raw_html, table_identifier="find-me")
-
-        # View output
-        print(sdm)
-        ```
-        ```shell
-        ┌───┬───────┬───────┐
-        │   │ Col 1 │ Col 2 │
-        ├───┼───────┼───────┤
-        │ 1 │ B     │ 2     │
-        │ 2 │ C     │ 3     │
-        └───┴───────┴───────┘
-        [3 rows x 2 columns]
-        ```
-        ---
+        .. code-block:: shell
+            
+            ┌───┬───────┬───────┐
+            │   │ Col 1 │ Col 2 │
+            ├───┼───────┼───────┤
+            │ 1 │ B     │ 2     │
+            │ 2 │ C     │ 3     │
+            └───┴───────┴───────┘
+            [3 rows x 2 columns]
 
         Notes:
             - `**kwargs` passed to method are used in `urllib.request.urlopen` if `html_source` is being considered as a web url.
@@ -2608,133 +2611,134 @@ class SQLDataModel:
         Creates a new `SQLDataModel` instance from the provided LaTeX file or raw literal.
         
         Parameters:
-            - `latex_source` (str): The LaTeX source containing one or more LaTeX tables.
+            `latex_source` (str): The LaTeX source containing one or more LaTeX tables.
                 - If `latex_source` is a valid system filepath, source will be treated as a `.tex` file and parsed.
                 - If `latex_source` is not a valid filepath, source will be parsed as raw LaTeX literal.
-            - `table_identifier` (int, optional): The index position of the LaTeX table to extract. Default is 1.
-            - `encoding` (str, optional): The file encoding to use if source is a LaTex filepath. Default is 'utf-8';.
-            - `**kwargs`: Additional keyword arguments to be passed to the `SQLDataModel` constructor.
+            `table_identifier` (int, optional): The index position of the LaTeX table to extract. Default is 1.
+            `encoding` (str, optional): The file encoding to use if source is a LaTex filepath. Default is 'utf-8';.
+            `**kwargs`: Additional keyword arguments to be passed to the `SQLDataModel` constructor.
 
         Returns:
-            - `SQLDataModel`: The `SQLDataModel` instance created from the parsed LaTeX table.            
+            `SQLDataModel`: The `SQLDataModel` instance created from the parsed LaTeX table.            
 
         Raises:
-            - `TypeError`: If the `latex_source` argument is not of type 'str', or if the `table_identifier` argument is not of type 'int'.
-            - `ValueError`: If the `table_identifier` argument is less than 1, or if no tables are found in the LaTeX source.
-            - `IndexError`: If the `table_identifier` is greater than the number of tables found in the LaTeX source.
+            `TypeError`: If the `latex_source` argument is not of type 'str', or if the `table_identifier` argument is not of type 'int'.
+            `ValueError`: If the `table_identifier` argument is less than 1, or if no tables are found in the LaTeX source.
+            `IndexError`: If the `table_identifier` is greater than the number of tables found in the LaTeX source.
+        
+        Table Indicies:    
+            - In the last example, `sdm` will contain the data from the second table found in the LaTeX content.
+            - Tables are indexed starting from index 1 at the top of the LaTeX content, incremented as they are found.
+            - LaTeX parsing stops after the table specified at `table_identifier` is found without parsing the remaining content.    
+
+        Examples:
+
+        From LaTeX literal
+        ------------------
+
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
+
+            # Raw LaTeX literal
+            latex_content = '''
+            \\begin{tabular}{|l|r|r|}
+            \\hline
+                {Name} & {Age} & {Height} \\\\
+            \\hline
+                John    &   30 &  175.30 \\\\
+                Alice   &   28 &  162.00 \\\\
+                Michael &   35 &  185.80 \\\\
+            \\hline
+            \\end{tabular}
+            '''
+
+            # Create the model from the LaTeX
+            sdm = SQLDataModel.from_latex(latex_content)
+
+            # View result
+            print(sdm)
+
+        This will output:
+
+        .. code-block:: shell
+            
+            ┌─────────┬──────┬─────────┐
+            │ Name    │  Age │  Height │
+            ├─────────┼──────┼─────────┤
+            │ John    │   30 │  175.30 │
+            │ Alice   │   28 │  162.00 │
+            │ Michael │   35 │  185.80 │
+            └─────────┴──────┴─────────┘
+            [3 rows x 3 columns]
+
+        From LaTeX file
+        ---------------
+
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
+
+            # Load LaTeX content from file
+            latex_file = 'path/to/latex/file.tex'
+
+            # Create the model using the path
+            sdm = SQLDataModel.from_latex(latex_file)
+
+        Specifying table identifier
+        ---------------------------
+
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
+
+            # Raw LaTeX literal with multiple tables
+            latex_content = '''
+            %% LaTeX with a Table
+
+            \\begin{tabular}{|l|l|}
+            \\hline
+                {Header A} & {Header B} \\\\
+            \\hline
+                Value A1 & Value B1 \\\\
+                Value A2 & Value B2 \\\\
+            \\hline
+            \\end{tabular}
+
+            %% Then another Table
+
+            \\begin{tabular}{|l|l|}
+            \\hline
+                {Header X} & {Header Y} \\\\
+            \\hline
+                Value X1 & Value Y1 \\\\
+                Value X2 & Value Y2 \\\\
+            \\hline
+            \\end{tabular}
+            '''
+
+            # Create the model from the 2nd table
+            sdm = SQLDataModel.from_latex(latex_content, table_identifier=2)
+
+            # View output
+            print(sdm)
+
+        This will output:
+
+        .. code-block:: shell
+
+            ┌──────────┬──────────┐
+            │ Header X │ Header Y │
+            ├──────────┼──────────┤
+            │ Value X1 │ Value Y1 │
+            │ Value X2 │ Value Y2 │
+            └──────────┴──────────┘
+            [2 rows x 2 columns]
 
         Note:
             - LaTeX tables are identified based on the presence of tabular environments: `\\begin{tabular}...\\end{tabular}`.
             - The `table_identifier` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
-            - The provided `kwargs` are passed to the `SQLDataModel` constructor for additional parameters to the instance returned.
-
-        ---
-
-        #### Example with raw LaTeX content:
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Raw LaTeX literal
-        latex_content = '''
-        \\begin{tabular}{|l|r|r|}
-        \\hline
-            {Name} & {Age} & {Height} \\\\
-        \\hline
-            John    &   30 &  175.30 \\\\
-            Alice   &   28 &  162.00 \\\\
-            Michael &   35 &  185.80 \\\\
-        \\hline
-        \\end{tabular}
-        '''
-
-        # Create the model from the LaTeX
-        sdm = SQLDataModel.from_latex(latex_content)
-
-        # View result
-        print(sdm)
-
-        ```
-        ```shell
-        ┌─────────┬──────┬─────────┐
-        │ Name    │  Age │  Height │
-        ├─────────┼──────┼─────────┤
-        │ John    │   30 │  175.30 │
-        │ Alice   │   28 │  162.00 │
-        │ Michael │   35 │  185.80 │
-        └─────────┴──────┴─────────┘
-        [3 rows x 3 columns]
-        ```
-        
-        ---
-
-        #### Example with LaTeX file:
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Load LaTeX content from file
-        latex_file = 'path/to/latex/file.tex'
-
-        # Create the model using the path
-        sdm = SQLDataModel.from_latex(latex_file)
-        ```
-        
-        ---
-
-        #### Example specifying table identifier:
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Raw LaTeX literal with multiple tables
-        latex_content = '''
-        %% LaTeX with a Table
-
-        \\begin{tabular}{|l|l|}
-        \\hline
-            {Header A} & {Header B} \\\\
-        \\hline
-            Value A1 & Value B1 \\\\
-            Value A2 & Value B2 \\\\
-        \\hline
-        \\end{tabular}
-
-        %% Then another Table
-
-        \\begin{tabular}{|l|l|}
-        \\hline
-            {Header X} & {Header Y} \\\\
-        \\hline
-            Value X1 & Value Y1 \\\\
-            Value X2 & Value Y2 \\\\
-        \\hline
-        \\end{tabular}
-        '''
-
-        # Create the model from the 2nd table
-        sdm = SQLDataModel.from_latex(latex_content, table_identifier=2)
-
-        # View output
-        print(sdm)
-
-        ```
-        ```shell
-        ┌──────────┬──────────┐
-        │ Header X │ Header Y │
-        ├──────────┼──────────┤
-        │ Value X1 │ Value Y1 │
-        │ Value X2 │ Value Y2 │
-        └──────────┴──────────┘
-        [2 rows x 2 columns]
-        ```
-
-        ---
-
-        Table indicies:    
-            - In the last example, `sdm` will contain the data from the second table found in the LaTeX content.
-            - Tables are indexed starting from index 1 at the top of the LaTeX content, incremented as they are found.
-            - LaTeX parsing stops after the table specified at `table_identifier` is found without parsing the remaining content.            
+            - The provided `kwargs` are passed to the `SQLDataModel` constructor for additional parameters to the instance returned.           
 
         """
         if not isinstance(latex_source, str):
@@ -2788,120 +2792,122 @@ class SQLDataModel:
         Otherwise, the provided string will be parsed as raw markdown.
 
         Parameters:
-            - `markdown_source` (str): The Markdown source file path or raw content.
-            - `table_identifier` (int, optional): The index position of the markdown table to extract. Default is 1.
-            - `**kwargs`: Additional keyword arguments to be passed to the `SQLDataModel` constructor.
+            `markdown_source` (str): The Markdown source file path or raw content.
+            `table_identifier` (int, optional): The index position of the markdown table to extract. Default is 1.
+            `**kwargs`: Additional keyword arguments to be passed to the `SQLDataModel` constructor.
 
         Returns:
-            - `SQLDataModel`: The SQLDataModel instance created from the parsed markdown table.
+            `SQLDataModel`: The SQLDataModel instance created from the parsed markdown table.
 
         Raises:
-            - `TypeError`: If the `markdown_source` argument is not of type 'str', or if the `table_identifier` argument is not of type 'int'.
-            - `ValueError`: If the `table_identifier` argument is less than 1, or if no tables are found in the markdown source.
-            - `IndexError`: If the `table_identifier` is greater than the number of tables found in the markdown source.
+            `TypeError`: If the `markdown_source` argument is not of type 'str', or if the `table_identifier` argument is not of type 'int'.
+            `ValueError`: If the `table_identifier` argument is less than 1, or if no tables are found in the markdown source.
+            `IndexError`: If the `table_identifier` is greater than the number of tables found in the markdown source.
+        
+        Table indicies:    
+            - In the last example, `sdm` will contain the data from the second table found in the markdown content.
+            - Tables are indexed starting from index 1 at the top of the markdown content, incremented as they are found.
+            - Markdown parsing stops after the table specified at `table_identifier` is found without parsing the remaining content.
 
-        Note:
+        Examples:
+
+        From Markdown Literal
+        ---------------------
+
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
+
+            # Raw markdown literal
+            markdown_content = '''
+            | Item          | Price | # In stock |
+            |---------------|-------|------------|
+            | Juicy Apples  | 1.99  | 37         |
+            | Bananas       | 1.29  | 52         |
+            | Pineapple     | 3.15  | 14         |
+            '''
+
+            # Create the model from the markdown
+            sdm = SQLDataModel.from_markdown(markdown_content)
+
+            # View result
+            print(sdm)
+
+        This will output:
+
+        .. code-block:: shell
+
+            ┌──────────────┬───────┬────────────┐
+            │ Item         │ Price │ # In stock │
+            ├──────────────┼───────┼────────────┤
+            │ Juicy Apples │ 1.99  │ 37         │
+            │ Bananas      │ 1.29  │ 52         │
+            │ Pineapple    │ 3.15  │ 14         │
+            └──────────────┴───────┴────────────┘
+            [3 rows x 3 columns]
+        
+
+        From Markdown File
+        ------------------
+
+        .. code-block:: python
+
+            from SQLDataModel import SQLDataModel
+
+            # Load markdown content from file
+            markdown_file_path = 'path/to/markdown_file.md'
+
+            # Create the model using the path
+            sdm = SQLDataModel.from_markdown(markdown_file_path)
+
+        Specifying Table Identifier
+        ---------------------------
+
+        .. code-block:: python
+            
+            from SQLDataModel import SQLDataModel
+
+            # Raw markdown literal with multiple tables
+            markdown_content = '''
+            ### Markdown with a Table
+
+            | Header A | Header B |
+            |----------|----------|
+            | Value A1 | Value B1 |
+            | Value A2 | Value B2 |
+
+            ### Then another Table
+
+            | Header X | Header Y |
+            |----------|----------|
+            | Value X1 | Value Y1 |
+            | Value X2 | Value Y2 |
+
+            '''
+            # Create the model from the 2nd table
+            sdm = SQLDataModel.from_markdown(markdown_content, table_identifier=2)
+
+            # View output
+            print(sdm)
+
+        This will output:
+
+        .. code-block:: shell
+
+            ┌──────────┬──────────┐
+            │ Header X │ Header Y │
+            ├──────────┼──────────┤
+            │ Value X1 │ Value Y1 │
+            │ Value X2 │ Value Y2 │
+            └──────────┴──────────┘
+            [2 rows x 2 columns]
+            
+        Notes:
             - Markdown tables are identified based on the presence of pipe characters (`|`) defining table cells.
             - The `table_identifier` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
             - Escaped pipe characters (`\\|`) within the markdown are replaced with the HTML entity reference '&vert;' for proper parsing.
             - The provided `kwargs` are passed to the `SQLDataModel` constructor for additional parameters to the instance returned.
 
-        ---
-
-        Example with raw markdown content:
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Raw markdown literal
-        markdown_content = '''
-        | Item          | Price | # In stock |
-        |---------------|-------|------------|
-        | Juicy Apples  | 1.99  | 37         |
-        | Bananas       | 1.29  | 52         |
-        | Pineapple     | 3.15  | 14         |
-        '''
-
-        # Create the model from the markdown
-        sdm = SQLDataModel.from_markdown(markdown_content)
-
-        # View result
-        print(sdm)
-
-        ```
-        ```shell
-        ┌──────────────┬───────┬────────────┐
-        │ Item         │ Price │ # In stock │
-        ├──────────────┼───────┼────────────┤
-        │ Juicy Apples │ 1.99  │ 37         │
-        │ Bananas      │ 1.29  │ 52         │
-        │ Pineapple    │ 3.15  │ 14         │
-        └──────────────┴───────┴────────────┘
-        [3 rows x 3 columns]
-        ```
-        
-        ---
-
-        Example with markdown file:
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Load markdown content from file
-        markdown_file_path = 'path/to/markdown_file.md'
-
-        # Create the model using the path
-        sdm = SQLDataModel.from_markdown(markdown_file_path)
-        ```
-        
-        ---
-
-        Example specifying table identifier:
-
-        ```python
-        from SQLDataModel import SQLDataModel
-
-        # Raw markdown literal with multiple tables
-        markdown_content = '''
-        ### Markdown with a Table
-
-        | Header A | Header B |
-        |----------|----------|
-        | Value A1 | Value B1 |
-        | Value A2 | Value B2 |
-
-        ### Then another Table
-
-        | Header X | Header Y |
-        |----------|----------|
-        | Value X1 | Value Y1 |
-        | Value X2 | Value Y2 |
-
-        '''
-        # Create the model from the 2nd table
-        sdm = SQLDataModel.from_markdown(markdown_content, table_identifier=2)
-
-        # View output
-        print(sdm)
-
-        ```
-        ```shell
-        ┌──────────┬──────────┐
-        │ Header X │ Header Y │
-        ├──────────┼──────────┤
-        │ Value X1 │ Value Y1 │
-        │ Value X2 │ Value Y2 │
-        └──────────┴──────────┘
-        [2 rows x 2 columns]
-        ```
-
-        ---
-
-        Table indicies:    
-            - In the last example, `sdm` will contain the data from the second table found in the markdown content.
-            - Tables are indexed starting from index 1 at the top of the markdown content, incremented as they are found.
-            - Markdown parsing stops after the table specified at `table_identifier` is found without parsing the remaining content.
-            
         """
         if not isinstance(markdown_source, str):
             raise TypeError(
