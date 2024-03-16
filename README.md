@@ -26,12 +26,12 @@ Use the package manager [pip](https://pip.pypa.io/en/stable/) to install SQLData
 ```bash
 $ pip install SQLDataModel
 ```
-Then import the main class `SQLDataModel` into your local project, see usage details below.
+Then import the main class `SQLDataModel` into your local project, see [usage](#usage) below or go straight to the [project docs](https://sqldatamodel.readthedocs.io).
 
 ---
 
 ### Quick Example
-SQLDataModel can be created from any number of [sources](#data-sources), as a quick demo lets create one using a Wikipedia page:
+A `SQLDataModel` can be created from any number of [sources](#data-sources), as a quick demo lets create one using a Wikipedia page:
 
 ```python
 >>> from SQLDataModel import SQLDataModel
@@ -123,6 +123,19 @@ SQLDataModel supports various data formats and sources, including:
 - Pickle files
 
 Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
+
+---
+
+### Documentation
+SQLDataModel's documentation can be found at https://sqldatamodel.readthedocs.io containing detailed descriptions for the key modules in the package. These are listed below as links to their respective sections in the docs:
+
+  * [`ANSIColor`](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.ANSIColor.ANSIColor) for terminal styling.
+  * [`HTMLParser`](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.HTMLParser.HTMLParser) for parsing tabular data from the web.
+  * [`JSONEncoder`](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.JSONEncoder.DataTypesEncoder) for type casting and encoding JSON data.
+  * [`SQLDataModel`](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.SQLDataModel.SQLDataModel) for wrapping it all up.
+
+
+However, to skip over the less relevant modules and jump straight to the meat of the package, the ``SQLDataModel`` module, click [here](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.SQLDataModel.SQLDataModel). 
 
 ---
 
