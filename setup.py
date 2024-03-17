@@ -3,11 +3,9 @@ import setuptools
 with open("README.md", "r", encoding='utf-8') as fh:
     long_description = fh.read()
 
-# str_utils_ext = setuptools.Extension('SQLDataModel.extensions.str_utils',sources=['src/SQLDataModel/extensions/str_utils.c'])
-
 setuptools.setup(
      name='SQLDataModel',  
-     version='0.1.82',
+     version='0.1.83',
      scripts=['src/SQLDataModel/SQLDataModel.py'] ,
      author="Ante Tonkovic-Capin",
      author_email="antetc@icloud.com",
@@ -15,6 +13,10 @@ setuptools.setup(
      long_description=long_description,
      long_description_content_type="text/markdown",
      url="https://github.com/AnteT/SQLDataModel",
+     project_urls = {
+        'Docs':"https://sqldatamodel.readthedocs.io/en/latest/",
+        'Source': "https://github.com/AnteT/SQLDataModel.git"
+    },
      package_dir = {"": "src"},
      packages = setuptools.find_packages(where="src"),
      classifiers=[
