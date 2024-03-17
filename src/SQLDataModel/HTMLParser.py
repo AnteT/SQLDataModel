@@ -2,6 +2,28 @@ from __future__ import annotations
 from html.parser import HTMLParser
 
 class HTMLParser(HTMLParser):
+    """
+    An HTML parser designed to extract tables from HTML content.
+
+    This parser subclasses HTMLParser from the standard library to parse HTML content.
+    It extracts tables from the HTML and provides methods to access the table data.
+
+    Attributes:
+        ``convert_charrefs`` (bool): Flag indicating whether to convert character references to Unicode characters. Default is True.
+        ``cell_sep`` (str): Separator string to separate cells within a row. Default is an empty string.
+        ``table_identifier`` (int or str): Identifier used to locate the target table. It can be either an integer representing the table index, or a string representing the HTML 'name' or 'id' attribute of the table.
+        ``_in_td`` (bool): Internal flag indicating whether the parser is currently inside a <td> tag.
+        ``_in_th`` (bool): Internal flag indicating whether the parser is currently inside a <th> tag.
+        ``_current_table`` (list): List to hold the current table being parsed.
+        ``_current_row`` (list): List to hold the current row being parsed.
+        ``_current_cell`` (list): List to hold the current cell being parsed.
+        ``_ignore_next`` (bool): Internal flag indicating whether the next token should be ignored.
+        ``found_target`` (bool): Flag indicating whether the target table has been found.
+        ``_is_finished`` (bool): Internal flag indicating whether parsing is finished.
+        ``table_counter`` (int): Counter to keep track of the number of tables encountered during parsing.
+        ``target_table`` (list): List to hold the data of the target table once found.
+
+    """    
     def __init__(self, *, convert_charrefs: bool = True, cell_sep:str="", table_identifier:int|str=0) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
         if table_identifier is None:
@@ -25,10 +47,37 @@ class HTMLParser(HTMLParser):
 
     @staticmethod
     def ErrorFormat(error:str) -> str:
+        """
+        Formats an error message with ANSI color coding.
+
+        Parameters:
+            ``error`` (str): The error message to be formatted.
+
+        Returns:
+            ``str``: A string with ANSI color coding, highlighting the error type in bold red.
+        
+        Example::
+            
+            import HTMLParser
+
+            # Error message to format
+            formatted_error = HTMLParser.ErrorFormat("ValueError: Invalid value provided.")
+            
+            # Display alongside error or exception when raised
+            print(formatted_error)
+
+        """        
         error_type, error_description = error.split(':',1)
         return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""
     
     def handle_starttag(self, tag: str, attrs: list[str]) -> None:
+        """
+        Handle the start of an HTML tag during parsing.
+
+        Parameters:
+            ``tag`` (str): The name of the HTML tag encountered.
+            ``attrs`` (list[str]): A list of (name, value) pairs representing the attributes of the tag.
+        """        
         if self._is_finished:
             return
         if tag == "table":
@@ -51,6 +100,12 @@ class HTMLParser(HTMLParser):
             self._ignore_next = True
 
     def handle_data(self, data: str) -> None:
+        """
+        Handle the data within an HTML tag during parsing.
+
+        Parameters:
+            ``data`` (str): The data contained within the HTML tag.
+        """        
         if self._is_finished:
             return
         if not self.found_target or self._ignore_next:
@@ -59,6 +114,12 @@ class HTMLParser(HTMLParser):
             self._current_cell.append(data)
     
     def handle_endtag(self, tag: str) -> None:
+        """
+        Handle the end of an HTML tag during parsing and modify the parsing tags accordingly.
+
+        Parameters:
+            ``tag`` (str): The name of the HTML tag encountered.
+        """        
         if self._is_finished:
             return
         if tag == 'style':
@@ -83,6 +144,19 @@ class HTMLParser(HTMLParser):
                 self._is_finished = True
 
     def validate_table(self) -> None:
+        """
+        Validate and retrieve the target HTML table data based on ``table_identifier`` used for parsing.
+
+        Returns:
+            ``tuple[list, list|None]``: A tuple containing the table data and headers (if present).
+
+        Raises:
+            ``ValueError``: If the target table is not found or cannot be parsed.
+
+        Note:
+            - :py:mod:`SQLDataModel.from_html() <SQLDataModel.SQLDataModel.SQLDataModel.from_html>` uses this class to extract valid HTML tables from either web or file content.
+            - If a row is found with mismatched dimensions, it will be filled with ``None`` values to ensure tabular output.
+        """        
         if not self.found_target:
             if (num_tables_found := self.table_counter + 1) < 1:
                 if num_tables_found < 1:

@@ -1,0 +1,18 @@
+/* Add any custom css to apply to the generated docs here, put this file in ./docs/source/_static dir */
+.wy-nav-content {
+    border: 3px solid #2980b9;
+    max-width: 1200px !important;
+}
+html {
+    scrollbar-color: #2980b9 #2b2d2e;
+}
+
+/* regular unlinked code literals, pivoted from #0c5280 */
+.rst-content code.literal, .rst-content tt.literal {
+    color: #115b8c;
+}
+
+/* regular hyperlinked code literals */
+.rst-content code.xref, .rst-content tt.xref, a .rst-content code, a .rst-content tt {
+    color: #404040;
+}
