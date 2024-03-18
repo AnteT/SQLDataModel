@@ -1,4 +1,13 @@
-# SQLDataModel
+<img src="figs/sdm_banner.PNG" src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_banner.PNG?raw=true" alt="SQLDataModel" style="width:100vw; border-radius: .6vw" />
+
+---
+
+### SQLDataModel: fast & lightweight source agnostic data model
+
+![SQLDataModel Home](https://img.shields.io/badge/SQLDataModel-Home-blue?style=flat&logo=github&link=https%3A%2F%2Fgithub.com%2FAnteT%2FSQLDataModel&link=https%3A%2F%2Fgithub.com%2FAnteT%2FSQLDataModel)
+![PyPI License](https://img.shields.io/pypi/l/sqldatamodel)
+![PyPI Version](https://img.shields.io/pypi/v/sqldatamodel)
+[![Docs Status](https://readthedocs.org/projects/sqldatamodel/badge/?version=latest)](https://sqldatamodel.readthedocs.io/en/latest/?badge=latest)
 
 SQLDataModel is a fast & lightweight data model with no additional dependencies for quickly fetching and storing your tabular data to and from the most commonly used databases & data sources in a couple lines of code. It's as easy as ETL:
 
@@ -79,7 +88,7 @@ sdm = sdm[sdm['total'] < 3200]
 # View it
 print(sdm)
 ```
-<img src="https://github.com/AnteT/sql-model/raw/master/figs/sdm_purple.PNG?raw=true" alt="sdm_colorful_table" style="width:100vw; border-radius: 3px" />
+<img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_purple.PNG?raw=true" alt="sdm_colorful_table" style="width:100vw; border-radius: .6vw" />
 
 ```python
 # Group by single or multiple columns:
@@ -88,7 +97,7 @@ sdm_group = sdm.group_by(['region','check'])
 # View output.
 print(sdm_group)
 ```
-<img src="https://github.com/AnteT/sql-model/raw/master/figs/sdm_group.PNG?raw=true" alt="sdm_grouped_table" style="width:100vw; border-radius: 3px" />
+<img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_group.PNG?raw=true" alt="sdm_grouped_table" style="width:100vw; border-radius: .6vw" />
 
 ```python
 # Loop through it.
