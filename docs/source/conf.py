@@ -53,7 +53,8 @@ html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 html_logo = "sdm_banner.PNG"
 html_theme_options = {
-    'logo_only': True
+    'logo_only': True,
+    'display_version': False
 }
 
 def process_docstring(app, what, name, obj, options, lines):
