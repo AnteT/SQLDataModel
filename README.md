@@ -1,4 +1,4 @@
-<img src="figs/sdm_banner.PNG" src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_banner.PNG?raw=true" alt="SQLDataModel" style="width:100vw; border-radius: .6vw" />
+<img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_banner.PNG?raw=true" alt="SQLDataModel" style="width:100vw; border-radius: .6vw" />
 
 ---
 

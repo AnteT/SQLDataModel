@@ -48,8 +48,13 @@ add_modules_names = False # doesnt seem to make a difference
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
+html_title = ''
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
+html_logo = "sdm_banner.PNG"
+html_theme_options = {
+    'logo_only': True
+}
 
 def process_docstring(app, what, name, obj, options, lines):
     for i in range(len(lines)):

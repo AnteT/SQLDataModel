@@ -1,3 +1,7 @@
+<img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_banner.PNG?raw=true" alt="SQLDataModel" style="width:100vw; border-radius: .6vw" />
+
+---
+
 ## Introduction
 
 SQLDataModel is a fast & lightweight data model with no additional dependencies for quickly fetching and storing your tabular data to and from the most commonly used databases & data sources in a couple lines of code. It's as easy as ETL:

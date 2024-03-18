@@ -10,9 +10,31 @@ html {
 /* regular unlinked code literals, pivoted from #0c5280 */
 .rst-content code.literal, .rst-content tt.literal {
     color: #115b8c;
+    font-size: 85%;
 }
 
 /* regular hyperlinked code literals */
 .rst-content code.xref, .rst-content tt.xref, a .rst-content code, a .rst-content tt {
     color: #404040;
+    font-size: 85%;
+}
+
+/* Decreases padding around left-navbar logo right above search bar */
+.wy-side-nav-search .wy-dropdown>a, .wy-side-nav-search>a, .wy-side-nav-search img  {
+    padding: 0px 0px;
+}
+
+.wy-side-nav-search .logo {
+    border-radius: 2px !important;
+}
+
+/* Font size of Parameter/Returns/Return Type key names */
+dt.field-odd, dt.field-even {
+    font-size: 12pt;
+}
+
+/* Font size of remaining standard text */
+p {
+    line-height: 22px;
+    font-size: 11pt;
 }

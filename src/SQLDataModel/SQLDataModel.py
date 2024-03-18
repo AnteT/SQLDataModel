@@ -220,7 +220,7 @@ class SQLDataModel:
     Pretty Printing
     ---------------
 
-    SQLDataModel also pretty prints your table in any color you specify, use :meth:`SQLDataModel.set_display_color` and provide either a hex value or a tuple of rgb and print the table, example output:
+    SQLDataModel also pretty prints your table in any color you specify, use :meth:`SQLDataModel.set_display_color()` and provide either a hex value or a tuple of rgb and print the table, example output:
 
     ```shell
 
@@ -241,8 +241,8 @@ class SQLDataModel:
     ```
     Note:
         - No additional dependencies are installed with this package, however you will obviously need to have pandas or numpy to create pandas or numpy objects.
-        - Use :meth:`SQLDataModel.set_display_color` to modify the terminal color of the table, by default no color styling is applied.
-        - Use :meth:`SQLDataModel.get_supported_sql_connections` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
+        - Use :meth:`SQLDataModel.set_display_color()` to modify the terminal color of the table, by default no color styling is applied.
+        - Use :meth:`SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
 
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies')
@@ -259,7 +259,7 @@ class SQLDataModel:
             ``min_column_width`` (int): The minimum width for each column. Default is 4.
             ``max_column_width`` (int): The maximum width for each column. Default is 32.
             ``column_alignment`` (str): The alignment for columns ('dynamic', 'left', 'center', 'right'). Default is 'dynamic'.
-            `display_color` (str|tuple|None): The color for display as hex code string or rgb tuple.
+            ``display_color`` (str|tuple|None): The color for display as hex code string or rgb tuple.
             ``display_index`` (bool): Whether to display row indices. Default is True.
             ``display_float_precision`` (int): The number of decimal places to display for float values. Default is 2.
             ``infer_types`` (bool): Whether to infer the data types based on a randomly selected sample. Default is False, using first row to derive the corresponding type.
@@ -298,7 +298,7 @@ class SQLDataModel:
             - If ``data`` is not provided, an empty model is created with headers, at least one of ``data``, ``headers`` or ``dtypes`` are required to instantiate the model.
             - If ``headers`` are not provided, default headers will be generated using the the format `'col_0', ..., col_N` where N is the column count.
             - If ``dtypes`` is provided, it must be a dictionary with column names as keys and Python data types as string values, e.g., `{'first_name': 'str', 'weight': 'float'}`
-            - If `infer_types = True` and ``dtypes`` are provided, the order will be resolved by first inferring the types, then overriding the inferred types for each ``{col:type}`` provided in the ``dtypes`` argument. If one is not provided, then the inferred type will be used as a fallback.
+            - If ``infer_types = True`` and ``dtypes`` are provided, the order will be resolved by first inferring the types, then overriding the inferred types for each ``{col:type}`` provided in the ``dtypes`` argument. If one is not provided, then the inferred type will be used as a fallback.
         """
         if data is None:
             if headers is None:
@@ -463,7 +463,7 @@ class SQLDataModel:
         Formats an error message with ANSI color coding.
 
         Parameters:
-            `error`: The error message to be formatted.
+            ``error``: The error message to be formatted.
 
         Returns:
             ``str``: The modified string with ANSI color coding, highlighting the error type in bold red.
@@ -486,7 +486,7 @@ class SQLDataModel:
         Formats a warning message with ANSI color coding.
 
         Parameters:
-            `warn`: The warning message to be formatted.
+            ``warn``: The warning message to be formatted.
 
         Returns:
             ``str``: The modified string with ANSI color coding, highlighting the class name in bold yellow.
@@ -509,7 +509,7 @@ class SQLDataModel:
         Formats a success message with ANSI color coding.
 
         Parameters:
-            `success`: The success message to be formatted.
+            ``success``: The success message to be formatted.
 
         Returns:
             ``str``: The modified string with ANSI color coding, highlighting the success source in bold green.
@@ -532,7 +532,7 @@ class SQLDataModel:
         Infer the data type of the input object.
 
         Parameters:
-            `obj` (str): The object for which the data type is to be inferred.
+            ``obj`` (str): The object for which the data type is to be inferred.
             ``date_format`` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
             ``datetime_format`` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
 
@@ -540,14 +540,14 @@ class SQLDataModel:
             ``str``: The inferred data type.
         
         Inference:
-            - `'str'`: If the input object is a string, or cannot be parsed as another data type.
-            - `'date'`: If the input object represents a date without time information.
-            - `'datetime'`: If the input object represents a datetime with both date and time information.
-            - `'int'`: If the input object represents an integer.
-            - `'float'`: If the input object represents a floating-point number.
-            - `'bool'`: If the input object represents a boolean value.
-            - `'bytes'`: If the input object represents a binary array.
-            - `'None'`: If the input object is None, empty, or not a string.
+            - ``'str'``: If the input object is a string, or cannot be parsed as another data type.
+            - ``'date'``: If the input object represents a date without time information.
+            - ``'datetime'``: If the input object represents a datetime with both date and time information.
+            - ``'int'``: If the input object represents an integer.
+            - ``'float'``: If the input object represents a floating-point number.
+            - ``'bool'``: If the input object represents a boolean value.
+            - ``'bytes'``: If the input object represents a binary array.
+            - ``'None'``: If the input object is None, empty, or not a string.
 
         Note:
             - This method attempts to infer the data type of the input object by evaluating its content.
@@ -630,9 +630,9 @@ class SQLDataModel:
         Parameters:
             ``column`` (str): The name of the column.
             ``dtype`` (str): The data type of the column ('float', 'int', 'index', or other).
-            `max_pad_width` (int): The maximum width to pad the output.
+            ``max_pad_width`` (int): The maximum width to pad the output.
             ``float_precision`` (int, optional): The precision for floating-point numbers (default is 4).
-            `alignment` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
+            ``alignment`` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
 
         Returns:
             ``str``: The formatted SELECT clause for SQLite.
@@ -758,10 +758,10 @@ class SQLDataModel:
 
         Parameters:
             ``json_source`` (dict | list): The raw JSON data to be parsed.
-            `flatten_rows` (bool): If True, the data will be normalized into columns and rows. If False,
+            ``flatten_rows`` (bool): If True, the data will be normalized into columns and rows. If False,
             columns will be concatenated from each row using the specified `key_prefix`.
-            `level_sep` (str): Separates nested levels from other levels and used to concatenate prefix to column.
-            `key_prefix` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
+            ``level_sep`` (str): Separates nested levels from other levels and used to concatenate prefix to column.
+            ``key_prefix`` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
 
         Returns:
             ``dict``: A flattened dictionary representing the parsed JSON data.
@@ -843,11 +843,6 @@ class SQLDataModel:
             ``IndexError``: If the provided column index is outside the current column range.
             ``SQLProgrammingError``: If there is an issue with the SQL execution during the column renaming.
 
-        Note:
-            - The method allows renaming a column identified by its index in the SQLDataModel.
-            - Handles negative indices by adjusting them relative to the end of the column range.
-            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
-
         Example::
 
             from SQLDataModel import SQLDataModel
@@ -872,6 +867,10 @@ class SQLDataModel:
             # Outputs ['first_name', 'last', 'age']
             print(new_headers)
 
+        Note:
+            - The method allows renaming a column identified by its index in the SQLDataModel.
+            - Handles negative indices by adjusting them relative to the end of the column range.
+            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
         """
         if not isinstance(column, (int,str)):
             raise TypeError(
@@ -911,8 +910,8 @@ class SQLDataModel:
         Parameters:
             ``pattern`` (str): The substring or regular expression pattern to search for in each column.
             ``replacement`` (str): The string to replace the matched pattern with.
-            `inplace` (bool, optional): If True, modifies the current SQLDataModel instance in-place. Default is False.
-            **kwargs: Additional keyword arguments to be passed to the ``execute_fetch`` method when not in-place.
+            ``inplace`` (bool, optional): If True, modifies the current SQLDataModel instance in-place. Default is False.
+            ``**kwargs``: Additional keyword arguments to be passed to the ``execute_fetch`` method when not in-place.
         
         Raises:
             ``TypeError``: If the ``pattern`` or ``replacement`` parameters are invalid types.
@@ -1053,8 +1052,8 @@ class SQLDataModel:
         Wraps :meth:`SQLDataModel.set_headers()`.
 
         Parameters:
-            `apply_function` (Callable, optional): Specify an alternative normalization pattern. When ``None``, the pattern
-                `'[^0-9a-z _]+'` will be used on uncased values.
+            ``apply_function`` (Callable, optional): Specify an alternative normalization pattern. When ``None``, the pattern
+                ``'[^0-9a-z _]+'`` will be used on uncased values.
 
         Returns:
             ``None``
@@ -1114,7 +1113,7 @@ class SQLDataModel:
         Modifying this attribute does not change the actual number of rows stored in ``SQLDataModel``, only the number of rows displayed.
 
         Parameters:
-            `rows` (int): The maximum number of rows to display.
+            ``rows`` (int): The maximum number of rows to display.
 
         Raises:
             ``TypeError``: If the provided argument is not ``None`` or is not an integer.
@@ -1383,7 +1382,7 @@ class SQLDataModel:
             # Get the current value for displaying the index
             display_index = sdm.get_display_index()
 
-            # Outputs `True`
+            # Output: True
             print(display_index)
         
         """
@@ -1423,7 +1422,7 @@ class SQLDataModel:
     
     def get_shape(self) -> tuple[int]:
         """
-        Returns the shape of the data as a tuple of `(rows x columns)`.
+        Returns the shape of the data as a tuple of ``(rows x columns)``.
 
         Returns:
             ``tuple[int]``: A tuple representing the number of rows and columns in the SQLDataModel.
@@ -1443,7 +1442,7 @@ class SQLDataModel:
 
         Note:
             - If an empty model is initialized, the ``rowcount`` will be 0 until the first row is inserted.
-            - Using the :meth:`SQLDataModel.__getitem__` syntax of `sdm[row, col]` returns a new model instance with the corresponding shape.
+            - Using the :meth:`SQLDataModel.__getitem__` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
         """
         return (self.row_count,self.column_count)
     
@@ -1539,9 +1538,9 @@ class SQLDataModel:
         Generates descriptive statistics for columns in the ``SQLDataModel`` instance based on column dtype including count, unique values, top value, frequency, mean, standard deviation, minimum, 25th, 50th, 75th percentiles, maximum and dtype for specified column.
 
         Parameters:
-            `exclude_columns` (str | list, optional): Columns to exclude from the analysis. Default is None.
+            ``exclude_columns`` (str | list, optional): Columns to exclude from the analysis. Default is None.
             ``exclude_dtypes`` (list[Literal["str", "int", "float", "date", "datetime", "bool"]], optional): Data types to exclude from the analysis. Default is None.
-            `ignore_na` (bool, optional): If True, ignores NA like values ('NA', ' ', 'None') when computing statistics. Default is True.
+            ``ignore_na`` (bool, optional): If True, ignores NA like values ('NA', ' ', 'None') when computing statistics. Default is True.
             ``**kwargs``: Additional keyword arguments to be passed to the ``execute_fetch`` method.
 
         Statistics Described:
@@ -1736,9 +1735,9 @@ class SQLDataModel:
         Return a random sample of size ``n_samples`` as a new ``SQLDataModel``.
 
         Parameters:
-            ``n_samples`` (float | int): Number of rows or proportion of rows to sample. Default set to ``0.05``, proportional to 5% of the current ``row_count``
-                - If ``n_samples`` is an integer, it represents the exact number of rows to sample where ``0 < n_samples <= row_count``.
-                - If ``n_samples`` is a float, it represents the proportion of rows to sample where ``0.0 < n_samples <= 1.0``.
+            ``n_samples`` (float | int): Number of rows or proportion of rows to sample. Default set to ``0.05``, proportional to 5% of the current :py:attr:`SQLDataModel.rowcount`.
+                If ``n_samples`` is an integer, it represents the exact number of rows to sample where ``0 < n_samples <= row_count``.
+                If ``n_samples`` is a float, it represents the proportion of rows to sample where ``0.0 < n_samples <= 1.0``.
 
         Returns:
             ``SQLDataModel``: A new SQLDataModel instance containing the sampled rows.
@@ -1768,7 +1767,7 @@ class SQLDataModel:
             sample_result2 = sdm2.sample(n_samples=0.2)
 
         Note:
-            - If the current model's ``rowcount`` value is less than the sample size, the current row count will be used instead.
+            - If the current model's :py:attr:`SQLDataModel.rowcount` value is less than the sample size, the current row count will be used instead.
 
         """
         if not isinstance(n_samples, (float,int)):
@@ -1992,9 +1991,9 @@ class SQLDataModel:
         Parameters:
             ``csv_source`` (str): The path to the CSV file or a raw delimited string.
             ``infer_types`` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
-            `encoding` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
-            `delimiters` (str, optional): Possible delimiters. Default is ``\\s``, ``\\t``, ``;``, ``|``, ``:`` or ``,`` (space, tab, semicolon, pipe, colon or comma).
-            `quotechar` (str, optional): The character used for quoting fields. Default is ``"``.
+            ``encoding`` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
+            ``delimiters`` (str, optional): Possible delimiters. Default is ``\\s``, ``\\t``, ``;``, ``|``, ``:`` or ``,`` (space, tab, semicolon, pipe, colon or comma).
+            ``quotechar`` (str, optional): The character used for quoting fields. Default is ``"``.
             ``headers`` (List[str], optional): List of column headers. If None, the first row of the CSV source is assumed to contain headers.
             ``**kwargs``: Additional keyword arguments to be passed to the SQLDataModel constructor.
 
@@ -2055,12 +2054,12 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
         Note:
-            - If ``csv_source`` is delimited by characters other than those specified, provide the delimiter to `delimiters`.
+            - If ``csv_source`` is delimited by characters other than those specified, provide the delimiter to ``delimiters``.
             - If ``headers`` are provided, the first row parsed from source will be the first row in the table and not discarded.
-            - This method is called by ``SQLDataModel.from_text()`` when source data appears to be delimited instead of SQLDataModel's ``__repr__()``
+            - This method is called by :meth:`SQLDataModel.from_text()` when source data appears to be delimited instead of SQLDataModel's ``__repr__()``
             - The ``infer_types`` argument can be used to infer the appropriate data type for each column:
-                - If `infer_types = True`, a random subset of the data will be used to infer the correct type and cast values accordingly
-                - If `infer_types = False`, values from the first row only will be used to assign types, almost always 'str' when reading from CSV.
+                - If ``infer_types = True``, a random subset of the data will be used to infer the correct type and cast values accordingly
+                - If ``infer_types = False``, values from the first row only will be used to assign types, almost always 'str' when reading from CSV.
         """
         if os.path.exists(csv_source):
             try:
@@ -2116,16 +2115,16 @@ class SQLDataModel:
             - ``pandas.DataFrame``: passed to :meth:`SQLDataModel.from_pandas()` as dataframe data.
             - ``str``: If starts with 'http', passed to :meth:`SQLDataModel.from_html()` as url, otherwise:
         
-              - `'.csv'`: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
-              - `'.html'`: passed to :meth:`SQLDataModel.from_html()` as html source data.
-              - `'.json'`: passed to :meth:`SQLDataModel.from_json()` as json source data.
-              - `'.md'`: passed to :meth:`SQLDataModel.from_markdown()` as markdown source data.
-              - `'.parquet'`: passed to :meth:`SQLDataModel.from_parquet()` as parquet source data.
-              - `'.pkl'`: passed to :meth:`SQLDataModel.from_pickle()` as pickle source data.
-              - `'.sdm'`: passed to :meth:`SQLDataModel.from_pickle()` as pickle source data.
-              - `'.tex'`: passed to :meth:`SQLDataModel.from_latex()` as latex source data.
-              - `'.tsv'`: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
-              - `'.txt'`: passed to :meth:`SQLDataModel.from_text()` as text source data.
+              - ``'.csv'``: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
+              - ``'.html'``: passed to :meth:`SQLDataModel.from_html()` as html source data.
+              - ``'.json'``: passed to :meth:`SQLDataModel.from_json()` as json source data.
+              - ``'.md'``: passed to :meth:`SQLDataModel.from_markdown()` as markdown source data.
+              - ``'.parquet'``: passed to :meth:`SQLDataModel.from_parquet()` as parquet source data.
+              - ``'.pkl'``: passed to :meth:`SQLDataModel.from_pickle()` as pickle source data.
+              - ``'.sdm'``: passed to :meth:`SQLDataModel.from_pickle()` as pickle source data.
+              - ``'.tex'``: passed to :meth:`SQLDataModel.from_latex()` as latex source data.
+              - ``'.tsv'``: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
+              - ``'.txt'``: passed to :meth:`SQLDataModel.from_text()` as text source data.
 
         Returns:
             ``SQLDataModel``: The SQLDataModel object created from the provided data.
@@ -2341,7 +2340,7 @@ class SQLDataModel:
 
         Parameters:
             ``json_source`` (str | list | dict): The JSON source. If a string, it can represent a file path or a JSON-like object.
-            `encoding` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
+            ``encoding`` (str): The encoding to use when reading from a file. Defaults to 'utf-8'.
             ``**kwargs``: Additional keyword arguments to pass to the ``SQLDataModel`` constructor.
 
         Returns:
@@ -2349,7 +2348,7 @@ class SQLDataModel:
 
         Raises:
             ``TypeError``: If the ``json_source`` argument is not of type 'str', 'list', or 'dict'.
-            `OSError`: If related exception occurs when trying to open and read from ``json_source`` as file path.
+            ``OSError``: If related exception occurs when trying to open and read from ``json_source`` as file path.
 
         Examples:
 
@@ -2471,7 +2470,7 @@ class SQLDataModel:
             [6 rows x 4 columns]
         ```
         Note:
-            - If ``json_source`` is deeply-nested it will be flattened according to the staticmethod :meth:`SQLDataModel.flatten_json`
+            - If ``json_source`` is deeply-nested it will be flattened according to the staticmethod :meth:`SQLDataModel.flatten_json()`
             - If ``json_source`` is a JSON-like string object that is not an array, it will be wrapped according as an array.
         
         """
@@ -2505,7 +2504,7 @@ class SQLDataModel:
                 If starts with 'http', the argument is considered a url and the table will be parsed from returned the web request.
                 If is a valid file path, the argument is considered a local file and the table will be parsed from its html.
                 If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input.
-            `encoding` (str): The encoding to use for reading HTML when ``html_source`` is considered a valid url or file path (default is 'utf-8').
+            ``encoding`` (str): The encoding to use for reading HTML when ``html_source`` is considered a valid url or file path (default is 'utf-8').
             ``table_identifier`` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
             ``infer_types`` (bool, optional): If column data types should be inferred in the return model. Default is False, meaning all columns are returned as 'str' types.
                 If is ``int``, identifier is treated as the indexed location of the <table> element on the page from top to bottom starting from zero and will return the corresponding position when encountered.
@@ -2513,14 +2512,14 @@ class SQLDataModel:
             ``**kwargs``: Additional keyword arguments to pass when using ``urllib.request.urlopen`` to fetch HTML from a URL.
 
         Returns:
-            ``SQLDataModel``: A new ``SQLDataModel`` instance containing the data from the parsed HTML table.
+            ``SQLDataModel``: A new SQLDataModel instance containing the data from the parsed HTML table.
 
         Raises:
             ``TypeError``: If ``html_source`` is not of type ``str`` representing a possible url, filepath or raw HTML stream.
-            `HTTPError`: Raised from ``urllib`` when ``html_source`` is considered a url and an HTTP exception occurs.
-            `URLError`: Raised from ``urllib`` when ``html_source`` is considered a url and a URL exception occurs.
+            ``HTTPError``: Raised from ``urllib`` when ``html_source`` is considered a url and an HTTP exception occurs.
+            ``URLError``: Raised from ``urllib`` when ``html_source`` is considered a url and a URL exception occurs.
             ``ValueError``: If no <table> elements are found or if the targeted ``table_identifier`` is not found.
-            `OSError`: Related exceptions that may be raised when ``html_source`` is considered a file path.
+            ``OSError``: Related exceptions that may be raised when ``html_source`` is considered a file path.
 
         Examples:
 
@@ -2680,7 +2679,7 @@ class SQLDataModel:
                 If ``latex_source`` is a valid system filepath, source will be treated as a ``.tex`` file and parsed.
                 If ``latex_source`` is not a valid filepath, source will be parsed as raw LaTeX literal.
             ``table_identifier`` (int, optional): The index position of the LaTeX table to extract. Default is 1.
-            `encoding` (str, optional): The file encoding to use if source is a LaTex filepath. Default is 'utf-8';.
+            ``encoding`` (str, optional): The file encoding to use if source is a LaTex filepath. Default is 'utf-8';.
             ``**kwargs``: Additional keyword arguments to be passed to the ``SQLDataModel`` constructor.
 
         Returns:
@@ -3053,7 +3052,7 @@ class SQLDataModel:
             ``SQLDataModel``: The SQLDataModel object created from the numpy array.
 
         Raises:
-            `ModuleNotFoundError`: If the required package ``numpy`` is not found.
+            ``ModuleNotFoundError``: If the required package ``numpy`` is not found.
             ``TypeError``: If ``array`` argument is not of type ``numpy.ndarray``.
             ``DimensionError``: If ``array.ndim != 2`` representing a `(row, column)` tabular array.
 
@@ -3117,7 +3116,7 @@ class SQLDataModel:
             ``SQLDataModel``: The SQLDataModel object created from the pandas DataFrame.
 
         Raises:
-            `ModuleNotFoundError`: If the required package ``pandas`` is not found.
+            ``ModuleNotFoundError``: If the required package ``pandas`` is not found.
             ``TypeError``: If ``df`` argument is not of type 'pandas.DataFrame'.
 
         Example::
@@ -3160,9 +3159,9 @@ class SQLDataModel:
             ``SQLDataModel``: A new instance of ``SQLDataModel`` created from the parquet file.
 
         Raises:
-            `ModuleNotFoundError`: If the required package ``pyarrow`` is not installed as determined by ``_has_pq`` flag.
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pq`` flag.
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid parquet file path.
-            `FileNotFoundError`: If the specified parquet ``filename`` is not found.
+            ``FileNotFoundError``: If the specified parquet ``filename`` is not found.
             ``Exception``: If any unexpected exception occurs during the file or parquet reading process.
 
         Example::
@@ -3201,8 +3200,8 @@ class SQLDataModel:
             [12 rows x 5 columns]
         ```
         Note:
-            - The pyarrow package is required to use this method as well as the :meth:`SQLDataModel.to_parquet` method.
-            - Once the file is read into pyarrow.parquet, the ``to_pydict()`` method is used to pass the data to this package's :meth:`SQLDataModel.from_dict` method.
+            - The pyarrow package is required to use this method as well as the :meth:`SQLDataModel.to_parquet()` method.
+            - Once the file is read into pyarrow.parquet, the ``to_pydict()`` method is used to pass the data to this package's :meth:`SQLDataModel.from_dict()` method.
             - Titanic parquet data used in example available at https://www.kaggle.com/code/taruntiwarihp/titanic-dataset
 
         """
@@ -3229,7 +3228,7 @@ class SQLDataModel:
     @classmethod
     def from_pickle(cls, filename:str=None, **kwargs) -> SQLDataModel:
         """
-        Returns the ``SQLDataModel`` object from the provided ``filename``. If ``None``, the current directory will be scanned for the default :meth:`SQLDataModel.to_pickle` format.
+        Returns the ``SQLDataModel`` object from the provided ``filename``. If ``None``, the current directory will be scanned for the default :meth:`SQLDataModel.to_pickle()` format.
 
         Parameters:
             ``filename`` (str, optional): The name of the pickle file to load. If None, the current directory will be scanned for the default filename. Default is None.
@@ -3240,7 +3239,7 @@ class SQLDataModel:
 
         Raises:
             ``TypeError``: If filename is provided but is not of type 'str' representing a valid pickle filepath.
-            `FileNotFoundError`: If the provided filename could not be found or does not exist.
+            ``FileNotFoundError``: If the provided filename could not be found or does not exist.
         
         Example::
 
@@ -3297,8 +3296,8 @@ class SQLDataModel:
             - ``teradatasql``
 
         Parameters:
-            `sql_query` (str): The SQL query to execute and create the SQLDataModel.
-            `sql_connection` (sqlite3.Connection): The SQLite3 database connection object.
+            ``sql_query`` (str): The SQL query to execute and create the SQLDataModel.
+            ``sql_connection`` (sqlite3.Connection): The SQLite3 database connection object.
             ``dtypes`` (dict, optional): A dictionary of the format 'column': 'python dtype' to assign to values.
             ``**kwargs``: Additional arguments to be passed to the SQLDataModel constructor.
 
@@ -3307,7 +3306,7 @@ class SQLDataModel:
 
         Raises:
             ``TypeError``: If dtypes argument is provided and is not of type ``dict`` representing python data types to assign to values.
-            `WarnFormat`: If the provided SQL connection has not been tested, a warning is issued.
+            ``WarnFormat``: If the provided SQL connection has not been tested, a warning is issued.
             ``SQLProgrammingError``: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
             ``DimensionError``: If the provided SQL query returns no data.
 
@@ -3378,7 +3377,7 @@ class SQLDataModel:
             sdm_table = SQLDataModel.from_sql("my_table", sqls_db_conn)
         ```
         Note:
-            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql` method for writing to the same connection types.
+            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types.
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
             - The ``dtypes``, if provided, are only applied to ``sqlite3`` connection objects as remaining supported connections implement SQL to python adapters.
         """
@@ -3460,8 +3459,8 @@ class SQLDataModel:
             sdm = SQLDataModel.from_text(text_source, table_identifier=2)
 
         Note:
-            - This method is made for parsing ``SQLDataModel`` formatted text, such as the kind generated with ``print(sdm)`` or the output created by the inverse method :meth:`SQLDataModel.to_text`
-            - For parsing other delimited tabular data, this method calls the related :meth:`SQLDataModel.from_csv` method, which parses tabular data constructed with common delimiters.
+            - This method is made for parsing ``SQLDataModel`` formatted text, such as the kind generated with ``print(sdm)`` or the output created by the inverse method :meth:`SQLDataModel.to_text()`
+            - For parsing other delimited tabular data, this method calls the related :meth:`SQLDataModel.from_csv()` method, which parses tabular data constructed with common delimiters.
 
         """
         if not isinstance(text_source, str):
@@ -3526,7 +3525,7 @@ class SQLDataModel:
     @classmethod
     def get_supported_sql_connections(cls) -> tuple:
         """
-        Returns the currently tested DB API 2.0 dialects for use with :meth:`SQLDataModel.from_sql` method.
+        Returns the currently tested DB API 2.0 dialects for use with :meth:`SQLDataModel.from_sql()` method.
 
         Returns:
             ``tuple``: A tuple of supported DB API 2.0 dialects.
@@ -3558,10 +3557,10 @@ class SQLDataModel:
 
         Parameters:
             ``include_index`` (bool, optional): If True, includes the index in the result; if False, excludes the index. Default is False.
-            `include_headers` (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
+            ``include_headers`` (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
 
         Returns:
-            list: The list of tuples representing the SQLDataModel data.
+            ``list``: The list of tuples representing the SQLDataModel data.
 
         Example::
 
@@ -3604,7 +3603,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
+        ```text
 
             ('John', 30, 175.3)
         ```
@@ -3618,7 +3617,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
+        ```text
         
             [('John',), ('Alice',), ('Travis',)]
         ```
@@ -3640,9 +3639,9 @@ class SQLDataModel:
 
         Parameters:
             ``filename`` (str): The name of the CSV file to which the data will be written. Default is None, returning as raw literal.
-            `delimiter` (str, optional): The delimiter to use for separating values. Default is ','.
-            `quotechar` (str, optional): The character used to quote fields. Default is '"'.
-            `lineterminator` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
+            ``delimiter`` (str, optional): The delimiter to use for separating values. Default is ','.
+            ``quotechar`` (str, optional): The character used to quote fields. Default is '"'.
+            ``lineterminator`` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
             ``include_index`` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
             ``**kwargs``: Additional arguments to be passed to the ``csv.writer`` constructor.
 
@@ -3729,8 +3728,9 @@ class SQLDataModel:
                 csvwriter.writerow(headers)
                 csvwriter.writerows(res.fetchall())
             return
-        csv_repr = lineterminator.join([delimiter.join([f'''{quotechar}{col}{quotechar}''' for col in headers]),*[delimiter.join([f'''{quotechar}{cell}{quotechar}''' for cell in row]) for row in res.fetchall()]])
-        return csv_repr
+        else:
+            csv_repr = lineterminator.join([delimiter.join([f'''{quotechar}{col}{quotechar}''' for col in headers]),*[delimiter.join([f'''{quotechar}{cell}{quotechar}''' for cell in row]) for row in res.fetchall()]])
+            return csv_repr
 
     def to_dict(self, orient:Literal["rows","columns","list"]="rows", include_index:bool=None) -> dict|list[dict]:
         """
@@ -3824,7 +3824,7 @@ class SQLDataModel:
         ```
         Note:
             - Use ``include_index`` to return index data, otherwise current instance ``display_index`` value will be used.
-            - For 'list' orientation, data returned is JSON-like in structure, where each row has its own "column": "value" data.
+            - For ``'list'`` orientation, data returned is JSON-like in structure, where each row has its own "column": "value" data.
         """   
         if orient not in ("rows", "columns", "list"):
             raise ValueError(
@@ -3847,12 +3847,12 @@ class SQLDataModel:
         Parameters:
             ``filename`` (str): The file path to save the HTML content. If None, returns the HTML as a string (default is None).
             ``include_index`` (bool): Whether to include the index column in the HTML table (default is current ``display_index``).
-            `encoding` (str): Character encoding to use when writing model to HTML file, default set to 'utf-8'.            
-            `style_params` (dict): A dictionary representing CSS styles {property: value} to customize the appearance of the HTML table (default is None).
+            ``encoding`` (str): Character encoding to use when writing model to HTML file, default set to ``'utf-8'``.            
+            ``style_params`` (dict): A dictionary representing CSS styles {property: value} to customize the appearance of the HTML table (default is None).
 
         Raises:
             ``TypeError``: If ``filename`` is not a valid string when specified or if ``style_params`` is not a dictionary when specified.
-            `OSError`: If encountered while trying to open and write the HTML to the file.
+            ``OSError``: If encountered while trying to open and write the HTML to the file.
 
         Returns:
             ``str`` | ``None``: If ``filename`` is None, returns the HTML content as a string. If ``filename`` is specified, writes to the file and returns None.
@@ -4016,7 +4016,7 @@ class SQLDataModel:
         ```
         Note:
             - When no filename is specified, JSON-like object will be returned as a rowwise array.
-            - Any nested structure will be flattened by this method as well as the :meth:`SQLDataModel.from_json` method.
+            - Any nested structure will be flattened by this method as well as the :meth:`SQLDataModel.from_json()` method.
         """
         if not isinstance(filename, str) and filename is not None:
             raise TypeError(
@@ -4044,11 +4044,11 @@ class SQLDataModel:
         Parameters:
             ``filename`` (str, optional): The name of the file to write the LaTeX content. If not provided, the LaTeX content is returned as a string. Default is None.
             ``include_index`` (bool, optional): Whether to include the index column in the LaTeX output. Default is False.
-            `bold_headers` (bool, optional): Whether the headers should be bolded in the LaTeX table. Default is False.
-            ``min_column_width`` (int, optional): The minimum column width for table cells. Default is current value set on attribute `self.min_column_width`.
-            ``max_column_width`` (int, optional): The maximum column width for table cells. Default is current value set on attribute `self.max_column_width`.
+            ``bold_headers`` (bool, optional): Whether the headers should be bolded in the LaTeX table. Default is False.
+            ``min_column_width`` (int, optional): The minimum column width for table cells. Default is current value set on attribute :py:attr:`SQLDataModel.min_column_width`.
+            ``max_column_width`` (int, optional): The maximum column width for table cells. Default is current value set on attribute :py:attr:`SQLDataModel.max_column_width`.
             ``format_output_as`` (Literal['table', 'document']), optional): Whether the output should be formatted as a LaTeX table or as a standalone document. Default is 'table'.
-            ``column_alignment`` (Literal['left', 'center', 'right', 'dynamic'], optional): The alignment for table columns. Default is current value set on attribute `self.column_alignment`.
+            ``column_alignment`` (Literal['left', 'center', 'right', 'dynamic'], optional): The alignment for table columns. Default is current value set on attribute :py:attr:`SQLDataModel.column_alignment`.
 
         Returns:
             ``str``: If ``filename`` is None, returns the LaTeX table as a string.
@@ -4065,7 +4065,7 @@ class SQLDataModel:
               - ``'table'``: Output formatted as insertable table, beginning and ending with LaTeX ``\\begin{table}`` and ``\\end{table}`` respectively.
               - ``'document'``: Output formatted as standalone document, beginning and ending with LaTeX ``\\begin{document}`` and ``\\end{document}`` respectively.
 
-            - LaTeX table alignment will follow the ``SQLDataModel`` instance alignment, set by :meth:`SQLDataModel.set_column_alignment`:
+            - LaTeX table alignment will follow the ``SQLDataModel`` instance alignment, set by :meth:`SQLDataModel.set_column_alignment()`:
 
               - ``'dynamic'``: Dynamically aligns column content, right for numeric types and left for remaining types.
               - ``'left'``: Left-aligns all column content, equivalent to LaTeX column format: ``|l|``.
@@ -4248,8 +4248,8 @@ class SQLDataModel:
         Use ``include_headers=True`` to return the headers as the first item in the returned sequence.
 
         Parameters:
-            ``include_index`` (bool, optional): If True, includes the index in the result; if False, excludes the index. Default is True.
-            `include_headers` (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
+            ``include_index`` (bool, optional): If True, includes the index in the result, if False, excludes the index. Default is True.
+            ``include_headers`` (bool, optional): If True, includes column headers in the result, if False, excludes headers. Default is False.
 
         Returns:
             ``list``: The list of tuples representing the SQLDataModel data.
@@ -4463,15 +4463,15 @@ class SQLDataModel:
 
     def to_numpy(self, include_index:bool=False, include_headers:bool=False) -> _np.ndarray:
         """
-        Converts ``SQLDataModel`` to a NumPy ``ndarray`` object of shape (rows, columns).
+        Converts ``SQLDataModel`` to a NumPy ``ndarray`` object of shape ``(rows, columns)``.
         Note that the ``numpy`` package must be installed to use this method.
 
         Parameters:
             ``include_index`` (bool, optional): If True, includes the model index in the result. Default is False.
-            `include_headers` (bool, optional): If True, includes column headers in the result. Default is False.
+            ``include_headers`` (bool, optional): If True, includes column headers in the result. Default is False.
         
         Raises:
-            `ModuleNotFoundError`: If NumPy is not installed.
+            ``ModuleNotFoundError``: If NumPy is not installed.
 
         Returns:
             ``numpy.ndarray``: The model's data converted into a NumPy array.
@@ -4540,10 +4540,10 @@ class SQLDataModel:
 
         Parameters:
             ``include_index`` (bool, optional): If True, includes the model index in the result. Default is False.
-            `include_headers` (bool, optional): If True, includes column headers in the result. Default is True.
+            ``include_headers`` (bool, optional): If True, includes column headers in the result. Default is True.
 
         Raises:
-            `ModuleNotFoundError`: If Pandas is not installed.
+            ``ModuleNotFoundError``: If Pandas is not installed.
 
         Returns:
             ``pandas.DataFrame``: The model's data converted to a Pandas DataFrame.
@@ -4580,7 +4580,7 @@ class SQLDataModel:
             2  Travis   35   185.8
         ```
         Note:
-            - SQLDataModel uses different data types than those used in ``pandas``, see :meth:`SQLDataModel.set_column_dtypes` for more information about casting rules.
+            - SQLDataModel uses different data types than those used in ``pandas``, see :meth:`SQLDataModel.set_column_dtypes()` for more information about casting rules.
 
         """
         if not _has_pd:
@@ -4603,7 +4603,7 @@ class SQLDataModel:
             ``**kwargs``: Additional keyword arguments to pass to the pyarrow ``write_table`` function.
 
         Raises:
-            `ModuleNotFoundError`: If the required package ``pyarrow`` is not installed as determined by ``_has_pq`` flag.        
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pq`` flag.        
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid parquet file path.
             ``Exception``: If any unexpected exception occurs during the parquet writing process.
         
@@ -4647,8 +4647,8 @@ class SQLDataModel:
             [3 rows x 3 columns]        
         ```
         Note:
-            - The ``pyarrow`` package is required to use this method as well as the :meth:`SQLDataModel.from_parquet` method.
-            - The :meth:`SQLDataModel.to_dict` method is used prior to writing to parquet to convert the ``SQLDataModel`` into a dictionary suitable for parquet Table format.
+            - The ``pyarrow`` package is required to use this method as well as the :meth:`SQLDataModel.from_parquet()` method.
+            - The :meth:`SQLDataModel.to_dict()` method is used prior to writing to parquet to convert the ``SQLDataModel`` into a dictionary suitable for parquet Table format.
             - Exceptions raised by the ``pyarrow`` package and its methods are caught and reraised when encountered to keep with package error formatting.
         """
         if not _has_pq:
@@ -4728,7 +4728,7 @@ class SQLDataModel:
             - ``replace_existing=True``: Deletes the existing table and replaces it with the SQLDataModel's data.
             - ``replace_existing=False``: Appends to the existing table and performs deduplication immediately after.
 
-        Use :meth:`SQLDataModel.get_supported_sql_connections` to view supported connections.
+        Use :meth:`SQLDataModel.get_supported_sql_connections()` to view supported connections.
         Use ``include_index=True`` to retain the model index in the target table.
 
         Parameters:
@@ -4758,7 +4758,7 @@ class SQLDataModel:
             sdm.to_sql("my_table", sqlite_db_conn, replace_existing=False, include_index=True)
 
         Note:
-            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql` method for writing to the same connection types.
+            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types.
             - Unsupported connection objects will output a ``SQLDataModelWarning`` advising unstable or undefined behavior.
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
@@ -4791,11 +4791,11 @@ class SQLDataModel:
 
         Parameters:
             ``filename`` (str, optional): The name of the file to write the text content. If provided, writes the text to the specified file. Default is None.
-            ``include_index`` (bool, optional): Whether to include the index column in the text output. Default is value set on `self.display_index`.
-            ``min_column_width`` (int, optional): The minimum column width for table cells. Default is value set on `self.min_column_width`.
-            ``max_column_width`` (int, optional): The maximum column width for table cells. Default is value set on `self.max_column_width`.
-            ``float_precision`` (int, optional): The precision for floating-point values. Default is value set on `self.display_float_precision`.
-            ``column_alignment`` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is value set on `self.column_alignment`. Use ``'dynamic'`` dynamically aligns column content, right for numeric types and left for remaining types. Use ``'left'`` left-aligns all column content. Use ``'center'`` center-aligns all column content. Use ``'right'`` right-aligns all column content.
+            ``include_index`` (bool, optional): Whether to include the index column in the text output. Default is value set on :py:attr:`SQLDataModel.display_index`.
+            ``min_column_width`` (int, optional): The minimum column width for table cells. Default is value set on :py:attr:`SQLDataModel.min_column_width`.
+            ``max_column_width`` (int, optional): The maximum column width for table cells. Default is value set on :py:attr:`SQLDataModel.max_column_width`.
+            ``float_precision`` (int, optional): The precision for floating-point values. Default is value set on :py:attr:`SQLDataModel.display_float_precision`.
+            ``column_alignment`` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is value set on :py:attr:`SQLDataModel.column_alignment`. Use ``'dynamic'`` dynamically aligns column content, right for numeric types and left for remaining types. Use ``'left'`` left-aligns all column content. Use ``'center'`` center-aligns all column content. Use ``'right'`` right-aligns all column content.
 
         Raises:
             ``TypeError``: If arguments are provided but are not the correct types: ``filename`` (str), ``include_index`` (bool), ``min_column_width`` (int), ``max_column_width`` (int), ``float_precision`` (int).
@@ -4963,7 +4963,7 @@ class SQLDataModel:
 
         Raises:
             ``TypeError``: If ``db`` is provided and is not of type 'str' representing a valid sqlite database save path.
-            `sqlite3.Error`: If there is an issue with the SQLite database operations during backup.
+            ``sqlite3.Error``: If there is an issue with the SQLite database operations during backup.
 
         Returns:
             ``None``
@@ -5003,7 +5003,7 @@ class SQLDataModel:
 
     def __lt__(self, other) -> SQLDataModel:
         """
-        Implements the less than operator '<' for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
+        Implements the less than operator ``<`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
         Parameters:
             ``other``: The ``SQLDataModel`` or scalar (``int``, ``str``, ``float``) to compare with.
@@ -5051,7 +5051,7 @@ class SQLDataModel:
             - For SQLDataModel ``other``, compares each element across X rows for Y columns for all (X_i, Y_j) in range of ``row_count`` and ``column_count`` and returns those row indicies evaluating to ``True``.
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
-            - Operations can be chained using standard ``set`` operators like ``'&'`` and ``'|'`` to allow complex filtering, multiple operations require parenthesis.
+            - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
         """        
         self_data = self.data()
@@ -5064,7 +5064,7 @@ class SQLDataModel:
     
     def __le__(self, other) -> SQLDataModel:
         """
-        Implements the less than or equal to operator '<=' for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
+        Implements the less than or equal to operator ``<=`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
         Parameters:
             ``other``: The ``SQLDataModel`` or scalar (``int``, ``str``, ``float``) to compare with.
@@ -5172,7 +5172,7 @@ class SQLDataModel:
             - For SQLDataModel ``other``, compares each element across X rows for Y columns for all (X_i, Y_j) in range of ``row_count`` and ``column_count`` and returns those row indicies evaluating to ``True``.
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
-            - Operations can be chained using standard ``set`` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+            - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
         """        
         self_data = self.data()
@@ -5185,7 +5185,7 @@ class SQLDataModel:
 
     def __ne__(self, other) -> SQLDataModel:
         """
-        Implements the not equal to operator '!=' for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
+        Implements the not equal to operator ``!=`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
         Parameters:
             ``other``: The ``SQLDataModel`` or scalar (``int``, ``str``, ``float``) to compare with.
@@ -5234,7 +5234,7 @@ class SQLDataModel:
             - For SQLDataModel ``other``, compares each element across X rows for Y columns for all (X_i, Y_j) in range of ``row_count`` and ``column_count`` and returns those row indicies evaluating to ``True``.
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
-            - Operations can be chained using standard ``set`` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+            - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
         """          
         self_data = self.data()
@@ -5247,7 +5247,7 @@ class SQLDataModel:
 
     def __gt__(self, other) -> SQLDataModel:
         """
-        Implements the greater than operator '>' for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
+        Implements the greater than operator ``>`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
         Parameters:
             ``other``: The ``SQLDataModel`` or scalar (`int`, ``str``, ``float``) to compare with.
@@ -5294,7 +5294,7 @@ class SQLDataModel:
             - For SQLDataModel ``other``, compares each element across X rows for Y columns for all (X_i, Y_j) in range of ``row_count`` and ``column_count`` and returns those row indicies evaluating to ``True``.
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
-            - Operations can be chained using standard ``set`` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+            - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
         """          
         self_data = self.data()
@@ -5307,7 +5307,7 @@ class SQLDataModel:
 
     def __ge__(self, other) -> SQLDataModel:
         """
-        Implements the greater than or equal to operator '>=' for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
+        Implements the greater than or equal to operator ``>=`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
         Parameters:
             ``other``: The ``SQLDataModel`` or scalar (`int`, ``str``, ``float``) to compare with.
@@ -5355,7 +5355,7 @@ class SQLDataModel:
             - For SQLDataModel ``other``, compares each element across X rows for Y columns for all (X_i, Y_j) in range of ``row_count`` and ``column_count`` and returns those row indicies evaluating to ``True``.
             - All the equality operations return a python ``set`` object containing the row indicies which result from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
-            - Operations can be chained using standard ``set`` operators like '&' and '|' to allow complex filtering, multiple operations require parenthesis.
+            - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
         """          
         self_data = self.data()
@@ -5368,7 +5368,7 @@ class SQLDataModel:
 
     def __add__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
         """
-        Implements the + operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``+`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (str | int | float): The value to be added to each element in the SQLDataModel.
@@ -5407,7 +5407,7 @@ class SQLDataModel:
 
     def __sub__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
-        Implements the - operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``-`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (int | float): The value to subtract from each element in the SQLDataModel.
@@ -5440,7 +5440,7 @@ class SQLDataModel:
 
     def __mul__(self, value:int|float) -> SQLDataModel:
         """
-        Implements the * operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``*`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (int | float): The value to multiply each element in the SQLDataModel by.
@@ -5471,14 +5471,14 @@ class SQLDataModel:
 
     def __truediv__(self, value:int|float) -> SQLDataModel:
         """
-        Implements the / operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``/`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (int | float): The value to divide each element in the SQLDataModel by.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
-            `ZeroDivisionError`: If ``value`` is 0.
+            ``ZeroDivisionError``: If ``value`` is 0.
 
         Returns:
             ``SQLDataModel``: A new SQLDataModel resulting from the division operation.
@@ -5503,7 +5503,7 @@ class SQLDataModel:
         
     def __pow__(self, value:int|float) -> SQLDataModel:
         """
-        Implements the ** operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``**`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (int | float): The value to raise each element in the SQLDataModel to.
@@ -5534,7 +5534,7 @@ class SQLDataModel:
 
     def __iadd__(self, value) -> SQLDataModel:
         """
-        Implements the += operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``+=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (str | int | float | SQLDataModel): The value to be added to each element in the SQLDataModel.
@@ -5586,7 +5586,7 @@ class SQLDataModel:
     
     def __isub__(self, value) -> SQLDataModel:
         """
-        Implements the -= operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``-=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (int | float | SQLDataModel): The value to subtract from each element in the SQLDataModel.
@@ -5663,14 +5663,14 @@ class SQLDataModel:
 
     def __idiv__(self, value) -> SQLDataModel:
         """
-        Implements the /= operator functionality for compatible ``SQLDataModel`` operations.
+        Implements the ``/=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
             ``value`` (int | float): The value to divide each element in the SQLDataModel by.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
-            `ZeroDivisionError`: If ``value`` is 0.
+            ``ZeroDivisionError``: If ``value`` is 0.
 
         Returns:
             ``SQLDataModel``: The modified SQLDataModel after the division operation.
@@ -5719,7 +5719,7 @@ class SQLDataModel:
         Iterates over a range of rows in the ``SQLDataModel`` based on the current model's row indices.
 
         Raises:
-            `StopIteration`: When there are no more rows to return.
+            ``StopIteration``: When there are no more rows to return.
 
         Yields:
             ``tuple``: A row fetched from the ``SQLDataModel``.
@@ -5752,7 +5752,7 @@ class SQLDataModel:
             (2, 'Travis', 35, 185.8)
         ```
         Note:
-            - This iterator fetches rows from the ``SQLDataModel`` using a SQL statement generated by the :meth:`SQLDataModel._generate_sql_stmt` method.
+            - This iterator fetches rows from the ``SQLDataModel`` using a SQL statement generated by the :meth:`SQLDataModel._generate_sql_stmt()` method.
             - The iteration starts from the first row, index 0, and continues until :py:attr:`SQLDataModel.row_count` is reached.
         """  
         yield from (self.sql_db_conn.execute(self._generate_sql_stmt(include_index=True, rows=slice(0,self.row_count))))
@@ -5814,7 +5814,7 @@ class SQLDataModel:
         Updates specified rows and columns in the SQLDataModel with the provided values.
 
         Parameters:
-            `target_indicies`: Indices specifying the rows and columns to be updated. This can be an integer, a tuple, a slice, or a combination of these.
+            ``target_indicies``: Indices specifying the rows and columns to be updated. This can be an integer, a tuple, a slice, or a combination of these.
             ``update_values``: The values to be assigned to the corresponding model records. It can be of types: str, int, float, bool, bytes, list, tuple, or another SQLDataModel object.
 
         Raises:
@@ -5910,7 +5910,7 @@ class SQLDataModel:
             [5 rows x 4 columns]            
         ```
         Note:
-            - If ``update_values`` is another SQLDataModel object, its data will be normalized using the :meth:`SQLDataModel.data` method.
+            - If ``update_values`` is another SQLDataModel object, its data will be normalized using the :meth:`SQLDataModel.data()` method.
             - The ``target_indicies`` parameter can be an integer, a tuple of disconnected row indices, a slice representing a range of rows, a string or list of strings representing column names, or a tuple combining row and column indices.
             - Values can be single values or iterables matching the specified rows and columns.
         """        
@@ -5998,9 +5998,9 @@ class SQLDataModel:
 
         Formatting:
             - Default alignment is right-aligned for numeric types and left-aligned for remaining types
-            - To override default and set custom alignment, use :meth:`SQLDataModel.set_column_alignment` method
-            - Max displayed rows set to 1,000 by default, use :meth:`SQLDataModel.set_display_max_rows` to modify
-            - Set table color using :meth:`SQLDataModel.set_display_color` method
+            - To override default and set custom alignment, use :meth:`SQLDataModel.set_column_alignment()` method
+            - Max displayed rows set to ``1000`` by default, use :meth:`SQLDataModel.set_display_max_rows()` to modify
+            - Set table color using :meth:`SQLDataModel.set_display_color()` method
 
         Example::
 
@@ -6197,7 +6197,7 @@ class SQLDataModel:
 
         Parameters:
             ``other`` (SQLDataModel | list | tuple): The SQLDataModel, list, or tuple to concatenate or append.
-            `inplace` (bool, optional): If True (default), performs the concatenation in-place, modifying the current model. If False, returns a new ``SQLDataModel`` instance with the concatenated result.
+            ``inplace`` (bool, optional): If True (default), performs the concatenation in-place, modifying the current model. If False, returns a new ``SQLDataModel`` instance with the concatenated result.
 
         Returns:
             ``None`` or ``SQLDataModel``: ``None`` when ``inplace = True`` and ``SQLDataModel`` when ``in_place = False``
@@ -6267,7 +6267,7 @@ class SQLDataModel:
         ```
         Note:
             - Models must be of compatible dimensions with equal ``column_count`` or equivalent dimension if ``list`` or ``tuple``
-            - Headers are inherited from the model calling the :meth:`SQLDataModel.concat` method whether done inplace or being returned as new instance.
+            - Headers are inherited from the model calling the :meth:`SQLDataModel.concat()` method whether done inplace or being returned as new instance.
         """        
         if not isinstance(other, (SQLDataModel,list,tuple)):
             raise TypeError(
@@ -6356,9 +6356,9 @@ class SQLDataModel:
 
         Parameters:
             ``subset`` (list[str], optional): List of columns to consider when identifying duplicates. If None, all columns are considered. Defaults to None.
-            `reset_index` (bool, optional): If True, resets the index after deduplication starting at 0; otherwise retains current indicies.
-            `keep_first` (bool, optional): If True, keeps the first occurrence of each duplicated row; otherwise, keeps the last occurrence. Defaults to True.
-            `inplace` (bool, optional): If True, modifies the current SQLDataModel in-place; otherwise, returns a new SQLDataModel without duplicates. Defaults to True.
+            ``reset_index`` (bool, optional): If True, resets the index after deduplication starting at 0; otherwise retains current indicies.
+            ``keep_first`` (bool, optional): If True, keeps the first occurrence of each duplicated row; otherwise, keeps the last occurrence. Defaults to True.
+            ``inplace`` (bool, optional): If True, modifies the current SQLDataModel in-place; otherwise, returns a new SQLDataModel without duplicates. Defaults to True.
 
         Raises:
             ``ValueError``: If a column specified in ``subset`` is not found in the SQLDataModel.
@@ -6432,8 +6432,8 @@ class SQLDataModel:
 
         Parameters:
             ``value``: The scalar value to fill missing values with. Should be of type 'str', 'int', 'float', 'bytes', or 'bool'.
-            `inplace` (bool): If True, modifies the current instance in-place. If False, returns a new instance with missing values filled.
-            `strictly_null` (bool): If True, only strictly null values are filled. If False, values like 'NA', 'NaN', 'n/a', 'na', and whitespace only strings are also filled.
+            ``inplace`` (bool): If True, modifies the current instance in-place. If False, returns a new instance with missing values filled.
+            ``strictly_null`` (bool): If True, only strictly null values are filled. If False, values like ``'NA'``, ``'NaN'``, ``'n/a'``, ``'na'``, and whitespace only strings are also filled.
 
         Raises:
             ``TypeError``: If ``value`` is not a scalar type or is incompatible with SQLite's type system.
@@ -6496,7 +6496,7 @@ class SQLDataModel:
 
         Parameters:
             ``columns`` (str, list, tuple): Columns to group by. Accepts either individual strings or a list/tuple of strings.
-            `order_by_count` (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
+            ``order_by_count`` (bool, optional): If True (default), orders the result by count. If False, orders by the specified columns.
 
         Raises:
             ``TypeError``: If the columns argument is not of type str, list, or tuple.
@@ -6600,9 +6600,9 @@ class SQLDataModel:
 
         Parameters:
             ``min_row`` (int, optional): The minimum row index to start iterating from (inclusive). Defaults to None.
-            `max_row` (int, optional): The maximum row index to iterate up to (exclusive). Defaults to None.
+            ``max_row`` (int, optional): The maximum row index to iterate up to (exclusive). Defaults to None.
             ``include_index`` (bool, optional): Whether to include the row index in the output. Defaults to True.
-            `include_headers` (bool, optional): Whether to include headers as the first row. Defaults to False.
+            ``include_headers`` (bool, optional): Whether to include headers as the first row. Defaults to False.
 
         Yields:
             ``Generator``: Rows from the specified range, including headers if specified.
@@ -6630,10 +6630,10 @@ class SQLDataModel:
         Returns a generator object of the ``SQLDataModel`` as namedtuples using current headers as field names.
 
         Parameters:
-            `include_idx_col` (bool, optional): Whether to include the index column in the namedtuples. Defaults to False.
+            ``include_idx_col`` (bool, optional): Whether to include the index column in the namedtuples. Defaults to False.
 
         Raises:
-            ``ValueError``: Raised if headers are not valid Python identifiers. Use :meth:`SQLDataModel.normalize_headers` method to fix.
+            ``ValueError``: Raised if headers are not valid Python identifiers. Use :meth:`SQLDataModel.normalize_headers()` method to fix.
 
         Yields:
             ``Generator``: Namedtuples representing rows with field names based on current headers.
@@ -6666,7 +6666,7 @@ class SQLDataModel:
 
         Parameters:
             ``merge_with`` (SQLDataModel): The SQLDataModel to merge with the current model.
-            `how` (Literal["left", "right", "inner", "full outer", "cross"]): The type of merge to perform.
+            ``how`` (Literal["left", "right", "inner", "full outer", "cross"]): The type of merge to perform.
             ``left_on`` (str): The column name from the current model to use as the left join key.
             ``right_on`` (str): The column name from the ``merge_with`` model to use as the right join key.
         
@@ -6709,7 +6709,7 @@ class SQLDataModel:
         ```
         Note:
             - The resulting SQLDataModel is created based on the ``sqlite3`` join definition and specified columns and merge type.
-            - The columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates` for details.
+            - The columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates()` for details.
         """        
         if not isinstance(merge_with, SQLDataModel):
             raise TypeError(
@@ -6836,7 +6836,7 @@ class SQLDataModel:
             [4 rows x 4 columns]        
         ```
         Note:
-            - The current index should be viewed more as a soft row number, to assign hard indicies use :meth:`SQLDataModel.freeze_index` method.
+            - The current index should be viewed more as a soft row number, to assign hard indicies use :meth:`SQLDataModel.freeze_index()` method.
             - Setting ``start_index`` too a very large negative or positive integer made lead to unpredictable behavior.
 
         """
@@ -6866,7 +6866,7 @@ class SQLDataModel:
         Sets the table string representation color when ``SQLDataModel`` is displayed in the terminal.
 
         Parameters:
-            `color` (str or tuple): Color to set. Accepts hex value (e.g., ``'#A6D7E8'``) or tuple of RGB values (e.g., ``(166, 215, 232)``).
+            ``color`` (str or tuple): Color to set. Accepts hex value (e.g., ``'#A6D7E8'``) or tuple of RGB values (e.g., ``(166, 215, 232)``).
 
         Returns:
             ``None``
@@ -6893,11 +6893,11 @@ class SQLDataModel:
 
     def sort(self, by:str|list[str]=None, asc:bool=True) -> SQLDataModel:
         """
-        Sort columns in the dataset by the specified ordering. If no value is specified, the current ``sql_idx`` column is used with the default ordering `asc = True`.
+        Sort columns in the dataset by the specified ordering. If no value is specified, the current ``sql_idx`` column is used with the default ordering ``asc = True``.
 
         Parameters:
             ``by`` (str | list[str]): The column or list of columns by which to sort the dataset. Defaults to sorting by the dataset's index.
-            `asc` (bool): If True, sort in ascending order; if False, sort in descending order. Defaults to ascending order.
+            ``asc`` (bool): If True, sort in ascending order; if False, sort in descending order. Defaults to ascending order.
 
         Raises:
             ``TypeError``: If value for ``by`` argument is not one of type 'str' or 'list'
@@ -7013,7 +7013,7 @@ class SQLDataModel:
             head_result = sdm.tail(3)
         
         Note:
-            - See :meth:`SQLDataModel.head` for inverse method
+            - See :meth:`SQLDataModel.head()` for inverse method
 
         """
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
@@ -7187,7 +7187,7 @@ class SQLDataModel:
         Note:
             - The number of ``args`` in the inspected signature of ``func`` must equal the current number of ``SQLDataModel`` columns.
             - The number of ``func`` args must match the current number of columns in the model, or an ``Exception`` will be raised.
-            - Use :meth:`SQLDataModel.generate_apply_function_stub` method to return a preconfigured template using current ``SQLDataModel`` columns and dtypes to assist.
+            - Use :meth:`SQLDataModel.generate_apply_function_stub()` method to return a preconfigured template using current ``SQLDataModel`` columns and dtypes to assist.
         """        
         ### get column name from str or index ###
         if not isinstance(func, Callable):
@@ -7217,7 +7217,7 @@ class SQLDataModel:
         Raises:
             ``TypeError``: If ``columns`` is not of type ``str``, ``int``, or ``list``.
             ``IndexError``: If ``columns`` is of type ``int`` and the index is outside the valid range.
-            ``ValueError``: If a specified column in ``columns`` is not found in the current dataset. Use ``get_headers()`` to view valid columns.
+            ``ValueError``: If a specified column in ``columns`` is not found in the current dataset. Use :meth:`SQLDataModel.get_headers()` to view valid columns.
 
         Returns:
             ``dict``: A dictionary mapping column names to their data types.
@@ -7275,7 +7275,7 @@ class SQLDataModel:
             service: REAL
         ```
         Note:
-            - SQLDataModel index column is not included, only columns specified in the ``headers`` attribute are in scope
+            - SQLDataModel index column is not included, only columns specified in the :py:attr:`SQLDataModel.headers` attribute are in scope
             - Only the dtypes are returned, any primary key references are removed to ensure compatability with external calls
             - Python datatypes are returned in lower case, while SQL dtypes are returned in upper case to reflect convention
         """        
@@ -7384,7 +7384,7 @@ class SQLDataModel:
         Returns the ``SQLDataModel`` table name currently being used by the model as an alias for any SQL queries executed by the user and internally.
 
         Returns:
-            ``str``: The current ``SQLDataModel`` table name.
+            ``str``: The current ``SQLDataModel`` table name set by value of attribute :py:attr:`SQLDataModel.model_name`.
         
         Example::
 
@@ -7407,7 +7407,7 @@ class SQLDataModel:
         Sets the new ``SQLDataModel`` table name that will be used as an alias for any SQL queries executed by the user or internally.
 
         Parameters:
-            `new_name` (str): The new table name for the ``SQLDataModel``.
+            ``new_name`` (str): The new table name for the ``SQLDataModel``.
 
         Raises:
             ``SQLProgrammingError``: If unable to rename the model table due to SQL execution failure.
@@ -7443,7 +7443,7 @@ class SQLDataModel:
         This method is called by other methods which expect results to be returned from their execution.
 
         Parameters:
-            `sql_query` (str): The SQL query to execute with the expectation of rows returned.
+            ``sql_query`` (str): The SQL query to execute with the expectation of rows returned.
             ``**kwargs`` (optional): Additional keyword args to pass to ``SQLDataModel`` constructor
 
         Raises:
@@ -7467,7 +7467,7 @@ class SQLDataModel:
             result_model = sdm.execute_fetch(query)
 
         Important:
-            - The default table name is ``'sdm'``, or you can use :meth:`SQLDataModel.get_model_name` to view the current model alias.
+            - The default table name is ``'sdm'``, or you can use :meth:`SQLDataModel.get_model_name()` to view the current model alias.
             - This function is the primary method used by ``SQLDataModel`` methods that are expected to return a new instance.
         """
         try:
@@ -7494,7 +7494,7 @@ class SQLDataModel:
         Executes an arbitrary SQL query against the current model without the expectation of selection or returned rows.
 
         Parameters:
-            `sql_stmt` (str): The SQL query to execute.
+            ``sql_stmt`` (str): The SQL query to execute.
             
         Raises:
             ``SQLProgrammingError``: If the SQL execution fails.
@@ -7513,8 +7513,8 @@ class SQLDataModel:
             sdm.execute_statement('UPDATE table SET column = value WHERE condition')
 
         Note:
-            - To execute a query with the expectation of results, see :meth:`SQLDataModel.execute_fetch` method
-            - To execute multiple queries within a single transaction, see :meth:`SQLDataModel.execute_transaction` method        
+            - To execute a query with the expectation of results, see :meth:`SQLDataModel.execute_fetch()` method
+            - To execute multiple queries within a single transaction, see :meth:`SQLDataModel.execute_transaction()` method        
         """
         try:
             self.sql_db_conn.execute(sql_stmt)
@@ -7531,7 +7531,7 @@ class SQLDataModel:
         Executes a prepared SQL script wrapped in a transaction against the current model without the expectation of selection or returned rows.
 
         Parameters:
-            `sql_script` (str): The SQL script to execute within a transaction.
+            ``sql_script`` (str): The SQL script to execute within a transaction.
 
         Raises:
             ``SQLProgrammingError``: If the SQL execution fails.
@@ -7557,7 +7557,7 @@ class SQLDataModel:
 
         Note:
             - If no errors were raised, the transaction was successfully executed as provided.
-            - Parameters cannot be passed to as a transaction script in ``sqlite3``, use :meth:`SQLDataModel.execute_fetch` method if parameter bindings are required.
+            - Parameters cannot be passed to as a transaction script in ``sqlite3``, use :meth:`SQLDataModel.execute_fetch()` method if parameter bindings are required.
             - Many other methods heavily rely on the :meth:`SQLDataModel.execute_transaction` method, therefore modifying it may adversly affect many other methods.
 
         """
@@ -7624,7 +7624,7 @@ class SQLDataModel:
         ```
         Note:
             - Freezing the index will assign the current :py:attr:`SQLDataModel.sql_idx` for each row as a new column, leaving the current index in place.
-            - To modify the actual :py:attr:`SQLDataModel.sql_idx` value, use the :meth:`SQLDataModel.reset_index` method instead.
+            - To modify the actual :py:attr:`SQLDataModel.sql_idx` value, use the :meth:`SQLDataModel.reset_index()` method instead.
         """
         if not isinstance(column_name, str):
             raise TypeError(
@@ -7743,7 +7743,7 @@ class SQLDataModel:
             sdm.apply_function_to_column(lambda x, y: x + y, column=1)
 
         Note:
-            - This method is a simplified version of the :meth:`SQLDataModel.apply` method, which can be used for arbitrary function params and inputs.
+            - This method is a simplified version of the :meth:`SQLDataModel.apply()` method, which can be used for arbitrary function params and inputs.
             - If providing a function name, ensure it can be used a valid ``sqlite3`` identifier for the instance's connection otherwise ``SQLProgrammingError`` will be raised.
 
         """
@@ -7797,7 +7797,7 @@ class SQLDataModel:
 
     def generate_apply_function_stub(self) -> str:
         """
-        Generates a function template using the current ``SQLDataModel`` to format function arguments for the :meth:`SQLDataModel.apply_function_to_column` method.
+        Generates a function template using the current ``SQLDataModel`` to format function arguments for the :meth:`SQLDataModel.apply_function_to_column()` method.
 
         Returns:
             ``str``: A string representing the function template.
@@ -7827,14 +7827,14 @@ class SQLDataModel:
 
         Note:
             - This method is to meant as a general informative tool or for debugging assistance if needed
-            - See :meth:`SQLDataModel.apply` method for usage and implementation of functions in SQLDataModel using ``sqlite3`` 
+            - See :meth:`SQLDataModel.apply()` method for usage and implementation of functions in SQLDataModel using ``sqlite3`` 
         """
         func_signature = ", ".join([f"""{k.replace(" ","_")}:{v[1]}""" for k,v in self.header_master.items() if k != self.sql_idx])
         return f"""def func({func_signature}):\n    # apply logic and return value\n    return"""
     
     def insert_row(self, values:list|tuple=None) -> None:
         """
-        Inserts a row in the ``SQLDataModel`` at index :py:attr:`self.rowcount + 1 <SQLDataModel.SQLDataModel.SQLDataModel.rowcount>` with provided ``values``. If ``values=None``, an empty row with SQL ``null`` values will be used.
+        Inserts a row in the ``SQLDataModel`` at index :py:attr:`self.rowcount + 1 <SQLDataModel.rowcount>` with provided ``values``. If ``values=None``, an empty row with SQL ``null`` values will be used.
 
         Parameters:
             ``values`` (list or tuple, optional): The values to be inserted into the row. If not provided or set to None, an empty row with SQL ``null`` values will be inserted.
@@ -7912,12 +7912,12 @@ class SQLDataModel:
         Updates a specific cell in the ``SQLDataModel`` at the given row and column indices with the provided value.
 
         Parameters:
-            `row_index` (int): The index of the row to be updated.
-            `column_index` (int or str): The index or name of the column to be updated.
+            ``row_index`` (int): The index of the row to be updated.
+            ``column_index`` (int or str): The index or name of the column to be updated.
             ``value``: The new value to be assigned to the specified cell.
 
         Raises:
-            ``TypeError``: If row_index is not of type 'int' or if column_index is not of type 'int' or 'str'.
+            ``TypeError``: If ``row_index`` is not of type 'int' or if ``column_index`` is not of type 'int' or 'str'.
             ``ValueError``: If the provided row index is outside the current model range.
             ``IndexError``: If the provided column index (when specified as an integer) is outside of the current model range.
             ``SQLProgrammingError``: If there is an issue with the SQL execution during the update.
@@ -8006,7 +8006,7 @@ class SQLDataModel:
               - :py:attr:`SQLDataModel.row_count`: Optionally updated, represents current row count.
 
         Parameters:
-            `update_row_meta` (bool, optional): If True, updates row metadata information; otherwise, retrieves column metadata only (default).
+            ``update_row_meta`` (bool, optional): If True, updates row metadata information; otherwise, retrieves column metadata only (default).
         
             
         Returns:
@@ -8090,14 +8090,14 @@ class SQLDataModel:
 
         Parameters:
             ``columns`` (list of str, optional): The list of columns to include in the SQL statement. If not provided, all columns from the model will be included.
-            `rows` (int, slice, tuple, optional): The rows to include in the SQL statement. It can be an integer for a single row, a slice for a range of rows, or a tuple for specific row indices. If not provided, all rows will be included.
+            ``rows`` (int, slice, tuple, optional): The rows to include in the SQL statement. It can be an integer for a single row, a slice for a range of rows, or a tuple for specific row indices. If not provided, all rows will be included.
             ``include_index`` (bool, optional): If True, include the primary index column in the SQL statement.
 
         Returns:
             ``str``: The generated SQL statement.   
 
         Note:
-            - No validation is performed on row or column indicies, see :meth:`SQLDataModel.validate_indicies` for implementation and usage.
+            - No validation is performed on row or column indicies, see :meth:`SQLDataModel.validate_indicies()` for implementation and usage.
         """
         if columns is None:
             columns = self.headers
@@ -8119,13 +8119,13 @@ class SQLDataModel:
     
     def _generate_unordered_sql_stmt(self, n_rows:int=None, columns:list[str]=None, include_index:bool=True, ordering:Literal["asc","desc","random"]="asc") -> str:
         """
-        Generates an SQL statement for fetching unordered rows from the SQLDataModel, used by :meth:`SQLDataModel.head`, :meth:`SQLDataModel.tail` and :meth:`SQLDataModel.sample` methods to fetch specified number of rows.
+        Generates an SQL statement for fetching unordered rows from the SQLDataModel, used by :meth:`SQLDataModel.head()`, :meth:`SQLDataModel.tail()` and :meth:`SQLDataModel.sample()` methods to fetch specified number of rows.
 
         Parameters:
             ``n_rows`` (int): The number of rows to fetch. If ``None``, fetches all rows.
             ``columns`` (list[str]): The list of columns to include in the SELECT statement. If ``None``, includes all columns.
             ``include_index`` (bool): If True, includes the index column in the SELECT statement.
-            `ordering` (Literal["asc", "desc", "random"]): The ordering of the rows. Can be 'asc' (ascending), 'desc' (descending), or 'random'.
+            ``ordering`` (Literal["asc", "desc", "random"]): The ordering of the rows. Can be ``'asc'`` (ascending), ``'desc'`` (descending), or 'random'.
 
         Returns:
             ``str``: The SQL statement for fetching unordered rows with specified ordering and limit.
@@ -8198,8 +8198,8 @@ class SQLDataModel:
         Generates and executes a SQL update statement to modify specific rows and columns with provided values in the SQLDataModel.
 
         Parameters:
-            `rows_to_update`: A tuple of row indices to be updated. If set to None, it defaults to all rows in the SQLDataModel.
-            `columns_to_update`: A list of column names to be updated. If set to None, it defaults to all columns in the SQLDataModel.
+            ``rows_to_update``: A tuple of row indices to be updated. If set to None, it defaults to all rows in the SQLDataModel.
+            ``columns_to_update``: A list of column names to be updated. If set to None, it defaults to all columns in the SQLDataModel.
             ``values_to_update``: A list of tuples representing values to update in the specified rows and columns.
 
         Raises:
@@ -8324,7 +8324,7 @@ class SQLDataModel:
 
     def _get_display_args(self) -> dict:
         """
-        Retrieves the current display configuration settings of the ``SQLDataModel`` with the correct ``kwargs`` for the class :meth:`SQLDataModel.__init__` method.
+        Retrieves the current display configuration settings of the ``SQLDataModel`` with the correct ``kwargs`` for the class :meth:`SQLDataModel.__init__()` method.
 
         Returns:
             ``dict``: A dictionary containing the display configuration settings in the format ``{'setting': 'value'}``.
@@ -8356,7 +8356,7 @@ class SQLDataModel:
               - tuple[int|slice, str|list]: Two-dimensional indexing with rows and columns.
 
         Parameters:
-            `indicies`: Specifies the indices for rows and columns.
+            ``indicies``: Specifies the indices for rows and columns.
 
         Raises:
             ``TypeError``: If the type of indices is invalid such as a float for row index or a boolean for a column name index.

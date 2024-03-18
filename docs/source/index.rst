@@ -1,5 +1,5 @@
-SQLDataModel Package
-========================================
+SQLDataModel
+============
 
 .. toctree::
    :maxdepth: 3
