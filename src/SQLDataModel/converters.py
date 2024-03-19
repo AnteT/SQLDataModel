@@ -2,19 +2,19 @@ import sqlite3, datetime
 
 def register_adapters_and_converters():
     def adapt_date(val):
-        """unchanged from sqlite3 default adapters"""
+        """Unchanged from sqlite3 default adapters"""
         return val.isoformat()
 
     def adapt_datetime(val):
-        """unchanged from sqlite3 default adapters"""
+        """Unchanged from sqlite3 default adapters"""
         return val.isoformat(" ")
 
     def convert_date(val):
-        """modified to avoid ValueError on parsing date from datetime and restrict input to first 10 items of val"""
+        """Modified to avoid ValueError on parsing date from datetime and restrict input to first 10 items of val"""
         return datetime.date(*map(int, val[:10].split(b"-")))
 
     def convert_timestamp(val):
-        """modified to avoid ValueError from parsing datetime from date and provide default timepart to val"""
+        """Modified to avoid ValueError from parsing datetime from date and provide default timepart to val"""
         if len(val) <= 10:
             datepart, timepart = val, b'00:00:00'
         else:

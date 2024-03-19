@@ -57,9 +57,14 @@ html_theme_options = {
     'display_version': False
 }
 
-def process_docstring(app, what, name, obj, options, lines):
-    for i in range(len(lines)):
+def process_docstring(app, what, name, obj, options, lines:list[str]):
+    i = 0
+    while i < len(lines):
         lines[i] = lines[i].replace('```python', '.. code-block:: python').replace('```shell', '.. code-block:: console').replace('```text', '.. code-block:: text').replace('```','')
+        if '.. code-block:: ' in lines[i]:
+            lines.insert(i + 1, '') # insert blank line to accomodate removal of extra line preceding directives
+            i += 1 
+        i += 1
 
 def setup(app):
     app.add_css_file('custom.css')  # custom css file has to be placed in ./docs/source/_static/custom.css

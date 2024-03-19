@@ -55,7 +55,6 @@ class SQLDataModel:
     -----
 
     ```python
-
         from SQLDataModel import SQLDataModel
         
         # Lets grab a random table from Wikipedia
@@ -64,10 +63,9 @@ class SQLDataModel:
         # Lets see what we found
         print(sdm)
     ```
-    This would output:
+    This will output:
 
     ```shell
-
         ┌───────────────┬──────┬──────┬──────────┬──────────┬──────┬──────┬───────┐
         │ Confederation │  AFC │  CAF │ CONCACAF │ CONMEBOL │  OFC │ UEFA │ Total │
         ├───────────────┼──────┼──────┼──────────┼──────────┼──────┼──────┼───────┤
@@ -134,10 +132,9 @@ class SQLDataModel:
         # View result
         print(sdm)
 
-    This would output:
+    This will output:
         
     ```shell
-
         ┌────────┬─────────────┬──────────┬────────┬────────┬───────┬────────┐
         │ metric │ passengerid │ survived │ pclass │    sex │   age │   fare │
         ├────────┼─────────────┼──────────┼────────┼────────┼───────┼────────┤
@@ -159,7 +156,6 @@ class SQLDataModel:
     Move data quickly from one source or format to another:
 
     ```python
-
         # Load it to your destination database:
         sdm.to_sql("new_table", destination_db_conn)
 
@@ -223,7 +219,6 @@ class SQLDataModel:
     SQLDataModel also pretty prints your table in any color you specify, use :meth:`SQLDataModel.set_display_color()` and provide either a hex value or a tuple of rgb and print the table, example output:
 
     ```shell
-
         ┌───┬─────────────────────┬────────────┬─────────────┬────────┬─────────┐
         │   │ full_name           │ date       │ country     │    pin │ service │
         ├───┼─────────────────────┼────────────┼─────────────┼────────┼─────────┤
@@ -284,7 +279,6 @@ class SQLDataModel:
             print(model)
         
         ```shell
-
             ┌────────┬──────┬──────┐
             │ Name   │  Age │ Sex  │
             ├────────┼──────┼──────┤
@@ -719,7 +713,6 @@ class SQLDataModel:
         Example of implementation for SQLDataModel:
 
         ```python
-
             # Given a list of headers
             original_headers = ['ID', 'ID', 'Name', 'Name', 'Name', 'Unique']
 
@@ -733,7 +726,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ID as ID
             ID as ID_2
             Name as Name
@@ -943,7 +935,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───────┬─────────┬──────┬─────────┐
             │ first │ last    │  age │ service │
             ├───────┼─────────┼──────┼─────────┤
@@ -1313,7 +1304,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬────────┬─────────┬────────┬─────────┐
             │   │  first │    last │    age │ service │
             ├───┼────────┼─────────┼────────┼─────────┤
@@ -1323,8 +1313,7 @@ class SQLDataModel:
             │ 3 │    pat │ douglas │     42 │   11.50 │
             └───┴────────┴─────────┴────────┴─────────┘        
         ```
-        ```python
-            
+        ```python            
             # Set to left-align
             sdm.set_column_alignment('left')
 
@@ -1333,8 +1322,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬────────┬─────────┬────────┬─────────┐
             │   │ first  │ last    │ age    │ service │
             ├───┼────────┼─────────┼────────┼─────────┤
@@ -1445,13 +1433,11 @@ class SQLDataModel:
         This will output:
 
         ```text
-
             shape: (3, 3)
         ```
         The shape can also be seen when printing the model:
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Create the model
@@ -1465,7 +1451,6 @@ class SQLDataModel:
         This will output:
 
         ```text
-
             ┌───┬───────┬───────┬───────┐
             │   │ col_0 │ col_1 │ col_2 │
             ├───┼───────┼───────┼───────┤
@@ -1536,7 +1521,6 @@ class SQLDataModel:
         This will output:
         
         ```shell
-
             ┌───┬────────┬─────────┬────────┬──────────────┐
             │   │ first  │ last    │    age │ service_time │
             ├───┼────────┼─────────┼────────┼──────────────┤
@@ -1547,7 +1531,6 @@ class SQLDataModel:
             └───┴────────┴─────────┴────────┴──────────────┘
         ```
         ```python
-
             # Get the updated float display precision
             updated_precision = sdm.get_display_float_precision()
 
@@ -1645,8 +1628,7 @@ class SQLDataModel:
 
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───┬──────────────────┬────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
             │   │ name             │ hire_date  │ country     │ service_years │    age │ last_update         │
             ├───┼──────────────────┼────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
@@ -1664,7 +1646,6 @@ class SQLDataModel:
             [10 rows x 6 columns]  
         ```
         ```python
-
             # Generate statistics
             sdm_described = sdm.describe()
 
@@ -1674,7 +1655,6 @@ class SQLDataModel:
         This will output:
         
         ```shell
-
             ┌────────┬──────────────┬─────────────┬─────────────┬───────────────┬────────┬─────────────────────┐
             │ metric │         name │   hire_date │     country │ service_years │    age │         last_update │
             ├────────┼──────────────┼─────────────┼─────────────┼───────────────┼────────┼─────────────────────┤
@@ -1694,7 +1674,6 @@ class SQLDataModel:
             [12 rows x 7 columns]    
         ```
         ```python
-
             # Set filters to exclude all str dtypes and the 'hire_date' column:
             sdm_describe = sdm.describe(exclude_dtypes=['str'], exclude_columns=['hire_date'])
 
@@ -1704,7 +1683,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌────────┬───────────────┬────────┬─────────────────────┐
             │ metric │ service_years │    age │         last_update │
             ├────────┼───────────────┼────────┼─────────────────────┤
@@ -1869,8 +1847,7 @@ class SQLDataModel:
 
         This will output data with dtypes correctly aligned:
         
-        ```shell
-            
+        ```shell            
             ┌───────┬─────────┬──────┬─────────┬────────────┐
             │ first │ last    │  age │ service │ hire_date  │
             ├───────┼─────────┼──────┼─────────┼────────────┤
@@ -1883,7 +1860,6 @@ class SQLDataModel:
             [5 rows x 5 columns]
         ```
         ```python
-
             # Get new column types to confirm
             dtypes_after = sdm.get_column_dtypes()
 
@@ -1894,7 +1870,6 @@ class SQLDataModel:
         This will output:
             
         ```shell
-
             first:      str -> str
             last:       str -> str
             age:        str -> int
@@ -2045,7 +2020,6 @@ class SQLDataModel:
         -------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # CSV file path or raw CSV string
@@ -2058,7 +2032,6 @@ class SQLDataModel:
         ---------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Space delimited data
@@ -2078,7 +2051,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌──────┬──────┬──────┐
             │ A    │ B    │ C    │
             ├──────┼──────┼──────┤
@@ -2198,8 +2170,7 @@ class SQLDataModel:
         
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌────┬────┬────┐
             │ A  │ B  │ C  │
             ├────┼────┼────┤
@@ -2321,8 +2292,7 @@ class SQLDataModel:
         
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬───────┐
             │   │ col_0 │ col_1 │
             ├───┼───────┼───────┤
@@ -2390,8 +2360,7 @@ class SQLDataModel:
         From JSON String Literal
         ------------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample JSON string
@@ -2420,7 +2389,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌──────┬───────┬───────┐
             │   id │ color │ value │
             ├──────┼───────┼───────┤
@@ -2434,8 +2402,7 @@ class SQLDataModel:
         From JSON-like Object
         ---------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # JSON-like sample
@@ -2460,8 +2427,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───────┬───────┐
             │ alpha │ value │
             ├───────┼───────┤
@@ -2476,7 +2442,6 @@ class SQLDataModel:
         --------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # JSON file path
@@ -2490,8 +2455,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌──────┬────────┬───────┬─────────┐
             │   id │ color  │ value │ notes   │
             ├──────┼────────┼───────┼─────────┤
@@ -2561,8 +2525,7 @@ class SQLDataModel:
         From Website URL
         ----------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # From URL
@@ -2576,8 +2539,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌────┬─────────────┬────┬────┬────┬────┬────┬────┬────┬─────┬──────┐
             │  R │ Team        │ G  │  P │  W │  D │  L │ GF │ GA │ GD  │ Pts. │
             ├────┼─────────────┼────┼────┼────┼────┼────┼────┼────┼─────┼──────┤
@@ -2595,8 +2557,7 @@ class SQLDataModel:
         From Local File 
         ---------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # From HTML file
@@ -2607,8 +2568,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌─────────────┬────────┬──────┐
             │ Team        │ Points │ Rank │
             ├─────────────┼────────┼──────┤
@@ -2626,8 +2586,7 @@ class SQLDataModel:
         From Raw HTML
         -------------
 
-        ```python
-        
+        ```python        
             from SQLDataModel import SQLDataModel
 
             # Raw HTML
@@ -2659,8 +2618,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬───────┐
             │   │ Col 1 │ Col 2 │
             ├───┼───────┼───────┤
@@ -2735,8 +2693,7 @@ class SQLDataModel:
         From LaTeX literal
         ------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Raw LaTeX literal
@@ -2760,8 +2717,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌─────────┬──────┬─────────┐
             │ Name    │  Age │  Height │
             ├─────────┼──────┼─────────┤
@@ -2774,8 +2730,7 @@ class SQLDataModel:
         From LaTeX file
         ---------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Load LaTeX content from file
@@ -2787,8 +2742,7 @@ class SQLDataModel:
         Specifying table identifier
         ---------------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Raw LaTeX literal with multiple tables
@@ -2825,7 +2779,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌──────────┬──────────┐
             │ Header X │ Header Y │
             ├──────────┼──────────┤
@@ -2913,8 +2866,7 @@ class SQLDataModel:
         From Markdown Literal
         ---------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Raw markdown literal
@@ -2935,7 +2887,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌──────────────┬───────┬────────────┐
             │ Item         │ Price │ # In stock │
             ├──────────────┼───────┼────────────┤
@@ -2950,7 +2901,6 @@ class SQLDataModel:
         ------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Load markdown content from file
@@ -2962,8 +2912,7 @@ class SQLDataModel:
         Specifying Table Identifier
         ---------------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Raw markdown literal with multiple tables
@@ -2992,7 +2941,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌──────────┬──────────┐
             │ Header X │ Header Y │
             ├──────────┼──────────┤
@@ -3107,8 +3055,7 @@ class SQLDataModel:
         
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───────┬───────┬───────┐
             │ Col A │ Col B │ Col C │
             ├───────┼───────┼───────┤
@@ -3214,8 +3161,7 @@ class SQLDataModel:
 
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌────┬─────────────┬──────┬────────┬───────┬───────┐
             │    │ column      │   na │ unique │ count │ total │
             ├────┼─────────────┼──────┼────────┼───────┼───────┤
@@ -3350,7 +3296,6 @@ class SQLDataModel:
         From SQL Table
         --------------
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Single word parameter
@@ -3362,8 +3307,7 @@ class SQLDataModel:
         From SQLite Database
         --------------------
 
-        ```python
-            
+        ```python            
             import sqlite3
             from SQLDataModel import SQLDataModel
 
@@ -3381,7 +3325,6 @@ class SQLDataModel:
         ------------------------
 
         ```python
-
             import psycopg2
             from SQLDataModel import SQLDataModel
 
@@ -3398,7 +3341,6 @@ class SQLDataModel:
         -----------------------
 
         ```python
-
             import pyodbc
             from SQLDataModel import SQLDataModel
 
@@ -3618,7 +3560,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌────────┬──────┬─────────┐
             │ Name   │  Age │  Height │
             ├────────┼──────┼─────────┤
@@ -3629,7 +3570,6 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
         ```python
-
             # Grab data from specific row
             row_data = sdm[0].data()
 
@@ -3639,11 +3579,9 @@ class SQLDataModel:
         This will output:
 
         ```text
-
             ('John', 30, 175.3)
         ```
         ```python
-
             # Grab data from single column
             col_data = sdm['Name'].data()
             
@@ -3652,8 +3590,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```text
-        
+        ```text        
             [('John',), ('Alice',), ('Travis',)]
         ```
         Note:
@@ -3688,8 +3625,7 @@ class SQLDataModel:
         Returning CSV Literal
         ---------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -3712,7 +3648,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             Name    Age     Height
             John    30      175.3
             Alice   28      162.0
@@ -3721,8 +3656,7 @@ class SQLDataModel:
         Write to File
         -------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -3745,7 +3679,6 @@ class SQLDataModel:
         Contents of ``persons.csv``
 
         ```shell
-
             idx,Name,Age,Height
             0,John,30,175.3
             1,Alice,28,162.0
@@ -3786,8 +3719,7 @@ class SQLDataModel:
         Orient by Rows
         --------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -3811,7 +3743,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             0: ('A,0', 'B,0', 'C,0')
             1: ('A,1', 'B,1', 'C,1')
             2: ('A,2', 'B,2', 'C,2')
@@ -3821,7 +3752,6 @@ class SQLDataModel:
         -----------------
         
         ```python
-
             # Convert to dictionary with columns as keys and rows as values
             columns_dict = sdm.to_dict(orient="columns")
 
@@ -3831,8 +3761,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             Col A: ('A,0', 'A,1', 'A,2')
             Col B: ('B,0', 'B,1', 'B,2')
             Col C: ('C,0', 'C,1', 'C,2')
@@ -3841,7 +3770,6 @@ class SQLDataModel:
         --------------
         
         ```python
-
             # Convert to list of dictionaries with each dictionary representing a row with columns as keys
             list_dict = sdm.to_dict(orient="list")
 
@@ -3852,7 +3780,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             {'Col A': 'A,0', 'Col B': 'B,0', 'Col C': 'C,0'}
             {'Col A': 'A,1', 'Col B': 'B,1', 'Col C': 'C,1'}
             {'Col A': 'A,2', 'Col B': 'B,2', 'Col C': 'C,2'}
@@ -3910,8 +3837,7 @@ class SQLDataModel:
         
         This will output:
 
-        ```shell
-            
+        ```shell            
             <table>
                 <tr>
                     <th>ID</th>
@@ -3988,7 +3914,6 @@ class SQLDataModel:
         -----------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Sample JSON to first create model
@@ -4009,8 +3934,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌──────┬────────┬───────┬─────────┐
             │   id │ color  │ value │ notes   │
             ├──────┼────────┼───────┼─────────┤
@@ -4028,7 +3952,6 @@ class SQLDataModel:
         -----------------
 
         ```python
-
             # Write model to JSON file
             sdm.to_json('output.json')
 
@@ -4041,7 +3964,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             [{'id': 1, 'color': 'red', 'value': '#f00', 'notes': 'primary'}
             ,{'id': 2, 'color': 'green', 'value': '#0f0', 'notes': None}
             ,{'id': 3, 'color': 'blue', 'value': '#00f', 'notes': 'primary'}
@@ -4114,8 +4036,7 @@ class SQLDataModel:
         Returning LaTeX Literal
         -----------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -4137,8 +4058,7 @@ class SQLDataModel:
         ```
         This will output:
         
-        ```shell
-            
+        ```shell            
             \\begin{tabular}{|l|r|r|}
             \\hline
                 {Name} & {Age} & {Height} \\
@@ -4152,8 +4072,7 @@ class SQLDataModel:
         Write to LaTeX File
         -------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -4172,8 +4091,7 @@ class SQLDataModel:
         ```
         Contents of file ``Table.tex``:
         
-        ```shell
-            
+        ```shell            
             \\documentclass{article}
             \\begin{document}
             \\begin{table}[h]
@@ -4313,7 +4231,6 @@ class SQLDataModel:
         This will output:
 
         ```text
-
             ('first', 'last', 'age')
             ('john', 'smith', 27)
             ('sarah', 'west', 29)
@@ -4358,8 +4275,7 @@ class SQLDataModel:
         To Markdown Literal
         -------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -4382,7 +4298,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             | Name    |  Age |  Height |
             |:--------|-----:|--------:|
             | John    |   30 |  175.30 |
@@ -4392,8 +4307,7 @@ class SQLDataModel:
         Write to Markdown File
         ----------------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -4412,8 +4326,7 @@ class SQLDataModel:
         ```
         Contents of ``Table.MD``:
 
-        ```shell
-            
+        ```shell            
             | Name    |  Age |  Height |
             |:--------|-----:|--------:|
             | John    |   30 |  175.30 |
@@ -4533,13 +4446,11 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             [['John' '30' '175.3']
              ['Alice' '28' '162.0']
              ['Travis' '35' '185.8']]
         ```
         ```python
-
             # Create the numpy array with with indicies and headers
             result_array = sdm.to_numpy(include_index=True, include_headers=True)
 
@@ -4549,7 +4460,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             [['idx' 'Name' 'Age' 'Height']
              ['0' 'John' '30' '175.3']
              ['1' 'Alice' '28' '162.0']
@@ -4608,7 +4518,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
                 Name  Age  Height
             0    John   30   175.3
             1   Alice   28   162.0
@@ -4670,8 +4579,7 @@ class SQLDataModel:
         
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───────┬──────┬────────┐
             │ Name  │  Age │   Rate │
             ├───────┼──────┼────────┤
@@ -4846,7 +4754,6 @@ class SQLDataModel:
         ----------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -4869,7 +4776,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌─────────┬──────┬────────┐
             │ Name    │  Age │ Height │
             ├─────────┼──────┼────────┤
@@ -4881,8 +4787,7 @@ class SQLDataModel:
         Write to File
         -------------
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Sample data
@@ -4901,8 +4806,7 @@ class SQLDataModel:
         ```
         Contents of ``Table.txt``:
         
-        ```shell
-            
+        ```shell            
             ┌───┬─────────┬──────┬────────┐
             │   │  Name   │ Age  │ Height │
             ├───┼─────────┼──────┼────────┤
@@ -5071,7 +4975,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
             │   │ first │ last   │  age │ service │ hire_date  │ gender │
             ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
@@ -5132,7 +5035,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
             │   │ first │ last   │  age │ service │ hire_date  │ gender │
             ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
@@ -5192,8 +5094,7 @@ class SQLDataModel:
 
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬──────┬──────┬─────────┬────────────┬────────┐
             │   │ first │ last │  age │ service │ hire_date  │ gender │
             ├───┼───────┼──────┼──────┼─────────┼────────────┼────────┤
@@ -5252,8 +5153,7 @@ class SQLDataModel:
 
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
             │   │ first │ last    │  age │ service │ hire_date  │ gender │
             ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
@@ -5314,8 +5214,7 @@ class SQLDataModel:
 
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
             │   │ first │ last    │  age │ service │ hire_date  │ gender │
             ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
@@ -5375,7 +5274,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
             │   │ first │ last   │  age │ service │ hire_date  │ gender │
             ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
@@ -5604,8 +5502,7 @@ class SQLDataModel:
 
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───┬────────┬─────────┬────────┬─────────┐
             │   │ first  │ last    │    age │ service │
             ├───┼────────┼─────────┼────────┼─────────┤
@@ -5656,7 +5553,6 @@ class SQLDataModel:
         This will output:
         
         ```shell
-
             ┌───┬────────┬─────────┬────────┬─────────┐
             │   │ first  │ last    │    age │ service │
             ├───┼────────┼─────────┼────────┼─────────┤
@@ -5781,7 +5677,6 @@ class SQLDataModel:
         This will output:
 
         ```text
-
             (0, 'John', 30, 175.3)
             (1, 'Alice', 28, 162.0)
             (2, 'Travis', 35, 185.8)
@@ -5886,7 +5781,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬─────────┬──────┬──────────┐
             │   │ Name    │  Age │ Job      │
             ├───┼─────────┼──────┼──────────┤
@@ -5899,7 +5793,6 @@ class SQLDataModel:
             [5 rows x 3 columns]
         ```
         ```python
-
             # Update multiple rows and columns with a list of values
             sdm[1:5, ["Name", "Age", "Job"]] = [("Alice", 30, "Manager"), ("Bob", 28, "Developer"), ("Charlie", 35, "Designer"), ("David", 32, "Analyst")]
 
@@ -5909,7 +5802,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬─────────┬──────┬───────────┐
             │   │ Name    │  Age │ Job       │
             ├───┼─────────┼──────┼───────────┤
@@ -5922,7 +5814,6 @@ class SQLDataModel:
             [5 rows x 3 columns]
         ```
         ```python
-
             # Create a new column "Hobby" and set the values
             sdm["Hobby"] = [('Fishing',), ('Biking',), ('Computers',), ('Photography',), ('Studying',)]
 
@@ -5931,8 +5822,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬─────────┬──────┬───────────┬─────────────┐
             │   │ Name    │  Age │ Job       │ Hobby       │
             ├───┼─────────┼──────┼───────────┼─────────────┤
@@ -6017,8 +5907,7 @@ class SQLDataModel:
 
         This will output:
 
-        ```shell
-        
+        ```shell        
             1000
         ```
         """        
@@ -6059,7 +5948,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬────────┬─────────┬────────┐
             │   │ first  │ last    │    age │
             ├───┼────────┼─────────┼────────┤
@@ -6070,8 +5958,7 @@ class SQLDataModel:
             └───┴────────┴─────────┴────────┘  
             [4 rows x 3 columns]      
         ```
-        ```python
-        
+        ```python        
             # Using left alignment instead
             sdm.set_column_alignment("left")
 
@@ -6080,8 +5967,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬────────┬─────────┬────────┐
             │   │ first  │ last    │ age    │
             ├───┼────────┼─────────┼────────┤
@@ -6092,8 +5978,7 @@ class SQLDataModel:
             └───┴────────┴─────────┴────────┘
             [4 rows x 3 columns]
         ```
-        ```python
-        
+        ```python        
             # Using center alignment instead
             sdm.set_column_alignment("center")
 
@@ -6102,8 +5987,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬────────┬─────────┬────────┐
             │   │ first  │  last   │  age   │
             ├───┼────────┼─────────┼────────┤
@@ -6114,8 +5998,7 @@ class SQLDataModel:
             └───┴────────┴─────────┴────────┘
             [4 rows x 3 columns]
         ```
-        ```python
-        
+        ```python        
             # Using right alignment instead
             sdm.set_column_alignment("right")
 
@@ -6125,7 +6008,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬────────┬─────────┬────────┐
             │   │  first │    last │    age │
             ├───┼────────┼─────────┼────────┤
@@ -6262,8 +6144,7 @@ class SQLDataModel:
 
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌────────┬────────┐
             │ letter │ number │
             ├────────┼────────┤
@@ -6274,8 +6155,7 @@ class SQLDataModel:
             └────────┴────────┘
             [4 rows x 2 columns]
         ```
-        ```python
-            
+        ```python            
             # List or tuples can also be used directly
             data_e = ['E', 5]
 
@@ -6287,8 +6167,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬────────┬────────┐
             │   │ letter │ number │
             ├───┼────────┼────────┤
@@ -6370,8 +6249,7 @@ class SQLDataModel:
 
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌────────┬──────┬────────┬───────┬───────┐
             │ column │   na │ unique │ count │ total │
             ├────────┼──────┼────────┼───────┼───────┤
@@ -6407,7 +6285,6 @@ class SQLDataModel:
         ----------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Create the model
@@ -6421,7 +6298,6 @@ class SQLDataModel:
         -------------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Create the model
@@ -6494,8 +6370,7 @@ class SQLDataModel:
         
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───┬─────────┬──────┬────────┐
             │   │ Name    │  Age │ Status │
             ├───┼─────────┼──────┼────────┤
@@ -6564,8 +6439,7 @@ class SQLDataModel:
         
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬────────┬───────┐
             │   │ gender │ count │
             ├───┼────────┼───────┤
@@ -6577,7 +6451,6 @@ class SQLDataModel:
         Multiple columns can also be used to group by:
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Create the model
@@ -6733,8 +6606,7 @@ class SQLDataModel:
         
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌────────┬──────┬────────┬────────────┐
             │ Name   │ Age  │ Gender │ Department │
             ├────────┼──────┼────────┼────────────┤
@@ -6807,7 +6679,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌─────┬────────┬─────────┬────────┬─────────┐
             │     │ first  │ last    │    age │ service │
             ├─────┼────────┼─────────┼────────┼─────────┤
@@ -6820,8 +6691,7 @@ class SQLDataModel:
         ```
         Now reset the index column:
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Reset the index with default start value
@@ -6832,8 +6702,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬────────┬─────────┬────────┬─────────┐
             │   │ first  │ last    │    age │ service │
             ├───┼────────┼─────────┼────────┼─────────┤
@@ -6846,8 +6715,7 @@ class SQLDataModel:
         ```
         Reset the index to a custom value:
 
-        ```python
-            
+        ```python            
             from SQLDataModel import SQLDataModel
 
             # Reset the index with a different value
@@ -6858,8 +6726,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌────┬────────┬─────────┬────────┬─────────┐
             │    │ first  │ last    │    age │ service │
             ├────┼────────┼─────────┼────────┼─────────┤
@@ -6965,8 +6832,7 @@ class SQLDataModel:
         
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬─────────┬──────┬─────────┬────────────┐
             │   │ first │ last    │  age │ service │ hire_date  │
             ├───┼───────┼─────────┼──────┼─────────┼────────────┤
@@ -6980,8 +6846,7 @@ class SQLDataModel:
         ```
         Sort by multiple columns:
 
-        ```python
-            
+        ```python            
             # Sort by multiple columns in descending order
             sorted_sdm = sdm.sort(['age','hire_date'], asc=False)
 
@@ -6990,8 +6855,7 @@ class SQLDataModel:
         ```
         This will output:
 
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬─────────┬──────┬─────────┬────────────┐
             │   │ first │ last    │  age │ service │ hire_date  │
             ├───┼───────┼─────────┼──────┼─────────┼────────────┤
@@ -7094,7 +6958,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬────────┬──────┬────────────┐
             │   │ Name   │  Age │ Job        │
             ├───┼────────┼──────┼────────────┤
@@ -7107,8 +6970,7 @@ class SQLDataModel:
         ```
         Filter by multiple parameters:
 
-        ```python
-        
+        ```python        
             # Filter by 'Job' and 'Age'
             sdm_filtered = sdm.where("Job = 'Student' and Age < 18")
 
@@ -7118,7 +6980,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬─────────┬──────┬─────────┐
             │   │ Name    │  Age │ Job     │
             ├───┼─────────┼──────┼─────────┤
@@ -7162,7 +7023,6 @@ class SQLDataModel:
         -------------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Create the SQLDataModel:
@@ -7182,7 +7042,6 @@ class SQLDataModel:
         ----------------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
         
             # Create the function, note that ``func`` must have the same number of args as the model ``.apply()`` is called on:
@@ -7195,8 +7054,7 @@ class SQLDataModel:
         Applying a Built-in Function
         ----------------------------
 
-        ```python
-            
+        ```python            
             import math
             from SQLDataModel import SQLDataModel
 
@@ -7210,7 +7068,6 @@ class SQLDataModel:
         --------------------------
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             # Create the SQLDataModel:
@@ -7282,8 +7139,7 @@ class SQLDataModel:
         
         This will output:
 
-        ```shell
-            
+        ```shell            
             first: str
             last: str
             age: int
@@ -7292,8 +7148,7 @@ class SQLDataModel:
         ```
         Get SQL data types as well:
 
-        ```python
-            
+        ```python            
             # Get specific column sql dtypes
             sdm_dtypes = sdm.get_column_dtypes(columns=['first','age','service'], dtypes="sql")
 
@@ -7304,7 +7159,6 @@ class SQLDataModel:
         This will output:
     
         ```shell
-
             first: TEXT
             age: INTEGER
             service: REAL
@@ -7383,7 +7237,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             Age dtype: int -> float
         ```
         Warning:
@@ -7644,8 +7497,7 @@ class SQLDataModel:
         
         This will output:
         
-        ```shell
-            
+        ```shell            
             ┌───┬───────┬─────────┬──────┬─────────┬────────────┬──────┐
             │   │ first │ last    │  age │ service │ hire_date  │   id │
             ├───┼───────┼─────────┼──────┼─────────┼────────────┼──────┤
@@ -7853,7 +7705,6 @@ class SQLDataModel:
         This will output:
 
         ```text
-
             def func(user_name:str, user_age:int, user_salaray:float):
                 # apply logic and return value
                 return
@@ -7901,7 +7752,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             ┌───┬───────┬──────┐
             │   │ Name  │ Age  │
             ├───┼───────┼──────┤
@@ -8068,7 +7918,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
                 {'first': ('TEXT', 'str', True, '<'),
                  'last': ('TEXT', 'str', True, '<'),
                  'age': ('INTEGER', 'int', True, '>'),
@@ -8078,7 +7927,6 @@ class SQLDataModel:
         Example Attributes Modified:
 
         ```python
-
             from SQLDataModel import SQLDataModel
 
             headers = ['idx', 'first', 'last', 'age', 'service_time']
@@ -8220,7 +8068,6 @@ class SQLDataModel:
         This will output:
 
         ```text
-
             (0, 1, 2)
         ```
         Notes
@@ -8351,7 +8198,6 @@ class SQLDataModel:
         This will output:
 
         ```shell
-
             CREATE TABLE "sdm" ("idx" INTEGER PRIMARY KEY,"first" TEXT,"last" TEXT,"age" INTEGER)
         ```
         """
