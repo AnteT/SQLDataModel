@@ -1422,7 +1422,7 @@ class SQLDataModel:
     
     def get_shape(self) -> tuple[int]:
         """
-        Returns the shape of the data as a tuple of ``(rows x columns)``.
+        Returns the current shape of the ``SQLDataModel`` as a tuple of ``(rows x columns)``.
 
         Returns:
             ``tuple[int]``: A tuple representing the number of rows and columns in the SQLDataModel.
@@ -1432,16 +1432,51 @@ class SQLDataModel:
             from SQLDataModel import SQLDataModel
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            sdm = SQLDataModel([[1,2,3],
+                                [4,5,6],
+                                [7,8,9]])
 
-            # Get shape
+            # Get the current shape
             shape = sdm.get_shape()
 
-            # Tuple of (rows, columns)
-            print(shape)
+            # View it
+            print("shape:", shape)
 
+        This will output:
+
+        ```text
+
+            shape: (3, 3)
+        ```
+        The shape can also be seen when printing the model:
+
+        ```python
+
+            from SQLDataModel import SQLDataModel
+
+            # Create the model
+            sdm = SQLDataModel([[1,2,3],
+                                [4,5,6],
+                                [7,8,9]])
+
+            # View it and the shape
+            print(sdm, "<-- shape is also visible here")
+        ```
+        This will output:
+
+        ```text
+
+            ┌───┬───────┬───────┬───────┐
+            │   │ col_0 │ col_1 │ col_2 │
+            ├───┼───────┼───────┼───────┤
+            │ 0 │     1 │     2 │     3 │
+            │ 1 │     4 │     5 │     6 │
+            │ 2 │     7 │     8 │     9 │
+            └───┴───────┴───────┴───────┘
+            [3 rows x 3 columns] <-- shape is also visible here
+        ```
         Note:
-            - If an empty model is initialized, the ``rowcount`` will be 0 until the first row is inserted.
+            - If an empty model is initialized, the :py:attr:`SQLDataModel.rowcount` will be 0 until the first row is inserted.
             - Using the :meth:`SQLDataModel.__getitem__` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
         """
         return (self.row_count,self.column_count)

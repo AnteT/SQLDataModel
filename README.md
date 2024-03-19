@@ -4,10 +4,11 @@
 
 ### SQLDataModel: fast & lightweight source agnostic data model
 
-![SQLDataModel Home](https://img.shields.io/badge/SQLDataModel-Home-blue?style=flat&logo=github&link=https%3A%2F%2Fgithub.com%2FAnteT%2FSQLDataModel&link=https%3A%2F%2Fgithub.com%2FAnteT%2FSQLDataModel)
-![PyPI License](https://img.shields.io/pypi/l/sqldatamodel)
-![PyPI Version](https://img.shields.io/pypi/v/sqldatamodel)
+[![SQLDataModel Home](https://img.shields.io/badge/SQLDataModel-Home-blue?style=flat&logo=github)](https://github.com/AnteT/SQLDataModel)
+[![PyPI License](https://img.shields.io/pypi/l/sqldatamodel)](https://pypi.org/project/SQLDataModel/)
+[![PyPI Version](https://img.shields.io/pypi/v/sqldatamodel)](https://pypi.org/project/SQLDataModel/)
 [![Docs Status](https://readthedocs.org/projects/sqldatamodel/badge/?version=latest)](https://sqldatamodel.readthedocs.io/en/latest/?badge=latest)
+[![Downloads](https://static.pepy.tech/badge/sqldatamodel)](https://pepy.tech/project/sqldatamodel)
 
 SQLDataModel is a fast & lightweight data model with no additional dependencies for quickly fetching and storing your tabular data to and from the most commonly used databases & data sources in a couple lines of code. It's as easy as ETL:
 
