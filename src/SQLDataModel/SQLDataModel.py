@@ -2660,6 +2660,7 @@ class SQLDataModel:
             tparser.feed(c)
         data, headers = tparser.validate_table()
         tparser.close() 
+        headers = list(SQLDataModel.alias_duplicates(headers))
         return cls(data=data, headers=headers, infer_types=infer_types)
 
     @classmethod

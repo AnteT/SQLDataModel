@@ -24,7 +24,7 @@ class HTMLParser(HTMLParser):
         ``target_table`` (list): List to hold the data of the target table once found.
 
     """    
-    def __init__(self, *, convert_charrefs: bool = True, cell_sep:str="", table_identifier:int|str=0) -> None:
+    def __init__(self, *, convert_charrefs: bool = True, cell_sep:str=" ", table_identifier:int|str=0) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
         if table_identifier is None:
             table_identifier = 0
@@ -111,7 +111,7 @@ class HTMLParser(HTMLParser):
         if not self.found_target or self._ignore_next:
             return
         if self._in_td or self._in_th:
-            self._current_cell.append(data)
+            self._current_cell.append(data.strip())
     
     def handle_endtag(self, tag: str) -> None:
         """
