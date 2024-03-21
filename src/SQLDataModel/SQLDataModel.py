@@ -3875,12 +3875,12 @@ class SQLDataModel:
         if include_index is None:
             include_index = self.display_index
         display_headers = [self.sql_idx,*self.headers] if include_index else self.headers
-        html_headers = "\n".join(("\t<tr>",*tuple(f"""\t\t<th class={f'"col-numeric"' if self.header_master[col][3] == '>' else '"col-text"'}>{col}</th>""" for col in display_headers),"\t</tr>")) # replace `{col}` with `{col if col != self.sql_idx else " "}` to revert idx display
-        html_body ="".join(["\n".join(("\n\t<tr>",*tuple(f"""\t\t<td>{cell}</td>""" for cell in tr),"\t</tr>")) for tr in self.iter_rows(include_index=include_index)])
-        col_styles = "\n".join([f"""td:nth-child({i+1}) {{{"text-align:right;" if self.header_master[col][3] == '>' else "text-align:left;"}}}""" for i,col in enumerate(display_headers)])
-        base_styles = f"""html {{background-color: {background_color}}}\ntable,th {{border: 1px solid {font_color}; border-collapse: collapse; overflow-x: auto;background-color:{background_color};color:{font_color};}}\ntr,td,th {{padding: 4px 6px;border-right: 1px solid {font_color}; font-family: Consolas; font-size: 9pt; font-weight:normal; overflow-x: auto;}}"""
+        html_headers = "\n".join(("\t<tr>",*tuple(f"""\t\t<th>{col}</th>""" for col in display_headers),"\t</tr>")) # replace `{col}` with `{col if col != self.sql_idx else " "}` to revert idx display
+        html_body ="".join(["\n".join(("\n\t<tr>",*tuple(f"""\t\t<td>{cell}</td>""" for cell in tr),"\t</tr>")) for tr in self.iter_rows(include_index=include_index)]).strip('\n')
+        col_styles = "\n".join([f"""th:nth-child({i+1}),td:nth-child({i+1}) {{{"text-align: right;" if self.header_master[col][3] == '>' else "text-align: left;"}}}""" for i,col in enumerate(display_headers)])
+        base_styles = f"""html {{background-color: {background_color}}}\ntable,th {{border: 1px solid {font_color}; border-collapse: collapse; overflow-x: auto; background-color:{background_color}; color:{font_color}; margin:6px;}}\ntr,td,th {{padding: 1px 6px; border-right: 1px solid {font_color}; font-family: 'Consolas', 'Monaco', 'Lucida Console', monospace; font-size: 9pt; font-weight: normal; overflow-x: auto;}}\ntr:first-child > th {{padding: 4px 6px;}}\ntr:nth-child(2) > td {{padding-top: 4px;}}\ntr:last-child > td {{padding-bottom: 4px;}}"""
         cascade_styles = "".join(("\ntable,tr,td,th {",*tuple(f"""{attr}:{value};""" for attr,value in style_params.items()),"}")) if style_params is not None else ""
-        html_styling = "\n".join(("<style>",f"{base_styles}{cascade_styles}",".col-numeric {text-align: right;}",".col-text {text-align: left;}",col_styles,"</style>"))
+        html_styling = "\n".join(("<style>",f"{base_styles}{cascade_styles}",col_styles,"</style>"))
         html_table = f"""<!DOCTYPE html>\n<table>\n{html_headers}\n{html_body}\n</table>\n{html_styling}"""
         if filename is None:
             return html_table
