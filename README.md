@@ -41,7 +41,7 @@ Then import the main class `SQLDataModel` into your local project, see [usage](#
 ---
 
 ### Quick Example
-A `SQLDataModel` can be created from any number of [sources](#data-sources), as a quick demo lets create one using a Wikipedia page:
+A `SQLDataModel` can be created from any number of [sources](#data-formats), as a quick demo lets create one using a Wikipedia page:
 
 ```python
 >>> from SQLDataModel import SQLDataModel
@@ -62,7 +62,7 @@ A `SQLDataModel` can be created from any number of [sources](#data-sources), as 
 [4 rows x 4 columns]
 ```
 
-SQLDataModel provides a quick and easy way to import, view, transform and export your data in multiple [formats](#data-sources) and sources, providing the full power of executing raw SQL against your model in the process. 
+SQLDataModel provides a quick and easy way to import, view, transform and export your data in multiple [formats](#data-formats) and sources, providing the full power of executing raw SQL against your model in the process. 
 
 ---
 
@@ -72,7 +72,7 @@ SQLDataModel provides a quick and easy way to import, view, transform and export
 
 <img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_graph.PNG?raw=true" alt="sdm_graph" style="width:100vw; border-radius: .6vw" />
 
-If you need to extract tabular data from one of these [formats](#data-sources), transform or simply just move it into another format, then `SQLDataModel` can make your life easier. Here's a few examples how:
+If you need to extract tabular data from one of these [formats](#data-formats), transform or simply just move it into another format, then `SQLDataModel` can make your life easier. Here's a few examples how:
 
 #### From Website to Markdown
 Say we find some cool data online, perhaps some planetary data, and we want to go and get it for our own purposes:
@@ -272,20 +272,37 @@ Regardless of where the data originated or where it ends up, `SQLDataModel`'s be
 
 ---
 
-### Data Sources
+### Data Formats
+`SQLDataModel` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
-SQLDataModel supports various data formats and sources, including:
-- HTML files or websites
-- SQL database connections (PostgreSQL, SQLite, Oracle DB, SQL Server, TeraData)
-- CSV or delimited text files
-- JSON files or objects
-- LaTeX files or formatted strings
-- Markdown files or formatted strings
-- Numpy arrays
-- Pandas dataframes
-- Parquet files
-- Python objects
-- Pickle files
+- **CSV**: Extract from and write to comma separated value, `.csv`, files.
+- **HTML**: Extract from web and write to and from `.html` files including formatted string literals.
+- **JSON**: Extract from and write to `.json` files, JSON-like objects, or JSON formatted sring literals.
+- **LaTeX**: Extract from and write to `.tex` files, LaTeX formatted string literals.
+- **Markdown**: Extract from and write to `.MD` files, Markdown formatted string literals.
+- **Numpy**: Convert to and from `numpy.ndarray` objects, `numpy` required.
+- **Pandas**: Convert to and from `pandas.DataFrame` objects, `pandas` required.
+- **Parquet**: Extract from and write to `.parquet` files, `pyarrow` required.
+- **Pickle**: Extract from and write to `.pkl` files, package uses `.sdm` extension when pickling for `SQLDataModel` metadata.
+- **SQL**: Extract from and write to the following popular SQL databases:
+    - **SQLite**: Using the built-in `sqlite3` module.
+    - **PostgreSQL**: Using the `psycopg2` package.
+    - **SQL Server**: Using the `pyodbc` package.
+    - **Oracle**: Using the `cx_Oracle` package.
+    - **Teradata**: Using the `teradatasql` package.
+- **Text**: Write to and from `.txt` files including other `SQLDataModel` string representations.
+- **TSV** or delimited: Write to and from files delimited by:
+    - **`\t`**: Tab separated values or `.tsv` files.
+    - **`\s`**: Single space or whitespace separated values.
+    - **`;`**: Semicolon separated values.
+    - **`|`**: Pipe separated values.
+    - **`:`**: Colon separated values.
+    - **`,`**: Comma separated values or `.csv` files.
+- **Python** objects:
+    - **dictionaries**: Convert to and from collections of python `dict` objects.
+    - **lists**: Convert to and from collections of python `list` objects.
+    - **tuples**: Convert to and from collections of python `tuple` objects.
+    - **namedtuples**: Convert to and from collections of `namedtuples` objects.
 
 Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
 
