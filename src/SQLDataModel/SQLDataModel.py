@@ -6682,7 +6682,7 @@ class SQLDataModel:
 
         Here are the left and right tables we will be joining:
             
-        ```text
+        ```shell
             Left Table:                     Right Table:
             ┌─────────┬──────┬──────┐       ┌──────┬─────────┐
             │ Name    │  Age │   ID │       │   ID │ Country │
@@ -6700,13 +6700,14 @@ class SQLDataModel:
 
         ```python
             # Create a model by performing a left join with the tables
-            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="left")
+            sdm_joined = sdm_left.merge(sdm_right, how="left")
 
             # View result
             print(sdm_joined)
         ```
         This will output:
-        ```text
+
+        ```shell
             Left Join:
             ┌─────────┬──────┬──────┬─────────┐
             │ Name    │  Age │   ID │ Country │
@@ -6720,17 +6721,18 @@ class SQLDataModel:
         ```
 
         Right Join
-        ---------
+        ----------
 
         ```python
             # Create a model by performing a right join with the tables
-            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="right")
+            sdm_joined = sdm_left.merge(sdm_right, how="right")
 
             # View result
             print(sdm_joined)
         ```
         This will output:
-        ```text
+
+        ```shell
             Right Join:
             ┌─────────┬──────┬──────┬─────────┐
             │ Name    │  Age │   ID │ Country │
@@ -6748,13 +6750,14 @@ class SQLDataModel:
 
         ```python
             # Create a model by performing an inner join with the tables
-            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="inner")
+            sdm_joined = sdm_left.merge(sdm_right, how="inner")
 
             # View result
             print(sdm_joined)
         ```
         This will output:
-        ```text
+
+        ```shell
             Inner Join:
             ┌─────────┬──────┬──────┬─────────┐
             │ Name    │  Age │   ID │ Country │
@@ -6766,17 +6769,18 @@ class SQLDataModel:
         ``` 
 
         Full Outer Join
-        ----------  
+        ---------------  
 
         ```python
             # Create a model by performing a full outer join with the tables
-            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="full outer")
+            sdm_joined = sdm_left.merge(sdm_right, how="full outer")
 
             # View result
             print(sdm_joined)
         ```
         This will output:
-        ```text
+
+        ```shell
             Full Outer Join:
             ┌─────────┬──────┬──────┬─────────┐
             │ Name    │  Age │   ID │ Country │
@@ -6790,18 +6794,20 @@ class SQLDataModel:
             └─────────┴──────┴──────┴─────────┘
             [6 rows x 4 columns]
         ```  
+
         Cross Join
         ----------  
 
         ```python
             # Create a model by performing a cross join with the tables
-            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="cross")
+            sdm_joined = sdm_left.merge(sdm_right, how="cross")
 
             # View result
             print(sdm_joined)
         ```
         This will output:
-        ```text
+
+        ```shell
             Cross Join:
             ┌─────────┬──────┬──────┬─────────┐
             │ Name    │  Age │   ID │ Country │

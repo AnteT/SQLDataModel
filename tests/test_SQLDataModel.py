@@ -468,3 +468,61 @@ def test_to_from_delimited(sample_data):
         sdm = SQLDataModel.from_csv(dsv, delimiters=delimiter)
         output_data = sdm.data(include_headers=True)
         assert input_data == output_data
+
+@pytest.mark.core
+def test_merge():
+    left_headers = ["Name", "Age", "ID"]
+    left_data = [        
+        ["Bob", 35, 1],
+        ["Alice", 30, 5],
+        ["David", 40, None],
+        ["Charlie", 25, 2]
+    ]
+    right_headers = ["ID", "Country"]
+    right_data = [
+        [1, "USA"],
+        [2, "Germany"],
+        [3, "France"],
+        [4, "Latvia"]
+    ]
+    sdm_left = SQLDataModel(left_data, left_headers)
+    sdm_right = SQLDataModel(right_data, right_headers)
+
+    ### left join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="left", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Alice', 30, 5, None), ('David', 40, None, None), ('Charlie', 25, 2, 'Germany')]
+    assert joined_output == expected_output
+
+    ### right join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="right", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]      
+    assert joined_output == expected_output
+
+    ### inner join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="inner", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Charlie', 25, 2, 'Germany')]
+    assert joined_output == expected_output
+
+    ### full outer join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="full outer", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Alice', 30, 5, None), ('David', 40, None, None), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]
+    assert joined_output == expected_output
+
+    ### cross join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="cross", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Bob', 35, 1, 'Germany'), ('Bob', 35, 1, 'France'), ('Bob', 35, 1, 'Latvia'), ('Alice', 30, 5, 'USA'), ('Alice', 30, 5, 'Germany'), ('Alice', 30, 5, 'France'), ('Alice', 30, 5, 'Latvia'), ('David', 40, None, 'USA'), ('David', 40, None, 'Germany'), ('David', 40, None, 'France'), ('David', 40, None, 'Latvia'), ('Charlie', 25, 2, 'USA'), ('Charlie', 25, 2, 'Germany'), ('Charlie', 25, 2, 'France'), ('Charlie', 25, 2, 'Latvia')]    
+    assert joined_output == expected_output
+
+@pytest.mark.core
+def test_astype():
+    sdm = SQLDataModel([['1111-11-11']], headers=['Value'])
+    astype_dict = {'bool':int, 'bytes':bytes,'date':datetime.date, 'datetime':datetime.datetime, 'float':float, 'int':int, 'None':str, 'str':str}
+    for type_name, expected_type in astype_dict.items():
+        astype = sdm.astype(type_name).data()
+        output_type = type(astype)
+        assert output_type == expected_type
