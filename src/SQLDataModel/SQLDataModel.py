@@ -6635,7 +6635,7 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_idx_col))
         yield from (Row(*x) for x in res.fetchall())
     
-    def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None) -> SQLDataModel:
+    def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None, include_join_column:bool=False) -> SQLDataModel:
         """
         Merges two ``SQLDataModel`` instances based on specified columns and merge type, ``how``, returning the result as a new instance. 
         If the join column shares the same name in both models, ``left_on`` and ``right_on`` column arguments are not required and will be inferred. Otherwise, explicit arguments for both are required.
@@ -6645,9 +6645,10 @@ class SQLDataModel:
             ``how`` (Literal["left", "right", "inner", "full outer", "cross"]): The type of merge to perform.
             ``left_on`` (str): The column name from the current model to use as the left join key.
             ``right_on`` (str): The column name from the ``merge_with`` model to use as the right join key.
+            ``include_join_column`` (bool): If the shared column being used as the join key should be included from both tables. Default is False.
         
         Raises:
-            ``TypeError``: If ``merge_with`` is not of type 'SQLDataModel'.
+            ``TypeError``: If ``merge_with`` is not of type ``SQLDataModel``.
             ``DimensionError``: If no shared column exists, and explicit ``left_on`` and ``right_on`` arguments are not provided.
             ``ValueError``: If the specified ``left_on`` or ``right_on`` column is not found in the respective models.
 
@@ -6658,33 +6659,176 @@ class SQLDataModel:
 
             from SQLDataModel import SQLDataModel
 
-            # Create sample data
-            data_a = [('Alice', 25, 'Female'), ('Bob', 30, 'Male')]
-            data_b = [('Alice', 'Marketing'), ('Charlie', 'Engineering')]
+            # Left table data with ID column
+            left_headers = ["Name", "Age", "ID"]
+            left_data = [        
+                ["Bob", 35, 1],
+                ["Alice", 30, 5],
+                ["David", 40, None],
+                ["Charlie", 25, 2]
+            ]
+            # Right table data with shared ID column
+            right_headers = ["ID", "Country"]
+            right_data = [
+                [1, "USA"],
+                [2, "Germany"],
+                [3, "France"],
+                [4, "Latvia"]
+            ]
 
-            # Create the models
-            sdm_a = SQLDataModel(data_a, headers=['Name', 'Age', 'Gender'])
-            sdm_b = SQLDataModel(data_b, headers=['Name', 'Department'])
+            # Create the left and right tables
+            sdm_left = SQLDataModel(left_data, left_headers)
+            sdm_right = SQLDataModel(right_data, right_headers)
 
-            # Merge the models based on the 'Name' column
-            merged_model = sdm_a.merge(merge_with=sdm_b, how="inner", left_on="Name", right_on="Name")
-
-            # View the merged result
-            print(merged_model)
-        
-        This will output:
-        
-        ```shell            
-            ┌────────┬──────┬────────┬────────────┐
-            │ Name   │ Age  │ Gender │ Department │
-            ├────────┼──────┼────────┼────────────┤
-            │ Alice  │ 25   │ Female │ Marketing  │
-            └────────┴──────┴────────┴────────────┘
-            [1 row x 4 columns]
+        Here are the left and right tables we will be joining:
+            
+        ```text
+            Left Table:                     Right Table:
+            ┌─────────┬──────┬──────┐       ┌──────┬─────────┐
+            │ Name    │  Age │   ID │       │   ID │ Country │
+            ├─────────┼──────┼──────┤       ├──────┼─────────┤
+            │ Bob     │   35 │    1 │       │    1 │ USA     │
+            │ Alice   │   30 │    5 │       │    2 │ Germany │
+            │ David   │   40 │      │       │    3 │ France  │
+            │ Charlie │   25 │    2 │       │    4 │ Latvia  │
+            └─────────┴──────┴──────┘       └──────┴─────────┘
+            [4 rows x 3 columns]            [4 rows x 2 columns]
         ```
+
+        Left Join
+        ---------
+
+        ```python
+            # Create a model by performing a left join with the tables
+            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="left")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+        ```text
+            Left Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Alice   │   30 │    5 │         │
+            │ David   │   40 │      │         │
+            │ Charlie │   25 │    2 │ Germany │
+            └─────────┴──────┴──────┴─────────┘
+            [4 rows x 4 columns]    
+        ```
+
+        Right Join
+        ---------
+
+        ```python
+            # Create a model by performing a right join with the tables
+            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="right")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+        ```text
+            Right Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Charlie │   25 │    2 │ Germany │
+            │         │      │      │ France  │
+            │         │      │      │ Latvia  │
+            └─────────┴──────┴──────┴─────────┘
+            [4 rows x 4 columns] 
+        ```  
+
+        Inner Join
+        ----------  
+
+        ```python
+            # Create a model by performing an inner join with the tables
+            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="inner")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+        ```text
+            Inner Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Charlie │   25 │    2 │ Germany │
+            └─────────┴──────┴──────┴─────────┘
+            [2 rows x 4 columns]
+        ``` 
+
+        Full Outer Join
+        ----------  
+
+        ```python
+            # Create a model by performing a full outer join with the tables
+            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="full outer")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+        ```text
+            Full Outer Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Alice   │   30 │    5 │         │
+            │ David   │   40 │      │         │
+            │ Charlie │   25 │    2 │ Germany │
+            │         │      │      │ France  │
+            │         │      │      │ Latvia  │
+            └─────────┴──────┴──────┴─────────┘
+            [6 rows x 4 columns]
+        ```  
+        Cross Join
+        ----------  
+
+        ```python
+            # Create a model by performing a cross join with the tables
+            sdm_joined = sdm_left.merge(merge_with=sdm_right, how="cross")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+        ```text
+            Cross Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Bob     │   35 │    1 │ Germany │
+            │ Bob     │   35 │    1 │ France  │
+            │ Bob     │   35 │    1 │ Latvia  │
+            │ Alice   │   30 │    5 │ USA     │
+            │ Alice   │   30 │    5 │ Germany │
+            │ Alice   │   30 │    5 │ France  │
+            │ Alice   │   30 │    5 │ Latvia  │
+            │ David   │   40 │      │ USA     │
+            │ David   │   40 │      │ Germany │
+            │ David   │   40 │      │ France  │
+            │ David   │   40 │      │ Latvia  │
+            │ Charlie │   25 │    2 │ USA     │
+            │ Charlie │   25 │    2 │ Germany │
+            │ Charlie │   25 │    2 │ France  │
+            │ Charlie │   25 │    2 │ Latvia  │
+            └─────────┴──────┴──────┴─────────┘
+            [16 rows x 4 columns]
+        ```  
         Note:
-            - The resulting SQLDataModel is created based on the ``sqlite3`` join definition and specified columns and merge type.
-            - The columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates()` for details.
+            - If ``include_join_column=False`` then only the ``left_on`` join column is included in the result, with the ``right_on`` column removed to avoid redundant shared key values.
+            - If ``include_join_column=True`` then all the columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates()` for details.
+            - The resulting ``SQLDataModel`` is created based on the ``sqlite3`` join definition and specified columns and merge type, for details see ``sqlite3`` documentation.
         """        
         if not isinstance(merge_with, SQLDataModel):
             raise TypeError(
@@ -6709,9 +6853,11 @@ class SQLDataModel:
                 )            
         tmp_table_name = "_merge_with"
         merge_with.to_sql(tmp_table_name, self.sql_db_conn)
-        all_cols = [*self.headers, *merge_with.headers]
+        left_headers, right_headers = self.headers, merge_with.headers if include_join_column else [x for x in merge_with.headers if x != right_on]
+        all_cols = [*left_headers, *right_headers]
         headers_str = ",".join([f'a."{col}" as "{alias}"' if i < self.column_count else f'b."{col}" as "{alias}"' for i, (col, alias) in enumerate(zip(all_cols,SQLDataModel.alias_duplicates(all_cols)))])
-        fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b on a."{left_on}" = b."{right_on}" """))
+        join_stmt = f"""on a."{left_on}" = b."{right_on}" """ if how != 'cross' else """"""
+        fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b {join_stmt}"""))
         return self.execute_fetch(fetch_stmt)
       
     def reset_index(self, start_index:int=0) -> None:
