@@ -1,4 +1,4 @@
-<img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_banner.PNG?raw=true" alt="SQLDataModel" style="width:100vw; border-radius: .6vw" />
+<img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_banner_cyan.PNG?raw=true" alt="SQLDataModel" style="width:100vw; border-radius: .6vw" />
 
 ---
 
@@ -299,7 +299,7 @@ Regardless of where the data originated or where it ends up, `SQLDataModel`'s be
     - **namedtuples**: Convert to and from collections of `namedtuples` objects.
 
 ```{note}        
-Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
+`SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
 ```
 
 ### Documentation

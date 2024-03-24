@@ -51,7 +51,7 @@ add_modules_names = False # doesnt seem to make a difference
 html_title = ''
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
-html_logo = "sdm_banner.PNG"
+html_logo = "sdm_banner_cyan.PNG"
 html_theme_options = {
     'logo_only': True,
     'display_version': False

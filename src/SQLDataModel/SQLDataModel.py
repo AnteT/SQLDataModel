@@ -125,7 +125,6 @@ class SQLDataModel:
         # Or group or aggregate the data:
         sdm_agg = sdm.group_by(["first", "last", "position"])            
 
-
         # Or have your data imported and described for you
         sdm = SQLDataModel.from_parquet('titanic.parquet').describe()
 
@@ -183,36 +182,46 @@ class SQLDataModel:
         sdm = SQLDataModel.from_pickle("output.sdm")
         sdm = SQLDataModel.from_sql("output", sqlite3.connect('output.db'))
     ```
+    
     Data Formats
     ------------
 
-    SQLDataModel can be constructed from, or exported to, many different formats including:
-        - CSV: extract from and and write to comma separated value files.
-        - HTML: extract from the web, .html files, or from raw hmtl strings and write to .html files.
-        - JSON: extract from .json files, JSON-like objects, and write to .json files or return JSON-like objects.
-        - LaTeX: extract from .tex files, LaTeX formatted string literals, and write to .tex files or return LaTeX-formatted strings.
-        - Markdown: extract from .MD files, Markdown formatted string literals, and write to .MD files or return Markdown-formatted strings.
-        - numpy: convert to and from ``numpy.ndarray`` objects, ``numpy`` package required or ``ModuleNotFound`` is raised.
-        - pandas: convert to and from ``pandas.DataFrame`` objects, ``pandas`` package required or ``ModuleNotFound`` is raised.
-        - parquet: extract from .parquet files and write to .parquet files, ``pyarrow`` package required or ``ModuleNotFound`` is raised.
-        - pickle: extract from pickled files and write with pickle using any compatible extension, default used is '.sdm'.
-        - SQL: extract from and write to the following popular SQL databases:
+    ``SQLDataModel`` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
-          - SQLite: using the built-in ``sqlite3`` package.
-          - PostgreSQL: using the ``psycopg2`` package.
-          - SQL Server: using the ``pyodbc`` package.
-          - Oracle: using the ``cx_Oracle`` package.
-          - Teradata: using the ``teradatasql`` package.
+        - ``CSV``: Extract from and write to comma separated value, ``.csv``, files.
+        - ``HTML``: Extract from web and write to and from ``.html`` files including formatted string literals.
+        - ``JSON``: Extract from and write to ``.json`` files, JSON-like objects, or JSON formatted sring literals.
+        - ``LaTeX``: Extract from and write to ``.tex`` files, LaTeX formatted string literals.
+        - ``Markdown``: Extract from and write to ``.MD`` files, Markdown formatted string literals.
+        - ``Numpy``: Convert to and from ``numpy.ndarray`` objects, ``numpy`` required.
+        - ``Pandas``: Convert to and from ``pandas.DataFrame`` objects, ``pandas`` required.
+        - ``Parquet``: Extract from and write to ``.parquet`` files, ``pyarrow`` required.
+        - ``Pickle``: Extract from and write to ``.pkl`` files, package uses ``.sdm`` extension when pickling for ``SQLDataModel`` metadata.
+        - ``SQL``: Extract from and write to the following popular SQL databases:
 
-        - TSV or delimited: write to and from delimited text files.
-        - Python objects:
+          - ``SQLite``: Using the built-in ``sqlite3`` module.
+          - ``PostgreSQL``: Using the ``psycopg2`` package.
+          - ``SQL Server``: Using the ``pyodbc`` package.
+          - ``Oracle``: Using the ``cx_Oracle`` package.
+          - ``Teradata``: Using the ``teradatasql`` package.
 
-          - dictionaries: convert to and from collections of python ``dict`` objects.
-          - lists: convert to and from collections of python ``list`` objects.
-          - tuples: convert to and from collections of python ``tuple`` objects.
-          - namedtuples: convert to and from collections of ``namedtuples`` objects.
-   
+        - ``Text``: Write to and from ``.txt`` files including other ``SQLDataModel`` string representations.
+        - ``TSV or delimited``: Write to and from files delimited by:
 
+          - ``\\t``: Tab separated values or ``.tsv`` files.
+          - ``\\s``: Single space or whitespace separated values.
+          - ``;``: Semicolon separated values.
+          - ``|``: Pipe separated values.
+          - ``:``: Colon separated values.
+          - ``,``: Comma separated values or ``.csv`` files.
+
+        - ``Python objects``:
+
+          - ``dictionaries``: Convert to and from collections of python ``dict`` objects.
+          - ``lists``: Convert to and from collections of python ``list`` objects.
+          - ``tuples``: Convert to and from collections of python ``tuple`` objects.
+          - ``namedtuples``: Convert to and from collections of ``namedtuples`` objects.
+          
     Pretty Printing
     ---------------
 
@@ -520,6 +529,64 @@ class SQLDataModel:
         success_by, success_description = success.split(':',1)
         return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
     
+    @staticmethod
+    def generate_html_table_chunks(html_source:str) -> Generator[str, None, None]:
+        """
+        Generate chunks of HTML content for all ``<table>`` elements found in provided source as complete and unbroken chunks for parsing.
+
+        Parameters:
+            ``html_source`` (str): The raw HTML content from which to generate chunks.
+
+        Raises:
+            ``ValueError``: If zero ``<table>`` elements were found in ``html_source`` provided.
+
+        Yields:
+            ``str``: Chunks of HTML content containing complete ``<table>`` elements.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # HTML content to chunk
+            html_source = '''
+            <html> 
+                <table><tr><td>Table 1</td></tr></table>
+                ...
+                <p>Non-table elements</p>
+                ...
+                <table><tr><td>Table 2</td></tr></table>
+            </html>
+            '''
+
+            # Generate and view the returned table chunks
+            for chunk in SQLDataModel.generate_html_table_chunks(html_source):
+                print('Chunk:', chunk)
+            
+        This will output:
+
+            ```text
+            Chunk: <table><tr><td>Table 1</td></tr></table>
+            Chunk: <table><tr><td>Table 2</td></tr></table>
+            ```
+        
+        Note:
+            - HTML content before the first ``<table>`` element and after the last ``</table>`` element is ignored and not yielded.
+            - See :meth:`SQLDataModel.from_html()` for full implementation and how this function is used for HTML parsing.
+        """
+        start_index, table_found = 0, False
+        while True:
+            start = html_source.find('<table', start_index)
+            end = html_source.find('</table>', start)
+            if start == -1 or end == -1:
+                break
+            yield html_source[start:end + 8] # len('</table>')
+            start_index = end + 8
+            table_found = True
+        if not table_found:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: zero table elements found in provided source, confirm `html_source` is valid HTML or check integrity of data")
+            )
+            
     @staticmethod
     def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:    
         """
@@ -2631,6 +2698,7 @@ class SQLDataModel:
             - ``**kwargs`` passed to method are used in ``urllib.request.urlopen`` if ``html_source`` is being considered as a web url.
             - ``**kwargs`` passed to method are used in ``open`` if ``html_source`` is being considered as a filepath.
             - The largest row size encountered will be used as the ``column_count`` for the returned ``SQLDataModel``, rows will be padded with ``None`` if less.
+            - See :meth:`SQLDataModel.generate_html_table_chunks()` for initial source chunking before content fed to :mod:`SQLDataModel.HTMLParser`.
             
         """        
         if not isinstance(html_source, str):
@@ -2653,8 +2721,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
                 ) from None
         tparser = HTMLParser(table_identifier=table_identifier)
-        chunks = [html_source[i:i+1024] for i in range(0, len(html_source), 1024)]
-        for c in chunks:
+        for c in SQLDataModel.generate_html_table_chunks(html_source):
             if tparser._is_finished:
                 break
             tparser.feed(c)
@@ -8417,3 +8484,90 @@ class SQLDataModel:
                 )
         validated_column_indicies = col_indicies
         return (validated_row_indicies, validated_column_indicies)
+    
+    def astype(self, dtype:Literal['bool','bytes','date','datetime','float','int','None','str']) -> SQLDataModel:
+        """
+        Casts the model data into the specified python ``dtype``.
+
+        Parameters:
+            ``dtype`` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type to cast the values to.
+
+        Raises:
+            ``ValueError``: If ``dtype`` is not one of 'bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str'.
+
+        Returns:
+            ``SQLDataModel``: The data casted as the specified type as a new ``SQLDataModel``.
+
+        Warning:
+            - Type casting will coerce any nonconforming values to the ``dtype`` being set, this means data will be lost if casting values to incompatible types.
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Height', 'Hired']
+            data = [
+                ('John', 30, 175.3, 'True'), 
+                ('Alice', 28, 162.0, 'True'), 
+                ('Travis', 35, 185.8, 'False')
+            ]    
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # See what we're working with
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌────────┬──────┬─────────┬───────┐
+            │ Name   │  Age │  Height │ Hired │
+            ├────────┼──────┼─────────┼───────┤
+            │ John   │   30 │  175.30 │ True  │
+            │ Alice  │   28 │  162.00 │ True  │
+            │ Travis │   35 │  185.80 │ False │
+            └────────┴──────┴─────────┴───────┘
+            [3 rows x 4 columns]
+        ```
+        
+        We can return the values as new types or save them to a column:
+
+        ```python
+            # Convert the string based 'Hired' column to boolean values
+            sdm['Hired'] = sdm['Hired'].astype('bool')
+
+            # Let's also create a new 'Height' column, this time as an integer
+            sdm['Height int'] = sdm['Height'].astype('int')
+
+            # See the new values and their types
+            print(sdm)
+        ```
+        
+        This will output:
+
+        ```shell
+            ┌────────┬──────┬─────────┬───────┬────────────┐
+            │ Name   │  Age │  Height │ Hired │ Height int │
+            ├────────┼──────┼─────────┼───────┼────────────┤
+            │ John   │   30 │  175.30 │ 1     │        175 │
+            │ Alice  │   28 │  162.00 │ 1     │        162 │
+            │ Travis │   35 │  185.80 │ 0     │        185 │
+            └────────┴──────┴─────────┴───────┴────────────┘
+            [3 rows x 5 columns]
+        ```        
+        
+        Note:
+            - Unless the returned values are saved as a new column, using this method does not change the underlying column's type currently assigned to it, to modify the column type use :meth:`SQLDataModel.set_column_dtypes()` instead.
+            
+        """
+        if dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{type(dtype).__name__}', argument for `dtype` must be one of 'bool','bytes','date','datetime','float','int','None' or 'str'")
+            )        
+        col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
+        str_col_cast = ",".join([f"""cast(nullif(nullif("{col}",'None'),'') as {col_sql_dtype}) as "{col}" """ if dtype not in ('bool','bytes','datetime','date','None') else f'datetime("{col}") as "{col}" ' if dtype == 'datetime' else f'date("{col}") as "{col}" ' if dtype == 'date' else f"""cast(case coalesce(nullif("{col}",''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int) as "{col}" """ if dtype == 'bool' else f"""cast(CASE WHEN (SUBSTR("{col}",1,2) = 'b''' AND SUBSTR("{col}",-1,1) ='''') THEN SUBSTR("{col}",3,LENGTH("{col}")-3) ELSE "{col}" END as {col_sql_dtype}) as "{col}" """ if dtype == 'bytes' else f"""nullif(trim(nullif("{col}",'None')),'') as "{col}" """ if dtype == 'None' else f'"{col}" as "{col}" ' for col in self.headers])
+        sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
+        dtype_dict = {col:dtype for col in self.headers}
+        return self.execute_fetch(sql_stmt, dtypes=dtype_dict)

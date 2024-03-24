@@ -1,14 +1,14 @@
 class DimensionError(Exception):
     """
     Raised when arguments provided to ``SQLDataModel`` are not of compatible dimensions,
-    for example, trying to join a (10, 4) dimensional model to a (7, 5) dimensional model.
+    for example, trying to join a ``(10, 4)`` dimensional model to a ``(7, 5)`` dimensional model.
 
     Attributes:
         ``message`` (str): A detailed error message describing the dimension mismatch.
 
     Example::
     
-        import SQLDataModel
+        from SQLDataModel import SQLDataModel
 
         # Example headers and data
         headers = ['idx', 'first', 'last', 'age']
@@ -20,17 +20,17 @@ class DimensionError(Exception):
         ]
 
         # Create the sample model with correct dimensions
-        sqldm = SQLDataModel(data,headers)
+        sdm = SQLDataModel(data,headers)
 
         # This time with one less header, which raises `DimensionError` exception:
         try:
-            sqldm = SQLDataModel(data,headers[:-1])
+            sdm = SQLDataModel(data,headers[:-1])
         except DimensionError as e:
             print(e)
         
         # Attempting to assign a row with incompatible shape which also raises `DimensionError` exception:
         try:
-            sqldm[1] = ['sarah', 'west', 30, 'new york']
+            sdm[1] = ['sarah', 'west', 30, 'new york']
         except DimensionError as e:
             print(e)
     
@@ -48,7 +48,7 @@ class SQLProgrammingError(Exception):
 
     Example::
     
-        import SQLDataModel
+        from SQLDataModel import SQLDataModel
 
         # Example headers and data
         headers = ['idx', 'first', 'last', 'age']
@@ -60,17 +60,17 @@ class SQLProgrammingError(Exception):
         ]
 
         # Create the sample model
-        sqldm = SQLDataModel(data,headers)
+        sdm = SQLDataModel(data,headers)
 
         # Query with invalid syntax to raise `SQLProgrammingError` exception:
         try:
-            sqldm = SQLDataModel.fetch_query("selct first, last from sdmmodel where age > 30")
+            sdm = SQLDataModel.fetch_query("selct first, last from sdm where age > 30")
         except SQLProgrammingError as e:
             print(e)
 
         # Query for non-existing column to raise `SQLProgrammingError` exception:
         try:
-            sqldm = SQLDataModel.fetch_query("select first, last, date_of_birth from sdmmodel")
+            sdm = SQLDataModel.fetch_query("select first, last, date_of_birth from sdm")
         except SQLProgrammingError as e:
             print(e)    
 
