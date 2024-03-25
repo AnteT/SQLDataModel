@@ -1,5 +1,7 @@
 <img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_banner_cyan.PNG?raw=true" alt="SQLDataModel Logo" style="width:100vw; border-radius: .6vw" />
 
+---
+
 ### SQLDataModel: fast & lightweight source agnostic data model
 
 [![SQLDataModel Home](https://img.shields.io/badge/SQLDataModel-Home-blue?style=flat&logo=github)](https://github.com/AnteT/SQLDataModel)
