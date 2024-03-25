@@ -5477,7 +5477,7 @@ class SQLDataModel:
         Implements the ``-`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to subtract from each element in the SQLDataModel.
+            ``value`` (int | float | SQLDataModel): The value to subtract from each element in the SQLDataModel.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
@@ -5548,7 +5548,7 @@ class SQLDataModel:
         Implements the ``*`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to multiply each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to multiply each element in the SQLDataModel by.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
@@ -5837,7 +5837,7 @@ class SQLDataModel:
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x ** value)      
 
-    def __iadd__(self, value) -> SQLDataModel:
+    def __iadd__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``+=`` operator functionality for compatible ``SQLDataModel`` operations.
 
@@ -5888,7 +5888,7 @@ class SQLDataModel:
         """        
         return self.__add__(value)
     
-    def __isub__(self, value) -> SQLDataModel:
+    def __isub__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``-=`` operator functionality for compatible ``SQLDataModel`` operations.
 
@@ -5938,12 +5938,12 @@ class SQLDataModel:
         """
         return self.__sub__(value)    
     
-    def __imul__(self, value) -> SQLDataModel:
+    def __imul__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``*=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to multiply each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to multiply each element in the SQLDataModel by.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
@@ -5964,16 +5964,16 @@ class SQLDataModel:
         """        
         return self.__mul__(value)    
 
-    def __idiv__(self, value) -> SQLDataModel:
+    def __idiv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``/=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to divide each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
 
         Raises:
-            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
-            ``ZeroDivisionError``: If ``value`` is 0.
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``ZeroDivisionError``: If ``value`` of divisor is 0.
 
         Returns:
             ``SQLDataModel``: The modified SQLDataModel after the division operation.
@@ -5991,12 +5991,12 @@ class SQLDataModel:
         """        
         return self.__truediv__(value)
 
-    def __ifloordiv__(self, value:int|float) -> SQLDataModel:
+    def __ifloordiv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``//=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to divide each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
@@ -6039,13 +6039,12 @@ class SQLDataModel:
         """
         return self.__floordiv__(value)
 
-
-    def __ipow__(self, value) -> SQLDataModel:
+    def __ipow__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``**=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to raise each element in the SQLDataModel to.
+            ``value`` (int | float | SQLDataModel): The value to raise each element in the SQLDataModel to.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
