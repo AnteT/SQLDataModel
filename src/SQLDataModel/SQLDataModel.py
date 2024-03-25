@@ -5499,9 +5499,72 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int' or 'float' ")
             )
+        if value == 0:
+            raise ZeroDivisionError(
+                SQLDataModel.ErrorFormat(f"ZeroDivisionError: invalid argument '{value}', division operations cannot be performed with a divisor of zero")
+            )
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x / value)
         
+    def __floordiv__(self, value:int|float) -> SQLDataModel:
+        """
+        Implements the ``//`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float): The value to divide each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
+            ``ZeroDivisionError``: If ``value`` is 0.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the division operation.
+
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['x']
+            data = [[10],[20],[30],[40],[50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Create new columns for regular division 
+            sdm['x / 3'] = sdm['x'] / 3
+
+            # Create another one using floor division
+            sdm['x // 3'] = sdm['x'] // 3
+
+            # View results for both
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌───┬──────┬──────────┬────────┐
+            │   │    x │    x / 3 │ x // 3 │
+            ├───┼──────┼──────────┼────────┤
+            │ 0 │   10 │   3.3333 │      3 │
+            │ 1 │   20 │   6.6667 │      6 │
+            │ 2 │   30 │  10.0000 │     10 │
+            │ 3 │   40 │  13.3333 │     13 │
+            │ 4 │   50 │  16.6667 │     16 │
+            └───┴──────┴──────────┴────────┘
+            [5 rows x 3 columns]
+        ```
+        """
+        if not isinstance(value, (int,float)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', floor division operations can only be performed on types 'int' or 'float' ")
+            )
+        if value == 0:
+            raise ZeroDivisionError(
+                SQLDataModel.ErrorFormat(f"ZeroDivisionError: invalid argument '{value}', division operations cannot be performed with a divisor of zero")
+            )        
+        return self.apply(lambda x: x // value)
+
     def __pow__(self, value:int|float) -> SQLDataModel:
         """
         Implements the ``**`` operator functionality for compatible ``SQLDataModel`` operations.
@@ -5686,7 +5749,56 @@ class SQLDataModel:
         
         """        
         return self.__truediv__(value)
-    
+
+    def __ifloordiv__(self, value:int|float) -> SQLDataModel:
+        """
+        Implements the ``//=`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float): The value to divide each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
+            ``ZeroDivisionError``: If ``value`` is 0.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the floor division operation.
+
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['x']
+            data = [[10],[20],[30],[40],[50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Modify the existing column
+            sdm['x'] //= 3
+            
+            # View result
+            print(sdm)
+
+        This will output:
+        
+        ```shell
+            ┌───┬──────┐
+            │   │    x │
+            ├───┼──────┤
+            │ 0 │    3 │
+            │ 1 │    6 │
+            │ 2 │   10 │
+            │ 3 │   13 │
+            │ 4 │   16 │
+            └───┴──────┘
+            [5 rows x 1 columns]
+        ```
+        """
+        return self.__floordiv__(value)
+
+
     def __ipow__(self, value) -> SQLDataModel:
         """
         Implements the ``**=`` operator functionality for compatible ``SQLDataModel`` operations.
