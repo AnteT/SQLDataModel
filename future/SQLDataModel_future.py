@@ -2745,7 +2745,7 @@ class SQLDataModel:
         return SQLDataModel.from_dict(data_dict, **kwargs)
 
     @classmethod
-    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, infer_types:bool=False, **kwargs) -> SQLDataModel:
+    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, infer_types:bool=True, **kwargs) -> SQLDataModel:
         """
         Parses HTML table element from one of three possible sources: web page at url, local file at path, raw HTML string literal.
         If ``table_identifier`` is not specified, the first <table> element successfully parsed is returned, otherwise if ``table_identifier`` is a ``str``, the parser will return the corresponding 'id' or 'name' HTML attribute that matches the identifier specified. 
@@ -2759,7 +2759,7 @@ class SQLDataModel:
                 If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input.
             ``encoding`` (str): The encoding to use for reading HTML when ``html_source`` is considered a valid url or file path (default is 'utf-8').
             ``table_identifier`` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
-            ``infer_types`` (bool, optional): If column data types should be inferred in the return model. Default is False, meaning all columns are returned as 'str' types.
+            ``infer_types`` (bool, optional): If column data types should be inferred in the return model. Default is True, meaning column types will be inferred otherwise are returned as 'str' types.
                 If is ``int``, identifier is treated as the indexed location of the <table> element on the page from top to bottom starting from zero and will return the corresponding position when encountered.
                 If is ``str``, identifier is treated as a target HTML 'id' or 'name' attribute to search for and will return the first case-insensitive match when encountered.
             ``**kwargs``: Additional keyword arguments to pass when using ``urllib.request.urlopen`` to fetch HTML from a URL.
