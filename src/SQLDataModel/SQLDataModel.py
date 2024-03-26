@@ -36,6 +36,12 @@ try:
 except ModuleNotFoundError:
     _has_pq = False
 
+try:
+    import openpyxl as _xl
+    _has_xl = True
+except ModuleNotFoundError:
+    _has_xl = False
+
 class SQLDataModel:
     """
     ------------
@@ -189,6 +195,7 @@ class SQLDataModel:
     ``SQLDataModel`` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
         - ``CSV``: Extract from and write to comma separated value, ``.csv``, files.
+        - ``Excel``: Extract from and write to Excel ``.xlsx`` files, ``openpyxl`` required.
         - ``HTML``: Extract from web and write to and from ``.html`` files including formatted string literals.
         - ``JSON``: Extract from and write to ``.json`` files, JSON-like objects, or JSON formatted sring literals.
         - ``LaTeX``: Extract from and write to ``.tex`` files, LaTeX formatted string literals.
@@ -350,7 +357,7 @@ class SQLDataModel:
                     )
             if (len(headers) != len(data[0])) and had_data:
                 raise DimensionError(
-                    SQLDataModel.ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length '{len(headers)} != {len(data[0])}', the implied column count for data provided")
+                    SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{len(headers)} != {len(data[0])}', provided headers dim, '{len(headers)}', does not match data dim '{len(data[0])}', compatible dimensions are required")
                     )                
             if isinstance(headers,tuple):
                 try:
@@ -422,7 +429,12 @@ class SQLDataModel:
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         """``sqlite3.Connection``: The in-memory sqlite3 connection object in use by the model."""
-        self.sql_db_conn.execute(sql_create_stmt)
+        try:
+            self.sql_db_conn.execute(sql_create_stmt)
+        except sqlite3.OperationalError as e:
+            raise SQLProgrammingError(
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid model structure, failed to create table due to '{e}'")
+            ) from None           
         self.header_master = None
         """``dict``: Maps the current model's column metadata in the format of ``'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')``, updated by :meth:`SQLDataModel._update_model_metadata`."""
         self._update_model_metadata()
@@ -2406,6 +2418,181 @@ class SQLDataModel:
             return cls(data, headers, **kwargs)  
 
     @classmethod
+    def from_excel(cls, filename:str, worksheet:int|str=0, min_row:int|None=None, max_row:int|None=None, min_col:int|None=None, max_col:int|None=None, headers:list[str]=None, **kwargs) -> SQLDataModel:
+        """
+        Returns a new ``SQLDataModel`` instance from the specified Excel file.
+
+        Parameters:
+            ``filename`` (str): The file path to the Excel file, e.g., ``filename = 'titanic.xlsx'``.
+            ``worksheet`` (int | str, optional): The index or name of the worksheet to read from. Defaults to 0, indicating the first worksheet.
+            ``min_row`` (int | None, optional): The minimum row number to start reading data from. Defaults to None, indicating the first row.
+            ``max_row`` (int | None, optional): Maximum row index (1-based) to import. Defaults to None, indicating all rows are read.
+            ``min_col`` (int | None, optional): Minimum column index (1-based) to import. Defaults to None, indicating the first column.
+            ``max_col`` (int | None, optional): Maximum column index (1-based) to import. Defaults to None, indicating all the columns are read.
+            ``headers`` (List[str], optional): The column headers for the data. Default is None, using the first row of the Excel sheet as headers.
+            ``**kwargs``: Additional keyword arguments to pass to the ``SQLDataModel`` constructor.
+
+        Raises:
+            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``_has_xl`` flag.
+            ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid Excel file path.
+            ``Exception``: If an error occurs during Excel read and write operations related to openpyxl processing.
+
+        Returns:
+            ``SQLDataModel``: A new instance of ``SQLDataModel`` created from the Excel file.
+
+        Examples:
+
+        We'll use this Excel file, ``data.xlsx``, as the source for the below examples:
+
+        ```text
+                ┌───────┬─────┬────────┬───────────┐
+                │ A     │ B   │ C      │ D         │
+            ┌───┼───────┼─────┼────────┼───────────┤
+            │ 1 │ Name  │ Age │ Gender │ City      │
+            │ 2 │ John  │ 25  │ Male   │ Boston    │
+            │ 3 │ Alice │ 30  │ Female │ Milwaukee │
+            │ 4 │ Bob   │ 22  │ Male   │ Chicago   │
+            │ 5 │ Sarah │ 35  │ Female │ Houston   │
+            │ 6 │ Mike  │ 28  │ Male   │ Atlanta   │
+            └───┴───────┴─────┴────────┴───────────┘
+            [ Sheet1 ]
+        ```
+        
+        Example 1: Load Excel file with default parameters
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Create the model using the default parameters
+            sdm = SQLDataModel.from_excel('data.xlsx')
+
+            # View imported data
+            print(sdm)
+        ```
+
+        This will output all of the data starting from 'A1':
+
+        ```shell
+            ┌───────┬──────┬────────┬───────────┐
+            │ Name  │  Age │ Gender │ City      │
+            ├───────┼──────┼────────┼───────────┤
+            │ John  │   25 │ Male   │ Boston    │
+            │ Alice │   30 │ Female │ Milwaukee │
+            │ Bob   │   22 │ Male   │ Chicago   │
+            │ Sarah │   35 │ Female │ Houston   │
+            │ Mike  │   28 │ Male   │ Atlanta   │
+            └───────┴──────┴────────┴───────────┘
+            [5 rows x 4 columns]
+        ```
+
+        Example 2: Load Excel file from specific worksheet
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Create the model from 'Sheet2'
+            sdm = SQLDataModel.from_excel('data.xlsx', worksheet='Sheet2')
+
+            # View imported data
+            print(sdm)
+        ```
+        
+        This will output the contents of 'Sheet2':
+
+        ```shell
+            ┌────────┬───────┐
+            │ Gender │ count │
+            ├────────┼───────┤
+            │ Male   │     3 │
+            │ Female │     2 │
+            └────────┴───────┘
+            [2 rows x 2 columns]
+        ```
+
+        Example 3: Load Excel file with custom headers starting from different row
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Use our own headers instead of the Excel ones
+            new_cols = ['Col A', 'Col B', 'Col C', 'Col D']
+
+            # Create the model starting from the 2nd row to ignore the original headers
+            sdm = SQLDataModel.from_excel('data.xlsx', min_row=2, headers=new_cols)
+
+            # View the data
+            print(sdm)
+        ```
+
+        This will output the data with our renamed headers:
+
+        ```shell
+            ┌───────┬───────┬────────┬───────────┐
+            │ Col A │ Col B │ Col C  │ Col D     │
+            ├───────┼───────┼────────┼───────────┤
+            │ John  │    25 │ Male   │ Boston    │
+            │ Alice │    30 │ Female │ Milwaukee │
+            │ Bob   │    22 │ Male   │ Chicago   │
+            │ Sarah │    35 │ Female │ Houston   │
+            │ Mike  │    28 │ Male   │ Atlanta   │
+            └───────┴───────┴────────┴───────────┘
+            [5 rows x 4 columns]
+        ```
+        
+        Example 4: Load Excel file with specific subset of columns
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Create the model using the middle two columns only
+            sdm = SQLDataModel.from_excel('data.xlsx', min_col=2, max_col=3)
+
+            # View the data
+            print(sdm)
+        ```        
+
+        This will output only the middle two columns:
+
+        ```shell
+            ┌──────┬────────┐
+            │  Age │ Gender │
+            ├──────┼────────┤
+            │   25 │ Male   │
+            │   30 │ Female │
+            │   22 │ Male   │
+            │   35 │ Female │
+            │   28 │ Male   │
+            └──────┴────────┘
+            [5 rows x 2 columns]
+        ```
+
+        Note:
+            - This method entirely relies on ``openpyxl``, see their amazing documentation for further information on Excel file handling in python.
+            - If custom ``headers`` are provided using the default ``min_row``, then the original headers, if present, will be duplicated.
+            - All indicies for ``min_row``, ``max_row``, ``min_col`` and ``max_col`` are 1-based instead of 0-based, again see ``openpyxl`` for more details.
+            - See related :meth:`SQLDataModel.to_excel()` for exporting an existing ``SQLDataModel`` to Excel.
+        """
+        if not _has_xl:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method")
+            )
+        if not isinstance(filename, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid Excel file path")
+            )        
+        try:
+            wb = _xl.load_workbook(filename=filename, read_only=True)
+            ws = wb.worksheets[worksheet] if isinstance(worksheet, int) else wb[worksheet]
+            data = [row for row in ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col, values_only=True)]
+            headers = data.pop(0) if headers is None else headers
+            wb.close()        
+        except Exception as e:
+            raise Exception(
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided Excel file")
+            ) from None
+        return cls(data=data, headers=headers, **kwargs)
+
+    @classmethod
     def from_json(cls, json_source:str|list|dict, encoding:str='utf-8', **kwargs) -> SQLDataModel:
         """
         Creates a new ``SQLDataModel`` instance from JSON file path or JSON-like source, flattening if required.
@@ -3197,7 +3384,7 @@ class SQLDataModel:
         return cls(data=data,headers=headers, **kwargs)
 
     @classmethod
-    def from_parquet(self, filename:str, **kwargs) -> SQLDataModel:
+    def from_parquet(cls, filename:str, **kwargs) -> SQLDataModel:
         """
         Returns a new ``SQLDataModel`` instance from the specified parquet file.
 
@@ -3869,6 +4056,96 @@ class SQLDataModel:
             return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}    
         return [{col:row[i] for i,col in enumerate(headers)} for row in data]
         
+    def to_excel(self, filename:str, worksheet:int|str=0, include_index:bool=False) -> None:
+        """
+        Writes the current ``SQLDataModel`` to the specified Excel ``filename``.
+
+        Parameters:
+            ``filename`` (str): The file path to save the Excel file, e.g., ``filename = 'output.xlsx'``.
+            ``worksheet`` (int | str, optional): The index or name of the worksheet to write to. Defaults to 0, indicating the first worksheet.
+            ``include_index`` (bool, optional): If ``SQLDataModel`` index should be included in the output. Default is False.
+
+        Raises:
+            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``_has_xl`` flag.        
+            ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid Excel file path to create or write to.
+            ``IndexError``: If ``worksheet`` is provided as type 'int' but is out of range of the available worksheets.
+            ``Exception``: If any unexpected exception occurs during the Excel writing and saving process.
+        
+        Returns:
+            ``None``: If successful, a new Excel file ``filename`` is created and ``None`` is returned.   
+
+        Example::
+
+            import openpyxl
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Rate', 'Gender']
+            data = [
+                ('Alice', 25, 26.50, 'Female'),
+                ('Bob', 30, 21.25, 'Male'),
+                ('Will', 35, 24.00, 'Male'),
+                ('Mary', 32, 23.75, 'Female')
+            ]  
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Export into a new Excel file
+            sdm.to_excel('Team-Overview.xlsx')
+
+            # Or append to existing Excel file as a new worksheet
+            sdm.to_excel('Team.xlsx', worksheet='Demographics')
+        
+        This will create a new Excel file ``Team-Overview.xlsx``:
+
+        ```shell
+                ┌───────┬──────┬────────┬────────┐
+                │ A     │  B   │ C      │ D      │
+            ┌───┼───────┼──────┼────────┼────────┤
+            │ 1 │ Name  │  Age │ Gender │   Rate │
+            │ 2 │ Alice │   25 │ Female │  26.50 │
+            │ 3 │ Mary  │   32 │ Female │  23.75 │
+            │ 4 │ Bobby │   30 │ Male   │  21.25 │
+            │ 5 │ Will  │   35 │ Male   │  24.00 │
+            └───┴───────┴──────┴────────┴────────┘
+            [ Sheet1 ]
+        ```
+        Note:
+            - If provided ``filename`` does not exist, it will be created. If it already exists, model data will be appended to the existing worksheet contents.
+            - When providing a string argument for ``worksheet``, if the sheet does not exist, it will be created. However if providing an integer index for an out of range sheet, an ``IndexError`` will be raised.
+            - See related :meth:`SQLDataModel.from_excel()` for creating a ``SQLDataModel`` from existing Excel content.
+        """
+        if not _has_xl:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method")
+            )
+        if not isinstance(filename, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid Excel file path")
+            )   
+        try:
+            wb = _xl.load_workbook(filename)
+        except FileNotFoundError:
+            wb = _xl.Workbook()
+        try:
+            ws = wb.worksheets[worksheet] if isinstance(worksheet, int) else wb[worksheet]
+        except KeyError:
+            wb.create_sheet(worksheet)
+            ws = wb[worksheet]
+        except IndexError:
+            raise IndexError(
+                SQLDataModel.ErrorFormat(f"IndexError: Worksheet '{worksheet}' not found, the worksheet must exist when using an integer index, otherwise provide a string name to create the sheet instead")
+            ) from None
+        try:
+            [ws.append(row) for row in self.data(include_headers=True, include_index=include_index)]
+            wb.save(filename=filename)
+            wb.close()
+        except Exception as e:
+            raise Exception(
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write and save to the provided Excel file")
+            ) from None    
+
     def to_html(self, filename:str=None, include_index:bool=None, encoding:str='utf-8', style_params:dict=None) -> str:
         """
         Returns the current SQLDataModel as a lightly formatted HTML <table> element as a string if ``filename`` is None.

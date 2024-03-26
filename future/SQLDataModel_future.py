@@ -36,6 +36,12 @@ try:
 except ModuleNotFoundError:
     _has_pq = False
 
+try:
+    import openpyxl as _xl
+    _has_xl = True
+except ModuleNotFoundError:
+    _has_xl = False
+
 class SQLDataModel:
     """
     ------------
@@ -125,7 +131,6 @@ class SQLDataModel:
         # Or group or aggregate the data:
         sdm_agg = sdm.group_by(["first", "last", "position"])            
 
-
         # Or have your data imported and described for you
         sdm = SQLDataModel.from_parquet('titanic.parquet').describe()
 
@@ -183,36 +188,47 @@ class SQLDataModel:
         sdm = SQLDataModel.from_pickle("output.sdm")
         sdm = SQLDataModel.from_sql("output", sqlite3.connect('output.db'))
     ```
+    
     Data Formats
     ------------
 
-    SQLDataModel can be constructed from, or exported to, many different formats including:
-        - CSV: extract from and and write to comma separated value files.
-        - HTML: extract from the web, .html files, or from raw hmtl strings and write to .html files.
-        - JSON: extract from .json files, JSON-like objects, and write to .json files or return JSON-like objects.
-        - LaTeX: extract from .tex files, LaTeX formatted string literals, and write to .tex files or return LaTeX-formatted strings.
-        - Markdown: extract from .MD files, Markdown formatted string literals, and write to .MD files or return Markdown-formatted strings.
-        - numpy: convert to and from ``numpy.ndarray`` objects, ``numpy`` package required or ``ModuleNotFound`` is raised.
-        - pandas: convert to and from ``pandas.DataFrame`` objects, ``pandas`` package required or ``ModuleNotFound`` is raised.
-        - parquet: extract from .parquet files and write to .parquet files, ``pyarrow`` package required or ``ModuleNotFound`` is raised.
-        - pickle: extract from pickled files and write with pickle using any compatible extension, default used is '.sdm'.
-        - SQL: extract from and write to the following popular SQL databases:
+    ``SQLDataModel`` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
-          - SQLite: using the built-in ``sqlite3`` package.
-          - PostgreSQL: using the ``psycopg2`` package.
-          - SQL Server: using the ``pyodbc`` package.
-          - Oracle: using the ``cx_Oracle`` package.
-          - Teradata: using the ``teradatasql`` package.
+        - ``CSV``: Extract from and write to comma separated value, ``.csv``, files.
+        - ``Excel``: Extract from and write to Excel ``.xlsx`` files, ``openpyxl`` required.
+        - ``HTML``: Extract from web and write to and from ``.html`` files including formatted string literals.
+        - ``JSON``: Extract from and write to ``.json`` files, JSON-like objects, or JSON formatted sring literals.
+        - ``LaTeX``: Extract from and write to ``.tex`` files, LaTeX formatted string literals.
+        - ``Markdown``: Extract from and write to ``.MD`` files, Markdown formatted string literals.
+        - ``Numpy``: Convert to and from ``numpy.ndarray`` objects, ``numpy`` required.
+        - ``Pandas``: Convert to and from ``pandas.DataFrame`` objects, ``pandas`` required.
+        - ``Parquet``: Extract from and write to ``.parquet`` files, ``pyarrow`` required.
+        - ``Pickle``: Extract from and write to ``.pkl`` files, package uses ``.sdm`` extension when pickling for ``SQLDataModel`` metadata.
+        - ``SQL``: Extract from and write to the following popular SQL databases:
 
-        - TSV or delimited: write to and from delimited text files.
-        - Python objects:
+          - ``SQLite``: Using the built-in ``sqlite3`` module.
+          - ``PostgreSQL``: Using the ``psycopg2`` package.
+          - ``SQL Server``: Using the ``pyodbc`` package.
+          - ``Oracle``: Using the ``cx_Oracle`` package.
+          - ``Teradata``: Using the ``teradatasql`` package.
 
-          - dictionaries: convert to and from collections of python ``dict`` objects.
-          - lists: convert to and from collections of python ``list`` objects.
-          - tuples: convert to and from collections of python ``tuple`` objects.
-          - namedtuples: convert to and from collections of ``namedtuples`` objects.
-   
+        - ``Text``: Write to and from ``.txt`` files including other ``SQLDataModel`` string representations.
+        - ``TSV or delimited``: Write to and from files delimited by:
 
+          - ``\\t``: Tab separated values or ``.tsv`` files.
+          - ``\\s``: Single space or whitespace separated values.
+          - ``;``: Semicolon separated values.
+          - ``|``: Pipe separated values.
+          - ``:``: Colon separated values.
+          - ``,``: Comma separated values or ``.csv`` files.
+
+        - ``Python objects``:
+
+          - ``dictionaries``: Convert to and from collections of python ``dict`` objects.
+          - ``lists``: Convert to and from collections of python ``list`` objects.
+          - ``tuples``: Convert to and from collections of python ``tuple`` objects.
+          - ``namedtuples``: Convert to and from collections of ``namedtuples`` objects.
+          
     Pretty Printing
     ---------------
 
@@ -341,7 +357,7 @@ class SQLDataModel:
                     )
             if (len(headers) != len(data[0])) and had_data:
                 raise DimensionError(
-                    SQLDataModel.ErrorFormat(f"DimensionError: invalid data dimensions, provided headers length '{len(headers)} != {len(data[0])}', the implied column count for data provided")
+                    SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{len(headers)} != {len(data[0])}', provided headers dim, '{len(headers)}', does not match data dim '{len(data[0])}', compatible dimensions are required")
                     )                
             if isinstance(headers,tuple):
                 try:
@@ -413,7 +429,12 @@ class SQLDataModel:
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         """``sqlite3.Connection``: The in-memory sqlite3 connection object in use by the model."""
-        self.sql_db_conn.execute(sql_create_stmt)
+        try:
+            self.sql_db_conn.execute(sql_create_stmt)
+        except sqlite3.OperationalError as e:
+            raise SQLProgrammingError(
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid model structure, failed to create table due to '{e}'")
+            ) from None           
         self.header_master = None
         """``dict``: Maps the current model's column metadata in the format of ``'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')``, updated by :meth:`SQLDataModel._update_model_metadata`."""
         self._update_model_metadata()
@@ -2397,6 +2418,181 @@ class SQLDataModel:
             return cls(data, headers, **kwargs)  
 
     @classmethod
+    def from_excel(cls, filename:str, worksheet:int|str=0, min_row:int|None=None, max_row:int|None=None, min_col:int|None=None, max_col:int|None=None, headers:list[str]=None, **kwargs) -> SQLDataModel:
+        """
+        Returns a new ``SQLDataModel`` instance from the specified Excel file.
+
+        Parameters:
+            ``filename`` (str): The file path to the Excel file, e.g., ``filename = 'titanic.xlsx'``.
+            ``worksheet`` (int | str, optional): The index or name of the worksheet to read from. Defaults to 0, indicating the first worksheet.
+            ``min_row`` (int | None, optional): The minimum row number to start reading data from. Defaults to None, indicating the first row.
+            ``max_row`` (int | None, optional): Maximum row index (1-based) to import. Defaults to None, indicating all rows are read.
+            ``min_col`` (int | None, optional): Minimum column index (1-based) to import. Defaults to None, indicating the first column.
+            ``max_col`` (int | None, optional): Maximum column index (1-based) to import. Defaults to None, indicating all the columns are read.
+            ``headers`` (List[str], optional): The column headers for the data. Default is None, using the first row of the Excel sheet as headers.
+            ``**kwargs``: Additional keyword arguments to pass to the ``SQLDataModel`` constructor.
+
+        Raises:
+            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``_has_xl`` flag.
+            ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid Excel file path.
+            ``Exception``: If an error occurs during Excel read and write operations related to openpyxl processing.
+
+        Returns:
+            ``SQLDataModel``: A new instance of ``SQLDataModel`` created from the Excel file.
+
+        Examples:
+
+        We'll use this Excel file, ``data.xlsx``, as the source for the below examples:
+
+        ```text
+                ┌───────┬─────┬────────┬───────────┐
+                │ A     │ B   │ C      │ D         │
+            ┌───┼───────┼─────┼────────┼───────────┤
+            │ 1 │ Name  │ Age │ Gender │ City      │
+            │ 2 │ John  │ 25  │ Male   │ Boston    │
+            │ 3 │ Alice │ 30  │ Female │ Milwaukee │
+            │ 4 │ Bob   │ 22  │ Male   │ Chicago   │
+            │ 5 │ Sarah │ 35  │ Female │ Houston   │
+            │ 6 │ Mike  │ 28  │ Male   │ Atlanta   │
+            └───┴───────┴─────┴────────┴───────────┘
+            [ Sheet1 ]
+        ```
+        
+        Example 1: Load Excel file with default parameters
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Create the model using the default parameters
+            sdm = SQLDataModel.from_excel('data.xlsx')
+
+            # View imported data
+            print(sdm)
+        ```
+
+        This will output all of the data starting from 'A1':
+
+        ```shell
+            ┌───────┬──────┬────────┬───────────┐
+            │ Name  │  Age │ Gender │ City      │
+            ├───────┼──────┼────────┼───────────┤
+            │ John  │   25 │ Male   │ Boston    │
+            │ Alice │   30 │ Female │ Milwaukee │
+            │ Bob   │   22 │ Male   │ Chicago   │
+            │ Sarah │   35 │ Female │ Houston   │
+            │ Mike  │   28 │ Male   │ Atlanta   │
+            └───────┴──────┴────────┴───────────┘
+            [5 rows x 4 columns]
+        ```
+
+        Example 2: Load Excel file from specific worksheet
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Create the model from 'Sheet2'
+            sdm = SQLDataModel.from_excel('data.xlsx', worksheet='Sheet2')
+
+            # View imported data
+            print(sdm)
+        ```
+        
+        This will output the contents of 'Sheet2':
+
+        ```shell
+            ┌────────┬───────┐
+            │ Gender │ count │
+            ├────────┼───────┤
+            │ Male   │     3 │
+            │ Female │     2 │
+            └────────┴───────┘
+            [2 rows x 2 columns]
+        ```
+
+        Example 3: Load Excel file with custom headers starting from different row
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Use our own headers instead of the Excel ones
+            new_cols = ['Col A', 'Col B', 'Col C', 'Col D']
+
+            # Create the model starting from the 2nd row to ignore the original headers
+            sdm = SQLDataModel.from_excel('data.xlsx', min_row=2, headers=new_cols)
+
+            # View the data
+            print(sdm)
+        ```
+
+        This will output the data with our renamed headers:
+
+        ```shell
+            ┌───────┬───────┬────────┬───────────┐
+            │ Col A │ Col B │ Col C  │ Col D     │
+            ├───────┼───────┼────────┼───────────┤
+            │ John  │    25 │ Male   │ Boston    │
+            │ Alice │    30 │ Female │ Milwaukee │
+            │ Bob   │    22 │ Male   │ Chicago   │
+            │ Sarah │    35 │ Female │ Houston   │
+            │ Mike  │    28 │ Male   │ Atlanta   │
+            └───────┴───────┴────────┴───────────┘
+            [5 rows x 4 columns]
+        ```
+        
+        Example 4: Load Excel file with specific subset of columns
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Create the model using the middle two columns only
+            sdm = SQLDataModel.from_excel('data.xlsx', min_col=2, max_col=3)
+
+            # View the data
+            print(sdm)
+        ```        
+
+        This will output only the middle two columns:
+
+        ```shell
+            ┌──────┬────────┐
+            │  Age │ Gender │
+            ├──────┼────────┤
+            │   25 │ Male   │
+            │   30 │ Female │
+            │   22 │ Male   │
+            │   35 │ Female │
+            │   28 │ Male   │
+            └──────┴────────┘
+            [5 rows x 2 columns]
+        ```
+
+        Note:
+            - This method entirely relies on ``openpyxl``, see their amazing documentation for further information on Excel file handling in python.
+            - If custom ``headers`` are provided using the default ``min_row``, then the original headers, if present, will be duplicated.
+            - All indicies for ``min_row``, ``max_row``, ``min_col`` and ``max_col`` are 1-based instead of 0-based, again see ``openpyxl`` for more details.
+            - See related :meth:`SQLDataModel.to_excel()` for exporting an existing ``SQLDataModel`` to Excel.
+        """
+        if not _has_xl:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method")
+            )
+        if not isinstance(filename, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid Excel file path")
+            )        
+        try:
+            wb = _xl.load_workbook(filename=filename, read_only=True)
+            ws = wb.worksheets[worksheet] if isinstance(worksheet, int) else wb[worksheet]
+            data = [row for row in ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col, values_only=True)]
+            headers = data.pop(0) if headers is None else headers
+            wb.close()        
+        except Exception as e:
+            raise Exception(
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided Excel file")
+            ) from None
+        return cls(data=data, headers=headers, **kwargs)
+
+    @classmethod
     def from_json(cls, json_source:str|list|dict, encoding:str='utf-8', **kwargs) -> SQLDataModel:
         """
         Creates a new ``SQLDataModel`` instance from JSON file path or JSON-like source, flattening if required.
@@ -3188,7 +3384,7 @@ class SQLDataModel:
         return cls(data=data,headers=headers, **kwargs)
 
     @classmethod
-    def from_parquet(self, filename:str, **kwargs) -> SQLDataModel:
+    def from_parquet(cls, filename:str, **kwargs) -> SQLDataModel:
         """
         Returns a new ``SQLDataModel`` instance from the specified parquet file.
 
@@ -3860,6 +4056,96 @@ class SQLDataModel:
             return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}    
         return [{col:row[i] for i,col in enumerate(headers)} for row in data]
         
+    def to_excel(self, filename:str, worksheet:int|str=0, include_index:bool=False) -> None:
+        """
+        Writes the current ``SQLDataModel`` to the specified Excel ``filename``.
+
+        Parameters:
+            ``filename`` (str): The file path to save the Excel file, e.g., ``filename = 'output.xlsx'``.
+            ``worksheet`` (int | str, optional): The index or name of the worksheet to write to. Defaults to 0, indicating the first worksheet.
+            ``include_index`` (bool, optional): If ``SQLDataModel`` index should be included in the output. Default is False.
+
+        Raises:
+            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``_has_xl`` flag.        
+            ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid Excel file path to create or write to.
+            ``IndexError``: If ``worksheet`` is provided as type 'int' but is out of range of the available worksheets.
+            ``Exception``: If any unexpected exception occurs during the Excel writing and saving process.
+        
+        Returns:
+            ``None``: If successful, a new Excel file ``filename`` is created and ``None`` is returned.   
+
+        Example::
+
+            import openpyxl
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Rate', 'Gender']
+            data = [
+                ('Alice', 25, 26.50, 'Female'),
+                ('Bob', 30, 21.25, 'Male'),
+                ('Will', 35, 24.00, 'Male'),
+                ('Mary', 32, 23.75, 'Female')
+            ]  
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Export into a new Excel file
+            sdm.to_excel('Team-Overview.xlsx')
+
+            # Or append to existing Excel file as a new worksheet
+            sdm.to_excel('Team.xlsx', worksheet='Demographics')
+        
+        This will create a new Excel file ``Team-Overview.xlsx``:
+
+        ```shell
+                ┌───────┬──────┬────────┬────────┐
+                │ A     │  B   │ C      │ D      │
+            ┌───┼───────┼──────┼────────┼────────┤
+            │ 1 │ Name  │  Age │ Gender │   Rate │
+            │ 2 │ Alice │   25 │ Female │  26.50 │
+            │ 3 │ Mary  │   32 │ Female │  23.75 │
+            │ 4 │ Bobby │   30 │ Male   │  21.25 │
+            │ 5 │ Will  │   35 │ Male   │  24.00 │
+            └───┴───────┴──────┴────────┴────────┘
+            [ Sheet1 ]
+        ```
+        Note:
+            - If provided ``filename`` does not exist, it will be created. If it already exists, model data will be appended to the existing worksheet contents.
+            - When providing a string argument for ``worksheet``, if the sheet does not exist, it will be created. However if providing an integer index for an out of range sheet, an ``IndexError`` will be raised.
+            - See related :meth:`SQLDataModel.from_excel()` for creating a ``SQLDataModel`` from existing Excel content.
+        """
+        if not _has_xl:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method")
+            )
+        if not isinstance(filename, str):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid Excel file path")
+            )   
+        try:
+            wb = _xl.load_workbook(filename)
+        except FileNotFoundError:
+            wb = _xl.Workbook()
+        try:
+            ws = wb.worksheets[worksheet] if isinstance(worksheet, int) else wb[worksheet]
+        except KeyError:
+            wb.create_sheet(worksheet)
+            ws = wb[worksheet]
+        except IndexError:
+            raise IndexError(
+                SQLDataModel.ErrorFormat(f"IndexError: Worksheet '{worksheet}' not found, the worksheet must exist when using an integer index, otherwise provide a string name to create the sheet instead")
+            ) from None
+        try:
+            [ws.append(row) for row in self.data(include_headers=True, include_index=include_index)]
+            wb.save(filename=filename)
+            wb.close()
+        except Exception as e:
+            raise Exception(
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write and save to the provided Excel file")
+            ) from None    
+
     def to_html(self, filename:str=None, include_index:bool=None, encoding:str='utf-8', style_params:dict=None) -> str:
         """
         Returns the current SQLDataModel as a lightly formatted HTML <table> element as a string if ``filename`` is None.
@@ -5363,10 +5649,11 @@ class SQLDataModel:
         Implements the ``+`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (str | int | float): The value to be added to each element in the SQLDataModel.
+            ``value`` (str | int | float | SQLDataModel): The value to be added to each element in the SQLDataModel.
 
         Raises:
-            ``TypeError``: If the provided ``value`` is not a valid type (str, int, or float).
+            ``TypeError``: If the provided ``value`` is not a valid type (str, int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as addition) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
 
         Returns:
             ``SQLDataModel``: A new SQLDataModel resulting from the addition operation.
@@ -5374,26 +5661,91 @@ class SQLDataModel:
         Example::
 
             from SQLDataModel import SQLDataModel
-
-            # Create the model:
-            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name'])
-
-            # Add strings:
-            sdm['Loud Name'] = sdm['First Name'] + '!'
-
-            # Create the model:
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Age', 'Years of Service'])
             
-            # Add integers:
-            sdm['Age'] = sdm['Age'] + 7 # it's a cruel world after all
-        
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar addition
+            sdm['x + 100'] = sdm['x'] + 100
+
+            # Perform vector addition using another column
+            sdm['x + y'] = sdm['x'] + sdm['y']
+
+            # View both results
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬─────────┬───────┐
+            │   x │   y │ x + 100 │ x + y │
+            ├─────┼─────┼─────────┼───────┤
+            │   2 │  10 │     102 │    12 │
+            │   4 │  20 │     104 │    24 │
+            │   8 │  30 │     108 │    38 │
+            │  16 │  40 │     116 │    56 │
+            │  32 │  50 │     132 │    82 │
+            └─────┴─────┴─────────┴───────┘
+            [5 rows x 4 columns]
+        ```
+        We can also use addition to concatenate strings:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['First', 'Last']
+            data = [['Alice', 'Smith'],['Bob', 'Johnson'],['Charlie', 'Hall'],['David', 'Brown']]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Concatenate scalar character
+            sdm['Loud First'] = sdm['First'] + '!'
+
+            # Concatenate scalar and vector using existing columns
+            sdm['Full Name'] = sdm['First'] + ' ' + sdm['Last']
+
+            # View it
+            print(sdm)
+        ```
+        This will output:
+
+        ```shell
+            ┌─────────┬─────────┬────────────┬──────────────┐
+            │ First   │ Last    │ Loud First │ Full Name    │
+            ├─────────┼─────────┼────────────┼──────────────┤
+            │ Alice   │ Smith   │ Alice!     │ Alice Smith  │
+            │ Bob     │ Johnson │ Bob!       │ Bob Johnson  │
+            │ Charlie │ Hall    │ Charlie!   │ Charlie Hall │
+            │ David   │ Brown   │ David!     │ David Brown  │
+            └─────────┴─────────┴────────────┴──────────────┘
+            [4 rows x 4 columns]
+        ```
+        Note:
+            - Mixing summands such as ``int + float`` will work, however an exception will be raised when attempting to perform addition on incompatible types such as ``str + float``.
+
         """
         if not isinstance(value, (str,int,float,SQLDataModel)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', addition operations can only be performed on types 'str', 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', addition operations can only be performed on types 'str', 'int', 'float' or 'SQLDataModel'")
             )
         if isinstance(value, SQLDataModel):
-            value = value.data()
+            value_shape = value.get_shape()
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(), value.data()
+                new_data = [tuple(base_data[i][j] + value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data
         if isinstance(value, (str,int,float)):
             return self.apply(lambda x: x + value)
 
@@ -5402,74 +5754,153 @@ class SQLDataModel:
         Implements the ``-`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to subtract from each element in the SQLDataModel.
-
-        Returns:
-            ``SQLDataModel``: A new SQLDataModel resulting from the subtraction operation.
+            ``value`` (int | float | SQLDataModel): The value to subtract from each element in the SQLDataModel.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as subtraction) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
 
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the subtraction operation.
+            
         Example::
         
             from SQLDataModel import SQLDataModel
 
-            # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Numbers'])
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
-            # Subtract value from column
-            sdm['Adjusted Numbers'] = sdm['Numbers'] - 2.5
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar subtraction
+            sdm['x - 100'] = sdm['x'] - 100
+
+            # Perform vector subtraction using another column
+            sdm['x - y'] = sdm['x'] - sdm['y']
+
+            # View both results
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬─────────┬───────┐
+            │   x │   y │ x - 100 │ x - y │
+            ├─────┼─────┼─────────┼───────┤
+            │   2 │  10 │     -98 │    -8 │
+            │   4 │  20 │     -96 │   -16 │
+            │   8 │  30 │     -92 │   -22 │
+            │  16 │  40 │     -84 │   -24 │
+            │  32 │  50 │     -68 │   -18 │
+            └─────┴─────┴─────────┴───────┘
+            [5 rows x 4 columns]
+        ```
+        Note:
+            - Mixing subtractors such as ``int + float`` will work, however an exception will be raised when attempting to perform subtraction on incompatible types such as ``str - float``.
 
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
         if isinstance(value, SQLDataModel):
-            value = value.data()
+            value_shape = value.get_shape()
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(), value.data()
+                new_data = [tuple(base_data[i][j] - value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x - value)
 
-    def __mul__(self, value:int|float) -> SQLDataModel:
+    def __mul__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``*`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to multiply each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to multiply each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as multiplication) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
 
         Returns:
             ``SQLDataModel``: A new SQLDataModel resulting from the multiplication operation.
 
-        Raises:
-            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
-        
         Example::
 
             from SQLDataModel import SQLDataModel
 
-            # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Monthly Cost'])
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
-            # Multiple all column values and save product
-            new_sdm['Yearly Cost'] = sdm['Monthly Cost'] * 12
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar multiplication
+            sdm['x * 10'] = sdm['x'] * 10
+
+            # Perform vector multiplication using another column
+            sdm['x * y'] = sdm['x'] * sdm['y']
+
+            # View results
+            print(sdm)
         
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬────────┬───────┐
+            │   x │   y │ x * 10 │ x * y │
+            ├─────┼─────┼────────┼───────┤
+            │   2 │  10 │     20 │    20 │
+            │   4 │  20 │     40 │    80 │
+            │   8 │  30 │     80 │   240 │
+            │  16 │  40 │    160 │   640 │
+            │  32 │  50 │    320 │  1600 │
+            └─────┴─────┴────────┴───────┘
+            [5 rows x 4 columns]
+        ```
+        Note:
+            - Mixing multipliers such as ``int * float`` will work, however an exception will be raised when attempting to perform multiplication on incompatible types such as ``str * float``.
+
         """
-        if not isinstance(value, (int,float)):
+        if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', multiplication operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', multiplication operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.get_shape()
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(), value.data()
+                new_data = [tuple(base_data[i][j] * value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data        
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x * value)
 
-    def __truediv__(self, value:int|float) -> SQLDataModel:
+    def __truediv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``/`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to divide each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
 
         Raises:
-            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as division) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
             ``ZeroDivisionError``: If ``value`` is 0.
 
         Returns:
@@ -5478,30 +5909,150 @@ class SQLDataModel:
         Example::
         
             from SQLDataModel import SQLDataModel
-            
-            # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Yearly Amount'])
 
-            # Create new column as quotient of division
-            sdm['Weekly Amount'] = sdm['Yearly Amount'] / 52
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar division
+            sdm['y / 10'] = sdm['y'] / 10
+
+            # Perform vector division using another column
+            sdm['y / x'] = sdm['y'] / sdm['x']
+
+            # View both results
+            print(sdm)
         
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬────────┬───────┐
+            │   x │   y │ y / 10 │ y / x │
+            ├─────┼─────┼────────┼───────┤
+            │   2 │  10 │   1.00 │  5.00 │
+            │   4 │  20 │   2.00 │  5.00 │
+            │   8 │  30 │   3.00 │  3.75 │
+            │  16 │  40 │   4.00 │  2.50 │
+            │  32 │  50 │   5.00 │  1.56 │
+            └─────┴─────┴────────┴───────┘
+            [5 rows x 4 columns]
+        ```
+        Note:
+            - Mixing divisor types such as ``int / float`` will work, however an exception will be raised when attempting to perform division on incompatible types such as ``str / float``.
+
         """
-        if not isinstance(value, (int,float)):
+        if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
+            )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.get_shape()
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(), value.data()
+                new_data = [tuple(base_data[i][j] / value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data 
+        if value == 0:
+            raise ZeroDivisionError(
+                SQLDataModel.ErrorFormat(f"ZeroDivisionError: invalid argument '{value}', division operations cannot be performed with a divisor of zero")
             )
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x / value)
         
-    def __pow__(self, value:int|float) -> SQLDataModel:
+    def __floordiv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the ``//`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as division) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
+            ``ZeroDivisionError``: If ``value`` is 0.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the floor division operation.
+
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar floor division
+            sdm['y // 10'] = sdm['y'] // 10
+
+            # Perform vector floor division using another column
+            sdm['y // x'] = sdm['y'] // sdm['x']
+
+            # View both results
+            print(sdm)
+        
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬─────────┬────────┐
+            │   x │   y │ y // 10 │ y // x │
+            ├─────┼─────┼─────────┼────────┤
+            │   2 │  10 │       1 │      5 │
+            │   4 │  20 │       2 │      5 │
+            │   8 │  30 │       3 │      3 │
+            │  16 │  40 │       4 │      2 │
+            │  32 │  50 │       5 │      1 │
+            └─────┴─────┴─────────┴────────┘
+            [5 rows x 4 columns]
+        ```
+        Note:
+            - Mixing divisor types such as ``int // float`` will work, however an exception will be raised when attempting to perform division on incompatible types such as ``str // float``.
+
+        """
+        if not isinstance(value, (int,float,SQLDataModel)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', floor division operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
+            )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.get_shape()
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(), value.data()
+                new_data = [tuple(base_data[i][j] // value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data 
+        if value == 0:
+            raise ZeroDivisionError(
+                SQLDataModel.ErrorFormat(f"ZeroDivisionError: invalid argument '{value}', floor division operations cannot be performed with a divisor of zero")
+            )
+        if isinstance(value, (int,float)):
+            return self.apply(lambda x: x // value)
+
+    def __pow__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``**`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to raise each element in the SQLDataModel to.
+            ``value`` (int | float | SQLDataModel): The exponent value to raise each element in the SQLDataModel to.
 
         Raises:
-            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as exponentiation) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
 
         Returns:
             ``SQLDataModel``: A new SQLDataModel resulting from the exponential operation.
@@ -5509,22 +6060,61 @@ class SQLDataModel:
         Example::
         
             from SQLDataModel import SQLDataModel
-            
+
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,1], [4,2], [8,3], [16,4], [32,5]]
+
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Numbers'])
+            sdm = SQLDataModel(data, headers)
 
-            # Set column equal to squared result
-            sdm['Numbers Squared'] = sdm['Numbers'] ** 2
-        
+            # Perform scalar exponentiation
+            sdm['y ** 2'] = sdm['y'] ** 2
+
+            # Perform vector exponentiation using another column
+            sdm['x ** y'] = sdm['x'] ** sdm['y']
+
+            # View results
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬────────┬──────────┐
+            │   x │   y │ y ** 2 │   x ** y │
+            ├─────┼─────┼────────┼──────────┤
+            │   2 │   1 │      1 │        2 │
+            │   4 │   2 │      4 │       16 │
+            │   8 │   3 │      9 │      512 │
+            │  16 │   4 │     16 │    65536 │
+            │  32 │   5 │     25 │ 33554432 │
+            └─────┴─────┴────────┴──────────┘
+            [5 rows x 4 columns]
+        ```
+        Note:
+            - Mixing exponent types such as ``int ** float`` will work, however an exception will be raised when attempting to exponentiate incompatible types such as ``str ** float``.
+            
         """
-        if not isinstance(value, (int,float)):
+        if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int' or 'float' ")
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.get_shape()
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(), value.data()
+                new_data = [tuple(base_data[i][j] ** value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data        
         if isinstance(value, (int,float)):
-            return self.apply(lambda x: x ** value)        
+            return self.apply(lambda x: x ** value)      
 
-    def __iadd__(self, value) -> SQLDataModel:
+    def __iadd__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``+=`` operator functionality for compatible ``SQLDataModel`` operations.
 
@@ -5575,7 +6165,7 @@ class SQLDataModel:
         """        
         return self.__add__(value)
     
-    def __isub__(self, value) -> SQLDataModel:
+    def __isub__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``-=`` operator functionality for compatible ``SQLDataModel`` operations.
 
@@ -5625,12 +6215,12 @@ class SQLDataModel:
         """
         return self.__sub__(value)    
     
-    def __imul__(self, value) -> SQLDataModel:
+    def __imul__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``*=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to multiply each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to multiply each element in the SQLDataModel by.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
@@ -5651,16 +6241,16 @@ class SQLDataModel:
         """        
         return self.__mul__(value)    
 
-    def __idiv__(self, value) -> SQLDataModel:
+    def __idiv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``/=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to divide each element in the SQLDataModel by.
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
 
         Raises:
-            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
-            ``ZeroDivisionError``: If ``value`` is 0.
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``ZeroDivisionError``: If ``value`` of divisor is 0.
 
         Returns:
             ``SQLDataModel``: The modified SQLDataModel after the division operation.
@@ -5677,13 +6267,61 @@ class SQLDataModel:
         
         """        
         return self.__truediv__(value)
-    
-    def __ipow__(self, value) -> SQLDataModel:
+
+    def __ifloordiv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the ``//=`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
+            ``ZeroDivisionError``: If ``value`` is 0.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the floor division operation.
+
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['x']
+            data = [[10],[20],[30],[40],[50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Modify the existing column
+            sdm['x'] //= 3
+            
+            # View result
+            print(sdm)
+
+        This will output:
+        
+        ```shell
+            ┌───┬──────┐
+            │   │    x │
+            ├───┼──────┤
+            │ 0 │    3 │
+            │ 1 │    6 │
+            │ 2 │   10 │
+            │ 3 │   13 │
+            │ 4 │   16 │
+            └───┴──────┘
+            [5 rows x 1 columns]
+        ```
+        """
+        return self.__floordiv__(value)
+
+    def __ipow__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``**=`` operator functionality for compatible ``SQLDataModel`` operations.
 
         Parameters:
-            ``value`` (int | float): The value to raise each element in the SQLDataModel to.
+            ``value`` (int | float | SQLDataModel): The value to raise each element in the SQLDataModel to.
 
         Raises:
             ``TypeError``: If the provided ``value`` is not a valid type (int or float).
@@ -6626,7 +7264,7 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_idx_col))
         yield from (Row(*x) for x in res.fetchall())
     
-    def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None) -> SQLDataModel:
+    def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None, include_join_column:bool=False) -> SQLDataModel:
         """
         Merges two ``SQLDataModel`` instances based on specified columns and merge type, ``how``, returning the result as a new instance. 
         If the join column shares the same name in both models, ``left_on`` and ``right_on`` column arguments are not required and will be inferred. Otherwise, explicit arguments for both are required.
@@ -6636,9 +7274,10 @@ class SQLDataModel:
             ``how`` (Literal["left", "right", "inner", "full outer", "cross"]): The type of merge to perform.
             ``left_on`` (str): The column name from the current model to use as the left join key.
             ``right_on`` (str): The column name from the ``merge_with`` model to use as the right join key.
+            ``include_join_column`` (bool): If the shared column being used as the join key should be included from both tables. Default is False.
         
         Raises:
-            ``TypeError``: If ``merge_with`` is not of type 'SQLDataModel'.
+            ``TypeError``: If ``merge_with`` is not of type ``SQLDataModel``.
             ``DimensionError``: If no shared column exists, and explicit ``left_on`` and ``right_on`` arguments are not provided.
             ``ValueError``: If the specified ``left_on`` or ``right_on`` column is not found in the respective models.
 
@@ -6649,33 +7288,182 @@ class SQLDataModel:
 
             from SQLDataModel import SQLDataModel
 
-            # Create sample data
-            data_a = [('Alice', 25, 'Female'), ('Bob', 30, 'Male')]
-            data_b = [('Alice', 'Marketing'), ('Charlie', 'Engineering')]
+            # Left table data with ID column
+            left_headers = ["Name", "Age", "ID"]
+            left_data = [        
+                ["Bob", 35, 1],
+                ["Alice", 30, 5],
+                ["David", 40, None],
+                ["Charlie", 25, 2]
+            ]
+            # Right table data with shared ID column
+            right_headers = ["ID", "Country"]
+            right_data = [
+                [1, "USA"],
+                [2, "Germany"],
+                [3, "France"],
+                [4, "Latvia"]
+            ]
 
-            # Create the models
-            sdm_a = SQLDataModel(data_a, headers=['Name', 'Age', 'Gender'])
-            sdm_b = SQLDataModel(data_b, headers=['Name', 'Department'])
+            # Create the left and right tables
+            sdm_left = SQLDataModel(left_data, left_headers)
+            sdm_right = SQLDataModel(right_data, right_headers)
 
-            # Merge the models based on the 'Name' column
-            merged_model = sdm_a.merge(merge_with=sdm_b, how="inner", left_on="Name", right_on="Name")
-
-            # View the merged result
-            print(merged_model)
-        
-        This will output:
-        
-        ```shell            
-            ┌────────┬──────┬────────┬────────────┐
-            │ Name   │ Age  │ Gender │ Department │
-            ├────────┼──────┼────────┼────────────┤
-            │ Alice  │ 25   │ Female │ Marketing  │
-            └────────┴──────┴────────┴────────────┘
-            [1 row x 4 columns]
+        Here are the left and right tables we will be joining:
+            
+        ```shell
+            Left Table:                     Right Table:
+            ┌─────────┬──────┬──────┐       ┌──────┬─────────┐
+            │ Name    │  Age │   ID │       │   ID │ Country │
+            ├─────────┼──────┼──────┤       ├──────┼─────────┤
+            │ Bob     │   35 │    1 │       │    1 │ USA     │
+            │ Alice   │   30 │    5 │       │    2 │ Germany │
+            │ David   │   40 │      │       │    3 │ France  │
+            │ Charlie │   25 │    2 │       │    4 │ Latvia  │
+            └─────────┴──────┴──────┘       └──────┴─────────┘
+            [4 rows x 3 columns]            [4 rows x 2 columns]
         ```
+
+        Left Join
+        ---------
+
+        ```python
+            # Create a model by performing a left join with the tables
+            sdm_joined = sdm_left.merge(sdm_right, how="left")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+
+        ```shell
+            Left Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Alice   │   30 │    5 │         │
+            │ David   │   40 │      │         │
+            │ Charlie │   25 │    2 │ Germany │
+            └─────────┴──────┴──────┴─────────┘
+            [4 rows x 4 columns]    
+        ```
+
+        Right Join
+        ----------
+
+        ```python
+            # Create a model by performing a right join with the tables
+            sdm_joined = sdm_left.merge(sdm_right, how="right")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+
+        ```shell
+            Right Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Charlie │   25 │    2 │ Germany │
+            │         │      │      │ France  │
+            │         │      │      │ Latvia  │
+            └─────────┴──────┴──────┴─────────┘
+            [4 rows x 4 columns] 
+        ```  
+
+        Inner Join
+        ----------  
+
+        ```python
+            # Create a model by performing an inner join with the tables
+            sdm_joined = sdm_left.merge(sdm_right, how="inner")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+
+        ```shell
+            Inner Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Charlie │   25 │    2 │ Germany │
+            └─────────┴──────┴──────┴─────────┘
+            [2 rows x 4 columns]
+        ``` 
+
+        Full Outer Join
+        ---------------  
+
+        ```python
+            # Create a model by performing a full outer join with the tables
+            sdm_joined = sdm_left.merge(sdm_right, how="full outer")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+
+        ```shell
+            Full Outer Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Alice   │   30 │    5 │         │
+            │ David   │   40 │      │         │
+            │ Charlie │   25 │    2 │ Germany │
+            │         │      │      │ France  │
+            │         │      │      │ Latvia  │
+            └─────────┴──────┴──────┴─────────┘
+            [6 rows x 4 columns]
+        ```  
+
+        Cross Join
+        ----------  
+
+        ```python
+            # Create a model by performing a cross join with the tables
+            sdm_joined = sdm_left.merge(sdm_right, how="cross")
+
+            # View result
+            print(sdm_joined)
+        ```
+        This will output:
+
+        ```shell
+            Cross Join:
+            ┌─────────┬──────┬──────┬─────────┐
+            │ Name    │  Age │   ID │ Country │
+            ├─────────┼──────┼──────┼─────────┤
+            │ Bob     │   35 │    1 │ USA     │
+            │ Bob     │   35 │    1 │ Germany │
+            │ Bob     │   35 │    1 │ France  │
+            │ Bob     │   35 │    1 │ Latvia  │
+            │ Alice   │   30 │    5 │ USA     │
+            │ Alice   │   30 │    5 │ Germany │
+            │ Alice   │   30 │    5 │ France  │
+            │ Alice   │   30 │    5 │ Latvia  │
+            │ David   │   40 │      │ USA     │
+            │ David   │   40 │      │ Germany │
+            │ David   │   40 │      │ France  │
+            │ David   │   40 │      │ Latvia  │
+            │ Charlie │   25 │    2 │ USA     │
+            │ Charlie │   25 │    2 │ Germany │
+            │ Charlie │   25 │    2 │ France  │
+            │ Charlie │   25 │    2 │ Latvia  │
+            └─────────┴──────┴──────┴─────────┘
+            [16 rows x 4 columns]
+        ```  
         Note:
-            - The resulting SQLDataModel is created based on the ``sqlite3`` join definition and specified columns and merge type.
-            - The columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates()` for details.
+            - If ``include_join_column=False`` then only the ``left_on`` join column is included in the result, with the ``right_on`` column removed to avoid redundant shared key values.
+            - If ``include_join_column=True`` then all the columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates()` for details.
+            - The resulting ``SQLDataModel`` is created based on the ``sqlite3`` join definition and specified columns and merge type, for details see ``sqlite3`` documentation.
         """        
         if not isinstance(merge_with, SQLDataModel):
             raise TypeError(
@@ -6700,9 +7488,11 @@ class SQLDataModel:
                 )            
         tmp_table_name = "_merge_with"
         merge_with.to_sql(tmp_table_name, self.sql_db_conn)
-        all_cols = [*self.headers, *merge_with.headers]
+        left_headers, right_headers = self.headers, merge_with.headers if include_join_column else [x for x in merge_with.headers if x != right_on]
+        all_cols = [*left_headers, *right_headers]
         headers_str = ",".join([f'a."{col}" as "{alias}"' if i < self.column_count else f'b."{col}" as "{alias}"' for i, (col, alias) in enumerate(zip(all_cols,SQLDataModel.alias_duplicates(all_cols)))])
-        fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b on a."{left_on}" = b."{right_on}" """))
+        join_stmt = f"""on a."{left_on}" = b."{right_on}" """ if how != 'cross' else """"""
+        fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b {join_stmt}"""))
         return self.execute_fetch(fetch_stmt)
       
     def reset_index(self, start_index:int=0) -> None:
@@ -8487,7 +9277,7 @@ class SQLDataModel:
             ``ValueError``: If ``dtype`` is not one of 'bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str'.
 
         Returns:
-            ``SQLDataModel`` (SQLDataModel): The data casted as the specified type.
+            ``SQLDataModel``: The data casted as the specified type as a new ``SQLDataModel``.
 
         Warning:
             - Type casting will coerce any nonconforming values to the ``dtype`` being set, this means data will be lost if casting values to incompatible types.
@@ -8512,7 +9302,7 @@ class SQLDataModel:
 
         This will output:
 
-            ```shell
+        ```shell
             ┌────────┬──────┬─────────┬───────┐
             │ Name   │  Age │  Height │ Hired │
             ├────────┼──────┼─────────┼───────┤
@@ -8521,11 +9311,11 @@ class SQLDataModel:
             │ Travis │   35 │  185.80 │ False │
             └────────┴──────┴─────────┴───────┘
             [3 rows x 4 columns]
-            ```
+        ```
         
         We can return the values as new types or save them to a column:
 
-            ```python
+        ```python
             # Convert the string based 'Hired' column to boolean values
             sdm['Hired'] = sdm['Hired'].astype('bool')
 
@@ -8534,11 +9324,11 @@ class SQLDataModel:
 
             # See the new values and their types
             print(sdm)
-            ```
+        ```
         
         This will output:
 
-            ```shell
+        ```shell
             ┌────────┬──────┬─────────┬───────┬────────────┐
             │ Name   │  Age │  Height │ Hired │ Height int │
             ├────────┼──────┼─────────┼───────┼────────────┤
@@ -8547,7 +9337,7 @@ class SQLDataModel:
             │ Travis │   35 │  185.80 │ 0     │        185 │
             └────────┴──────┴─────────┴───────┴────────────┘
             [3 rows x 5 columns]
-            ```        
+        ```        
         
         Note:
             - Unless the returned values are saved as a new column, using this method does not change the underlying column's type currently assigned to it, to modify the column type use :meth:`SQLDataModel.set_column_dtypes()` instead.
@@ -8561,4 +9351,4 @@ class SQLDataModel:
         str_col_cast = ",".join([f"""cast(nullif(nullif("{col}",'None'),'') as {col_sql_dtype}) as "{col}" """ if dtype not in ('bool','bytes','datetime','date','None') else f'datetime("{col}") as "{col}" ' if dtype == 'datetime' else f'date("{col}") as "{col}" ' if dtype == 'date' else f"""cast(case coalesce(nullif("{col}",''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int) as "{col}" """ if dtype == 'bool' else f"""cast(CASE WHEN (SUBSTR("{col}",1,2) = 'b''' AND SUBSTR("{col}",-1,1) ='''') THEN SUBSTR("{col}",3,LENGTH("{col}")-3) ELSE "{col}" END as {col_sql_dtype}) as "{col}" """ if dtype == 'bytes' else f"""nullif(trim(nullif("{col}",'None')),'') as "{col}" """ if dtype == 'None' else f'"{col}" as "{col}" ' for col in self.headers])
         sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
         dtype_dict = {col:dtype for col in self.headers}
-        return self.execute_fetch(sql_stmt, dtypes=dtype_dict)    
+        return self.execute_fetch(sql_stmt, dtypes=dtype_dict)

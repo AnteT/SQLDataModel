@@ -413,6 +413,20 @@ def test_to_from_json():
         assert input_json[i] == output_json[i]
 
 @pytest.mark.ext
+def test_to_from_excel(sample_data):
+    input_data, input_headers = [tuple(str(x) if x is not None else None for x in row) for row in sample_data[1:]], tuple(sample_data[0])
+    sdm = SQLDataModel(input_data,input_headers)
+    excel_file = f'{os.getcwd()}\\tmp.xlsx'
+    sdm.to_excel(excel_file)
+    sdm = SQLDataModel.from_excel(excel_file)
+    os.remove(excel_file)
+    output_data = sdm.data(include_headers=True)
+    output_data, output_headers = output_data[1:], output_data[0]
+    assert input_headers == output_headers
+    for i in range(len(input_data)):
+        assert input_data[i] == output_data[i]
+
+@pytest.mark.ext
 def test_to_from_parquet(sample_data):
     input_data, input_headers = sample_data[1:], tuple(sample_data[0])
     sdm = SQLDataModel(input_data,input_headers)

@@ -446,6 +446,7 @@ Regardless of where the data originated or where it ends up, `SQLDataModel`'s be
 `SQLDataModel` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
 - **CSV**: Extract from and write to comma separated value, `.csv`, files.
+- **Excel**: Extract from and write to Excel `.xlsx` files, `openpyxl` required.
 - **HTML**: Extract from web and write to and from `.html` files including formatted string literals.
 - **JSON**: Extract from and write to `.json` files, JSON-like objects, or JSON formatted sring literals.
 - **LaTeX**: Extract from and write to `.tex` files, LaTeX formatted string literals.
