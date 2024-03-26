@@ -10,17 +10,31 @@ SQLDataModel is a fast & lightweight data model with no additional dependencies 
 from SQLDataModel import SQLDataModel
 
 # Extract your data:
-sdm = SQLDataModel.from_sql("your_table", cx_Oracle.Connection)
+sdm = SQLDataModel.from_html('https://antet.github.io/planets')
 
 # Transform it:
-for row in sdm.iter_rows():
-    print(row)
+sdm['Flyable?'] = sdm['Gravity'].apply(lambda x: str(x < 1.0))
 
-# Load it wherever you need to!
-sdm.to_sql("new_table", psycopg2.Connection)
+# Filter it
+sdm = sdm[sdm['Flyable?']=='True']
+
+# Load it wherever you need! Let's make a Markdown file
+sdm.to_markdown('Planets.MD')
 ```
 
-Made for those times when you just want to use raw SQL on your dataframe, or need to move data around but the full Pandas, Numpy, SQLAlchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like pretty printing your table, at _1/1000_ the size, 0.03MB vs 30MB
+Now we have a planetary bucket list in `Planets.MD`:
+
+```markdown
+| Planet  | Gravity | Moons | Flyable? |
+|:--------|--------:|------:|:---------|
+| Mercury |    0.38 |     0 | True     |
+| Venus   |    0.91 |     0 | True     |
+| Mars    |    0.38 |     2 | True     |
+| Saturn  |    0.92 |   146 | True     |
+| Uranus  |    0.89 |    27 | True     |
+```
+
+Made for those times when you just want to use raw SQL on your dataframe, or need to move data around but the full Pandas, Numpy, SQLAlchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like using plan SQL on your `DataFrame` and pretty printing your table, at _1/1000_ the size, 0.03MB vs 30MB
 
 ---
 
