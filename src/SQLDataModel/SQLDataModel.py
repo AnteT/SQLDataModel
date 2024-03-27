@@ -7190,11 +7190,34 @@ class SQLDataModel:
         
             from SQLDataModel import SQLDataModel
 
-            # Create the  model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+            # Countries data available for sample dataset
+            url = 'https://developers.google.com/public-data/docs/canonical/countries_csv'
 
-            # Generate a new model with top 3 rows
-            head_result = sdm.head(3)
+            # Create the model
+            sdm = SQLDataModel.from_html(url)
+
+            # Get head of model
+            sdm_head = sdm.head()
+
+            # View it
+            print(sdm_head)
+
+        This will grab the top 5 rows by default:
+
+        ```shell
+            ┌───┬─────────┬──────────┬───────────┬────────────────┐
+            │   │ country │ latitude │ longitude │ name           │
+            ├───┼─────────┼──────────┼───────────┼────────────────┤
+            │ 0 │ AF      │  33.9391 │   67.7100 │ Afghanistan    │
+            │ 1 │ AL      │  41.1533 │   20.1683 │ Albania        │
+            │ 2 │ DZ      │  28.0339 │    1.6596 │ Algeria        │
+            │ 3 │ AS      │ -14.2710 │ -170.1322 │ American Samoa │
+            │ 4 │ AD      │  42.5462 │    1.6016 │ Andorra        │
+            └───┴─────────┴──────────┴───────────┴────────────────┘
+            [5 rows x 4 columns]
+        ```
+        Note:
+            - See related :meth:`SQLDataModel.tail()` for the opposite, grabbing the bottom ``n_rows`` from the current model.
         
         """
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="asc"))
@@ -7751,17 +7774,37 @@ class SQLDataModel:
             ``SQLDataModel``: A new ``SQLDataModel`` instance containing the specified number of rows.
 
         Example::
-
+        
             from SQLDataModel import SQLDataModel
 
-            # Create the  model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+            # Countries data available for sample dataset
+            url = 'https://developers.google.com/public-data/docs/canonical/countries_csv'
 
-            # Generate a new model with bottom 3 rows
-            head_result = sdm.tail(3)
-        
+            # Create the model
+            sdm = SQLDataModel.from_html(url)
+
+            # Get tail of model
+            sdm_tail = sdm.tail()
+
+            # View it
+            print(sdm_tail)
+
+        This will grab the bottom 5 rows by default:
+
+        ```shell
+            ┌─────┬─────────┬──────────┬───────────┬───────────────────┐
+            │     │ country │ latitude │ longitude │ name              │
+            ├─────┼─────────┼──────────┼───────────┼───────────────────┤
+            │ 240 │ WF      │ -13.7688 │ -177.1561 │ Wallis and Futuna │
+            │ 241 │ EH      │  24.2155 │  -12.8858 │ Western Sahara    │
+            │ 242 │ YE      │  15.5527 │   48.5164 │ Yemen             │
+            │ 243 │ ZM      │ -13.1339 │   27.8493 │ Zambia            │
+            │ 244 │ ZW      │ -19.0154 │   29.1549 │ Zimbabwe          │
+            └─────┴─────────┴──────────┴───────────┴───────────────────┘
+            [5 rows x 4 columns]        
+        ```    
         Note:
-            - See :meth:`SQLDataModel.head()` for inverse method
+            - See related :meth:`SQLDataModel.head()` for the opposite, grabbing the top ``n_rows`` from the current model.
 
         """
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
