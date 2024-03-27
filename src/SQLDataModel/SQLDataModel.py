@@ -919,6 +919,8 @@ class SQLDataModel:
         
         Examples::
 
+            from SQLDataModel import SQLDataModel
+            
             # Sample data
             headers = ['Name', 'Age', 'Gender', 'City']
             data = [

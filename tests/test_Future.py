@@ -87,6 +87,79 @@ def test_setitem():
     assert num_checked == (sdm.row_count * sdm.column_count)
 
 @pytest.mark.core
+def test_addition():
+    data = [(f"{i}", i, i*1.0) for i in range(1,11)]
+    expected_output = [(f"{row[0]}x", row[1]+1, row[2]+0.1, row[1]+1 + row[2]+0.1) for row in data]
+    headers = ['str', 'int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['str concat'] = sdm['str'] + 'x'
+    sdm['int scalar'] = sdm['int'] + 1
+    sdm['float scalar'] = sdm['float'] + 0.1
+    sdm['vector'] = sdm['int scalar'] + sdm['float scalar']
+    model_output = sdm[:,[3,4,5,6]].data()
+    assert model_output == expected_output
+
+@pytest.mark.core
+def test_subtraction():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(row[0]-1, row[1]-0.1, (row[1]-0.1) - (row[0]-1)) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] = sdm['int'] - 1
+    sdm['float scalar'] = sdm['float'] - 0.1
+    sdm['vector'] = sdm['float scalar'] - sdm['int scalar']
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output    
+
+@pytest.mark.core
+def test_multiplication():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(row[0] * 2, row[1]*3.0, (row[1]*3.0) * (row[0] * 2)) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] = sdm['int'] * 2
+    sdm['float scalar'] = sdm['float']*3.0
+    sdm['vector'] = sdm['float scalar'] * sdm['int scalar']
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output    
+
+@pytest.mark.core
+def test_division():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(row[0] / 2, row[1]/3.0, (row[1]/3.0) / (row[0] / 2)) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] = sdm['int'] / 2
+    sdm['float scalar'] = sdm['float']/3.0
+    sdm['vector'] = sdm['float scalar'] / sdm['int scalar']
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output    
+
+@pytest.mark.core
+def test_floor_division():
+    data = [(i*2+10, i*1.0) for i in range(1,11)]
+    expected_output = [(row[0] // 3, row[1]//2.0, (row[0]//row[1])) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] = sdm['int'] // 3
+    sdm['float scalar'] = sdm['float']//2.0
+    sdm['vector'] = sdm['int'] // sdm['float']
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output  
+
+@pytest.mark.core
+def test_exponentiation():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(row[0] **2, row[1]**1.5, (row[0]**row[1])) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] = sdm['int'] **2
+    sdm['float scalar'] = sdm['float']**1.5
+    sdm['vector'] = sdm['int'] ** sdm['float']
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output 
+
+@pytest.mark.core
 def test_headers(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(data=input_data, headers=input_headers)
@@ -340,6 +413,20 @@ def test_to_from_json():
         assert input_json[i] == output_json[i]
 
 @pytest.mark.ext
+def test_to_from_excel(sample_data):
+    input_data, input_headers = [tuple(str(x) if x is not None else None for x in row) for row in sample_data[1:]], tuple(sample_data[0])
+    sdm = SQLDataModel(input_data,input_headers)
+    excel_file = f'{os.getcwd()}\\tmp.xlsx'
+    sdm.to_excel(excel_file)
+    sdm = SQLDataModel.from_excel(excel_file)
+    os.remove(excel_file)
+    output_data = sdm.data(include_headers=True)
+    output_data, output_headers = output_data[1:], output_data[0]
+    assert input_headers == output_headers
+    for i in range(len(input_data)):
+        assert input_data[i] == output_data[i]
+
+@pytest.mark.ext
 def test_to_from_parquet(sample_data):
     input_data, input_headers = sample_data[1:], tuple(sample_data[0])
     sdm = SQLDataModel(input_data,input_headers)
@@ -468,3 +555,87 @@ def test_to_from_delimited(sample_data):
         sdm = SQLDataModel.from_csv(dsv, delimiters=delimiter)
         output_data = sdm.data(include_headers=True)
         assert input_data == output_data
+
+@pytest.mark.core
+def test_merge():
+    left_headers = ["Name", "Age", "ID"]
+    left_data = [        
+        ["Bob", 35, 1],
+        ["Alice", 30, 5],
+        ["David", 40, None],
+        ["Charlie", 25, 2]
+    ]
+    right_headers = ["ID", "Country"]
+    right_data = [
+        [1, "USA"],
+        [2, "Germany"],
+        [3, "France"],
+        [4, "Latvia"]
+    ]
+    sdm_left = SQLDataModel(left_data, left_headers)
+    sdm_right = SQLDataModel(right_data, right_headers)
+
+    ### left join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="left", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Alice', 30, 5, None), ('David', 40, None, None), ('Charlie', 25, 2, 'Germany')]
+    assert joined_output == expected_output
+
+    ### right join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="right", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]      
+    assert joined_output == expected_output
+
+    ### inner join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="inner", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Charlie', 25, 2, 'Germany')]
+    assert joined_output == expected_output
+
+    ### full outer join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="full outer", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Alice', 30, 5, None), ('David', 40, None, None), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]
+    assert joined_output == expected_output
+
+    ### cross join ###
+    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="cross", left_on="ID", right_on="ID", include_join_column=False)
+    joined_output = sdm_joined.data(include_headers=True)
+    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Bob', 35, 1, 'Germany'), ('Bob', 35, 1, 'France'), ('Bob', 35, 1, 'Latvia'), ('Alice', 30, 5, 'USA'), ('Alice', 30, 5, 'Germany'), ('Alice', 30, 5, 'France'), ('Alice', 30, 5, 'Latvia'), ('David', 40, None, 'USA'), ('David', 40, None, 'Germany'), ('David', 40, None, 'France'), ('David', 40, None, 'Latvia'), ('Charlie', 25, 2, 'USA'), ('Charlie', 25, 2, 'Germany'), ('Charlie', 25, 2, 'France'), ('Charlie', 25, 2, 'Latvia')]    
+    assert joined_output == expected_output
+
+@pytest.mark.core
+def test_astype():
+    sdm = SQLDataModel([['1111-11-11']], headers=['Value'])
+    astype_dict = {'bool':int, 'bytes':bytes,'date':datetime.date, 'datetime':datetime.datetime, 'float':float, 'int':int, 'None':str, 'str':str}
+    for type_name, expected_type in astype_dict.items():
+        astype = sdm.astype(type_name).data()
+        output_type = type(astype)
+        assert output_type == expected_type
+
+@pytest.mark.core
+def test_drop_column(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]    
+    drop_column_args = [
+            # Format: (column_arg, [validation data indicies], inplace_arg)
+            ('date', [4], True),
+            (['string','bool'], [0,3], True),
+            (-1, [7], True),
+            ([0,2,-3], [0,2,5], True),
+            ('date', [4], False),
+            (['string','bool'], [0,3], False),
+            (-1, [7], False),
+            ([0,2,-3], [0,2,5], False)  
+        ]
+    for drop_column, val_idx, inplace in drop_column_args:
+        validation_data = [tuple([cell for i,cell in enumerate(row) if i not in val_idx]) for row in input_data]
+        validation_headers = [col for j, col in enumerate(input_headers) if j not in val_idx]
+        sdm = SQLDataModel(input_data,input_headers)
+        if inplace:
+            sdm.drop_column(drop_column, inplace=inplace)
+        else:
+            sdm = sdm.drop_column(drop_column, inplace=inplace)
+        output_headers, output_data = sdm.get_headers(), sdm.data()
+        assert output_headers == validation_headers
+        assert output_data == validation_data

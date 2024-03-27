@@ -900,7 +900,151 @@ class SQLDataModel:
                 else:
                     flat_dict[col].append(None)
         return flat_dict
-    
+
+    def drop_column(self, column:int|str|list, inplace:bool=True) -> None|SQLDataModel:
+        """
+        Drops the specified column(s) from the ``SQLDataModel``. Values for ``column`` can be a single column name or index, or a list of multiple column names or indicies to drop from the model.
+
+        Parameters:
+            ``column`` (int | str | list): The index, name, or list of indices/names of the column(s) to drop.
+            ``inplace`` (bool): If True, drops the column(s) in-place and updates the model metadata. If False, returns a new ``SQLDataModel`` object without the dropped column(s) and does not modify the original object. Default is True.
+
+        Returns:
+            ``None | SQLDataModel``: If inplace is True, returns None. Otherwise, returns a new ``SQLDataModel`` object without the dropped column(s).
+
+        Raises:
+            ``TypeError``: If the column parameter is not of type 'int', 'str', or a list containing equivalent types.
+            ``IndexError``: If any provided column index is outside the current column range.
+            ``ValueError``: If any provided column name is not found in the model's headers.
+        
+        Examples::
+
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['Name', 'Age', 'Gender', 'City']
+            data = [
+                ('Alice', 30, 'Female', 'Milwaukee'),
+                ('Sarah', 35, 'Female', 'Houston'),
+                ('Mike', 28, 'Male', 'Atlanta'),
+                ('John', 25, 'Male', 'Boston'),
+                ('Bob', 22, 'Male', 'Chicago'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data,headers)
+
+            # Drop the 'Gender' column
+            sdm.drop_column('Gender')
+
+            # View updated model
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌───────┬──────┬───────────┐
+            │ Name  │  Age │ City      │
+            ├───────┼──────┼───────────┤
+            │ Alice │   30 │ Milwaukee │
+            │ Sarah │   35 │ Houston   │
+            │ Mike  │   28 │ Atlanta   │
+            │ John  │   25 │ Boston    │
+            │ Bob   │   22 │ Chicago   │
+            └───────┴──────┴───────────┘
+            [5 rows x 3 columns]
+        ```
+
+        Dropping multiple columns:
+
+        ```python
+            # Drop first and last columns by index
+            sdm.drop_column([0,-1])
+
+            # View updated model
+            print(sdm)
+        ```
+
+        This will output:
+
+        ```shell
+            ┌──────┬────────┐
+            │  Age │ Gender │
+            ├──────┼────────┤
+            │   30 │ Female │
+            │   35 │ Female │
+            │   28 │ Male   │
+            │   25 │ Male   │
+            │   22 │ Male   │
+            └──────┴────────┘
+            [5 rows x 2 columns]
+        ```
+
+        Drop columns and return as a new ``SQLDataModel``:
+
+        ```python
+            # Drop the multiple columns and return as a new model
+            sdm = sdm.drop_column(['Age','Gender'], inplace=False)
+
+            # View updated model    
+            print(sdm)
+        ```
+
+        This will output:
+
+        ```shell
+            ┌───────┬───────────┐
+            │ Name  │ City      │
+            ├───────┼───────────┤
+            │ Alice │ Milwaukee │
+            │ Sarah │ Houston   │
+            │ Mike  │ Atlanta   │
+            │ John  │ Boston    │
+            │ Bob   │ Chicago   │
+            └───────┴───────────┘
+            [5 rows x 2 columns]
+        ```
+        Note:
+            - Arguments for ``column`` can be a single ``str`` or ``int`` or ``list[str]`` containing ``str`` or ``list[int]`` containing ``int`` representing column names or column indicies, respectively, but they cannot be combined and provided together. For example, passing ``columns = ['First Name', 3]`` will raise a ``TypeError`` exception.
+            - The equivalent of this method can also be achieved by simply indexing the required rows and columns using ``sdm[rows, column]`` notation, see :meth:`SQLDataModel.__getitem__()` for additional details.
+        """
+        if not isinstance(column, list):
+            column = [column]
+        if not all(isinstance(col, int) for col in column) and not all(isinstance(col, str) for col in column):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column type '{type(column).__name__}', argument for `column` must be of type 'int' or 'str' or a list containing the equivalent types")
+            )
+        if isinstance(column[0],int):
+            try:
+                column = [self.headers[idx] for idx in column]
+            except IndexError:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column indicies '{column}', provided index outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
+                ) from None
+        else:
+            for col in column:
+                if col not in self.headers:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', use `.get_headers()` to view current valid column arguments")
+                    )
+        if inplace:
+            drop_cols = ";".join([f'''alter table "{self.sql_model}" drop column "{col}"''' for col in column])
+            sql_stmt = f"""begin transaction;{drop_cols}; end transaction;"""
+            try:
+                self.sql_db_conn.executescript(sql_stmt)
+                self.sql_db_conn.commit()
+            except Exception as e:
+                self.sql_db_conn.rollback()
+                raise SQLProgrammingError(
+                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
+                ) from None
+            self._update_model_metadata()
+            return
+        else:
+            keep_headers = [col for col in self.headers if col not in column]
+            sql_stmt = self._generate_sql_stmt(columns=keep_headers)
+            return self.execute_fetch(sql_stmt)    
+
     def rename_column(self, column:int|str, new_column_name:str) -> None:
         """
         Renames a column in the ``SQLDataModel`` at the specified index or using the old column name with the provided value in ``new_column_name``.
@@ -2914,7 +3058,7 @@ class SQLDataModel:
             tparser.feed(c)
         data, headers = tparser.validate_table()
         tparser.close() 
-        headers = list(SQLDataModel.alias_duplicates(headers))
+        headers = list(SQLDataModel.alias_duplicates(headers)) if headers is not None else headers
         return cls(data=data, headers=headers, infer_types=infer_types)
 
     @classmethod
@@ -7190,11 +7334,34 @@ class SQLDataModel:
         
             from SQLDataModel import SQLDataModel
 
-            # Create the  model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+            # Countries data available for sample dataset
+            url = 'https://developers.google.com/public-data/docs/canonical/countries_csv'
 
-            # Generate a new model with top 3 rows
-            head_result = sdm.head(3)
+            # Create the model
+            sdm = SQLDataModel.from_html(url)
+
+            # Get head of model
+            sdm_head = sdm.head()
+
+            # View it
+            print(sdm_head)
+
+        This will grab the top 5 rows by default:
+
+        ```shell
+            ┌───┬─────────┬──────────┬───────────┬────────────────┐
+            │   │ country │ latitude │ longitude │ name           │
+            ├───┼─────────┼──────────┼───────────┼────────────────┤
+            │ 0 │ AF      │  33.9391 │   67.7100 │ Afghanistan    │
+            │ 1 │ AL      │  41.1533 │   20.1683 │ Albania        │
+            │ 2 │ DZ      │  28.0339 │    1.6596 │ Algeria        │
+            │ 3 │ AS      │ -14.2710 │ -170.1322 │ American Samoa │
+            │ 4 │ AD      │  42.5462 │    1.6016 │ Andorra        │
+            └───┴─────────┴──────────┴───────────┴────────────────┘
+            [5 rows x 4 columns]
+        ```
+        Note:
+            - See related :meth:`SQLDataModel.tail()` for the opposite, grabbing the bottom ``n_rows`` from the current model.
         
         """
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="asc"))
@@ -7751,17 +7918,37 @@ class SQLDataModel:
             ``SQLDataModel``: A new ``SQLDataModel`` instance containing the specified number of rows.
 
         Example::
-
+        
             from SQLDataModel import SQLDataModel
 
-            # Create the  model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+            # Countries data available for sample dataset
+            url = 'https://developers.google.com/public-data/docs/canonical/countries_csv'
 
-            # Generate a new model with bottom 3 rows
-            head_result = sdm.tail(3)
-        
+            # Create the model
+            sdm = SQLDataModel.from_html(url)
+
+            # Get tail of model
+            sdm_tail = sdm.tail()
+
+            # View it
+            print(sdm_tail)
+
+        This will grab the bottom 5 rows by default:
+
+        ```shell
+            ┌─────┬─────────┬──────────┬───────────┬───────────────────┐
+            │     │ country │ latitude │ longitude │ name              │
+            ├─────┼─────────┼──────────┼───────────┼───────────────────┤
+            │ 240 │ WF      │ -13.7688 │ -177.1561 │ Wallis and Futuna │
+            │ 241 │ EH      │  24.2155 │  -12.8858 │ Western Sahara    │
+            │ 242 │ YE      │  15.5527 │   48.5164 │ Yemen             │
+            │ 243 │ ZM      │ -13.1339 │   27.8493 │ Zambia            │
+            │ 244 │ ZW      │ -19.0154 │   29.1549 │ Zimbabwe          │
+            └─────┴─────────┴──────────┴───────────┴───────────────────┘
+            [5 rows x 4 columns]        
+        ```    
         Note:
-            - See :meth:`SQLDataModel.head()` for inverse method
+            - See related :meth:`SQLDataModel.head()` for the opposite, grabbing the top ``n_rows`` from the current model.
 
         """
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
@@ -8741,7 +8928,6 @@ class SQLDataModel:
 
         Parameters:
             ``update_row_meta`` (bool, optional): If True, updates row metadata information; otherwise, retrieves column metadata only (default).
-        
             
         Returns:
             ``None``
@@ -9341,7 +9527,7 @@ class SQLDataModel:
         
         Note:
             - Unless the returned values are saved as a new column, using this method does not change the underlying column's type currently assigned to it, to modify the column type use :meth:`SQLDataModel.set_column_dtypes()` instead.
-            
+            - Any ``None`` or ``null`` values encountered will not be coerced to the specified ``dtype``, see :meth:`SQLDataModel.fillna()` for handling and filling null values appropriately.
         """
         if dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
             raise ValueError(

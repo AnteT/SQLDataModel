@@ -613,3 +613,29 @@ def test_astype():
         astype = sdm.astype(type_name).data()
         output_type = type(astype)
         assert output_type == expected_type
+
+@pytest.mark.core
+def test_drop_column(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]    
+    drop_column_args = [
+            # Format: (column_arg, [validation data indicies], inplace_arg)
+            ('date', [4], True),
+            (['string','bool'], [0,3], True),
+            (-1, [7], True),
+            ([0,2,-3], [0,2,5], True),
+            ('date', [4], False),
+            (['string','bool'], [0,3], False),
+            (-1, [7], False),
+            ([0,2,-3], [0,2,5], False)  
+        ]
+    for drop_column, val_idx, inplace in drop_column_args:
+        validation_data = [tuple([cell for i,cell in enumerate(row) if i not in val_idx]) for row in input_data]
+        validation_headers = [col for j, col in enumerate(input_headers) if j not in val_idx]
+        sdm = SQLDataModel(input_data,input_headers)
+        if inplace:
+            sdm.drop_column(drop_column, inplace=inplace)
+        else:
+            sdm = sdm.drop_column(drop_column, inplace=inplace)
+        output_headers, output_data = sdm.get_headers(), sdm.data()
+        assert output_headers == validation_headers
+        assert output_data == validation_data
