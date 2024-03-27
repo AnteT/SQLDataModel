@@ -900,7 +900,149 @@ class SQLDataModel:
                 else:
                     flat_dict[col].append(None)
         return flat_dict
-    
+
+    def drop_column(self, column:int|str|list, inplace:bool=True) -> None|SQLDataModel:
+        """
+        Drops the specified column(s) from the ``SQLDataModel``. Values for ``column`` can be a single column name or index, or a list of multiple column names or indicies to drop from the model.
+
+        Parameters:
+            ``column`` (int | str | list): The index, name, or list of indices/names of the column(s) to drop.
+            ``inplace`` (bool): If True, drops the column(s) in-place and updates the model metadata. If False, returns a new ``SQLDataModel`` object without the dropped column(s) and does not modify the original object. Default is True.
+
+        Returns:
+            ``None | SQLDataModel``: If inplace is True, returns None. Otherwise, returns a new ``SQLDataModel`` object without the dropped column(s).
+
+        Raises:
+            ``TypeError``: If the column parameter is not of type 'int', 'str', or a list containing equivalent types.
+            ``IndexError``: If any provided column index is outside the current column range.
+            ``ValueError``: If any provided column name is not found in the model's headers.
+        
+        Examples::
+
+            # Sample data
+            headers = ['Name', 'Age', 'Gender', 'City']
+            data = [
+                ('Alice', 30, 'Female', 'Milwaukee'),
+                ('Sarah', 35, 'Female', 'Houston'),
+                ('Mike', 28, 'Male', 'Atlanta'),
+                ('John', 25, 'Male', 'Boston'),
+                ('Bob', 22, 'Male', 'Chicago'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data,headers)
+
+            # Drop the 'Gender' column
+            sdm.drop_column('Gender')
+
+            # View updated model
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌───────┬──────┬───────────┐
+            │ Name  │  Age │ City      │
+            ├───────┼──────┼───────────┤
+            │ Alice │   30 │ Milwaukee │
+            │ Sarah │   35 │ Houston   │
+            │ Mike  │   28 │ Atlanta   │
+            │ John  │   25 │ Boston    │
+            │ Bob   │   22 │ Chicago   │
+            └───────┴──────┴───────────┘
+            [5 rows x 3 columns]
+        ```
+
+        Dropping multiple columns:
+
+        ```python
+            # Drop first and last columns by index
+            sdm.drop_column([0,-1])
+
+            # View updated model
+            print(sdm)
+        ```
+
+        This will output:
+
+        ```shell
+            ┌──────┬────────┐
+            │  Age │ Gender │
+            ├──────┼────────┤
+            │   30 │ Female │
+            │   35 │ Female │
+            │   28 │ Male   │
+            │   25 │ Male   │
+            │   22 │ Male   │
+            └──────┴────────┘
+            [5 rows x 2 columns]
+        ```
+
+        Drop columns and return as a new ``SQLDataModel``:
+
+        ```python
+            # Drop the multiple columns and return as a new model
+            sdm = sdm.drop_column(['Age','Gender'], inplace=False)
+
+            # View updated model    
+            print(sdm)
+        ```
+
+        This will output:
+
+        ```shell
+            ┌───────┬───────────┐
+            │ Name  │ City      │
+            ├───────┼───────────┤
+            │ Alice │ Milwaukee │
+            │ Sarah │ Houston   │
+            │ Mike  │ Atlanta   │
+            │ John  │ Boston    │
+            │ Bob   │ Chicago   │
+            └───────┴───────────┘
+            [5 rows x 2 columns]
+        ```
+        Note:
+            - Arguments for ``column`` can be a single ``str`` or ``int`` or ``list[str]`` containing ``str`` or ``list[int]`` containing ``int`` representing column names or column indicies, respectively, but they cannot be combined and provided together. For example, passing ``columns = ['First Name', 3]`` will raise a ``TypeError`` exception.
+            - The equivalent of this method can also be achieved by simply indexing the required rows and columns using ``sdm[rows, column]`` notation, see :meth:`SQLDataModel.__getitem__()` for additional details.
+        """
+        if not isinstance(column, list):
+            column = [column]
+        if not all(isinstance(col, int) for col in column) and not all(isinstance(col, str) for col in column):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid column type '{type(column).__name__}', argument for `column` must be of type 'int' or 'str' or a list containing the equivalent types")
+            )
+        if isinstance(column[0],int):
+            try:
+                column = [self.headers[idx] for idx in column]
+            except IndexError:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column indicies '{column}', provided index outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
+                ) from None
+        else:
+            for col in column:
+                if col not in self.headers:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', use `.get_headers()` to view current valid column arguments")
+                    )
+        if inplace:
+            drop_cols = ";".join([f'''alter table "{self.sql_model}" drop column "{col}"''' for col in column])
+            sql_stmt = f"""begin transaction;{drop_cols}; end transaction;"""
+            try:
+                self.sql_db_conn.executescript(sql_stmt)
+                self.sql_db_conn.commit()
+            except Exception as e:
+                self.sql_db_conn.rollback()
+                raise SQLProgrammingError(
+                    SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to rename columns, SQL execution failed with: "{e}"')
+                ) from None
+            self._update_model_metadata()
+            return
+        else:
+            keep_headers = [col for col in self.headers if col not in column]
+            sql_stmt = self._generate_sql_stmt(columns=keep_headers)
+            return self.execute_fetch(sql_stmt)    
+
     def rename_column(self, column:int|str, new_column_name:str) -> None:
         """
         Renames a column in the ``SQLDataModel`` at the specified index or using the old column name with the provided value in ``new_column_name``.
@@ -8784,7 +8926,6 @@ class SQLDataModel:
 
         Parameters:
             ``update_row_meta`` (bool, optional): If True, updates row metadata information; otherwise, retrieves column metadata only (default).
-        
             
         Returns:
             ``None``
@@ -9384,7 +9525,7 @@ class SQLDataModel:
         
         Note:
             - Unless the returned values are saved as a new column, using this method does not change the underlying column's type currently assigned to it, to modify the column type use :meth:`SQLDataModel.set_column_dtypes()` instead.
-            
+            - Any ``None`` or ``null`` values encountered will not be coerced to the specified ``dtype``, see :meth:`SQLDataModel.fillna()` for handling and filling null values appropriately.
         """
         if dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
             raise ValueError(
