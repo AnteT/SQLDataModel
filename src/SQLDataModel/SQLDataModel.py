@@ -3711,7 +3711,7 @@ class SQLDataModel:
         ```            
 
         Note:
-            - To convert an existing ``SQLDataModel`` instance to Apache Arrow format, see :meth:`SQLDataModel.from_pyarrow()`.
+            - To convert an existing ``SQLDataModel`` instance to Apache Arrow format, see :meth:`SQLDataModel.to_pyarrow()`.
             - This method is only for in-memory Apache Arrow table objects, for reading and writing parquet see :meth:`SQLDataModel.from_parquet()`.
         """
         if not _has_pa:

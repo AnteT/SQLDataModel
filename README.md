@@ -10,7 +10,7 @@
 [![Docs Status](https://readthedocs.org/projects/sqldatamodel/badge/?version=latest)](https://sqldatamodel.readthedocs.io/en/latest/?badge=latest)
 [![Downloads](https://static.pepy.tech/badge/sqldatamodel)](https://pepy.tech/project/sqldatamodel)
 
-SQLDataModel is a fast & lightweight data model with no additional dependencies for quickly fetching and storing your tabular data to and from the most commonly used databases & data sources in a couple lines of code. It's as easy as ETL:
+SQLDataModel is a fast & lightweight data model with no additional dependencies for quickly fetching and storing your tabular data to and from the most commonly used [databases & data sources](#data-formats) in a couple lines of code. It's as easy as ETL:
 
 ```python
 from SQLDataModel import SQLDataModel
