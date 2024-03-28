@@ -465,6 +465,7 @@ Regardless of where the data originated or where it ends up, `SQLDataModel`'s be
 ### Data Formats
 `SQLDataModel` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
+- **Arrow**: Convert to and from Apache Arrow format, `pyarrow` required.
 - **CSV**: Extract from and write to comma separated value, `.csv`, files.
 - **Excel**: Extract from and write to Excel `.xlsx` files, `openpyxl` required.
 - **HTML**: Extract from web and write to and from `.html` files including formatted string literals.

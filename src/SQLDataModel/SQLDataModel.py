@@ -31,10 +31,10 @@ except ModuleNotFoundError:
     _has_pd = False
 
 try:
-    from pyarrow import parquet as _pq, Table as _pq_Table
-    _has_pq = True
+    import pyarrow as _pa, pyarrow.parquet as _pq
+    _has_pa = True
 except ModuleNotFoundError:
-    _has_pq = False
+    _has_pa = False
 
 try:
     import openpyxl as _xl
@@ -194,6 +194,7 @@ class SQLDataModel:
 
     ``SQLDataModel`` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
+        - ``Arrow``: Convert to and from Apache Arrow format, ``pyarrow`` required.
         - ``CSV``: Extract from and write to comma separated value, ``.csv``, files.
         - ``Excel``: Extract from and write to Excel ``.xlsx`` files, ``openpyxl`` required.
         - ``HTML``: Extract from web and write to and from ``.html`` files including formatted string literals.
@@ -3540,7 +3541,7 @@ class SQLDataModel:
             ``SQLDataModel``: A new instance of ``SQLDataModel`` created from the parquet file.
 
         Raises:
-            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pq`` flag.
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pa`` flag.
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid parquet file path.
             ``FileNotFoundError``: If the specified parquet ``filename`` is not found.
             ``Exception``: If any unexpected exception occurs during the file or parquet reading process.
@@ -3585,7 +3586,7 @@ class SQLDataModel:
             - Titanic parquet data used in example available at https://www.kaggle.com/code/taruntiwarihp/titanic-dataset
 
         """
-        if not _has_pq:
+        if not _has_pa:
             raise ModuleNotFoundError(
                 SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.from_parquet()` method")
             )
@@ -3662,6 +3663,67 @@ class SQLDataModel:
             sdm_deserialized.update(**kwargs)
         return cls(**sdm_deserialized)
  
+    @classmethod
+    def from_pyarrow(cls, table, **kwargs) -> SQLDataModel:
+        """
+        Returns a new ``SQLDataModel`` instance from the provided Apache Arrow object.
+
+        Parameters:
+            ``table`` (pyarrow.lib.Table): Apache Arrow object from which to construct a new ``SQLDataModel`` object.
+            ``**kwargs``: Additional keyword arguments to pass to the SQLDataModel constructor.
+
+        Raises:
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed.
+            ``TypeError``: If the provided `table` argument is not of type 'pyarrow.lib.Table'.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel instance representing the data in the provided Apache Arrow object.
+
+        Example::
+
+            import pyarrow as pa
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            data = {
+                'Name': ['Alice', 'Bob', 'Charlie'],
+                'Age': [25, 30, 35],
+                'Grade': [3.8, 3.9, 3.2],
+            }
+
+            # Create PyArrow table from data
+            table = pa.Table.from_pydict(data)
+
+            # Create model from PyArrow table
+            sdm = SQLDataModel.from_pyarrow(table)
+
+        This will output:
+
+        ```shell
+            ┌─────────┬──────┬───────┐
+            │ Name    │  Age │ Grade │
+            ├─────────┼──────┼───────┤
+            │ Alice   │   25 │  3.80 │
+            │ Bob     │   30 │  3.90 │
+            │ Charlie │   35 │  3.20 │
+            └─────────┴──────┴───────┘
+            [3 rows x 3 columns]
+        ```            
+
+        Note:
+            - To convert an existing ``SQLDataModel`` instance to Apache Arrow format, see :meth:`SQLDataModel.from_pyarrow()`.
+            - This method is only for in-memory Apache Arrow table objects, for reading and writing parquet see :meth:`SQLDataModel.from_parquet()`.
+        """
+        if not _has_pa:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.from_pyarrow()` method")
+            )
+        if not isinstance(table,_pa.lib.Table):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(table).__name__}', argument for `table` must point to an Apache Arrow object of type 'pyarrow.lib.Table'")
+            )            
+        return cls.from_dict(table.to_pydict(), **kwargs)  
+
     @classmethod
     def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, dtypes:dict=None, **kwargs) -> SQLDataModel:
         """
@@ -5036,7 +5098,7 @@ class SQLDataModel:
             ``**kwargs``: Additional keyword arguments to pass to the pyarrow ``write_table`` function.
 
         Raises:
-            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pq`` flag.        
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pa`` flag.        
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid parquet file path.
             ``Exception``: If any unexpected exception occurs during the parquet writing process.
         
@@ -5083,7 +5145,7 @@ class SQLDataModel:
             - The :meth:`SQLDataModel.to_dict()` method is used prior to writing to parquet to convert the ``SQLDataModel`` into a dictionary suitable for parquet Table format.
             - Exceptions raised by the ``pyarrow`` package and its methods are caught and reraised when encountered to keep with package error formatting.
         """
-        if not _has_pq:
+        if not _has_pa:
             raise ModuleNotFoundError(
                 SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.to_parquet()` method")
             )        
@@ -5092,7 +5154,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid parquet file path")
             )
         try:
-            pqtable = _pq_Table.from_pydict(self.to_dict(orient='columns'))
+            pqtable = _pa.Table.from_pydict(self.to_dict(orient='columns'))
         except Exception as e:
             raise Exception (
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write parquet file")
@@ -5151,6 +5213,65 @@ class SQLDataModel:
                 )
         with open(filename, 'wb') as handle:
             pickle.dump(serialized_sdm, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def to_pyarrow(self, include_index:bool=False) -> _pa.Table:
+        """
+        Returns the current ``SQLDataModel`` in Apache Arrow columnar format as a ``pyarrow.Table``.
+
+        Parameters:
+            ``include_index`` (bool, optional): Specifies whether to include the index of the SQLDataModel in the resulting Table. Default is to False.
+
+        Raises:
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed.
+            ``Exception``: If any unexpected exception occurs during the pyarrow conversion process.
+
+        Returns:
+            ``pyarrow.Table``: A table representing the current ``SQLDataModel`` in Apache Arrow columnar format.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Grade']
+            data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2)]
+            
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Create the pyarrow table
+            table = sdm.to_pyarrow()
+
+            # View result
+            print(table)        
+
+        This will output the ``pyarrow`` object details:
+
+        ```shell
+            pyarrow.Table
+            Name: string
+            Age: int64
+            Grade: double
+            ----
+            Name: [["Alice","Bob","Charlie"]]
+            Age: [[25,30,35]]
+            Grade: [[3.8,3.9,3.2]]
+        ```
+
+        Note:
+            - Unmodified python types will follow conversion and casting rules specified in ``pyarrow`` implementation, for the modified ``date`` and ``datetime`` types, ``date32[day]`` and ``timestamp[us]`` will be used, respectively.
+        """
+        if not _has_pa:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.to_pyarrow()` method")
+            )        
+        try:
+            table = _pa.Table.from_pydict(self.to_dict(orient='columns', include_index=include_index))
+        except Exception as e:
+            raise Exception (
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to convert to pyarrow format")
+            ) from None        
+        return table
 
     def to_sql(self, table:str, extern_conn:sqlite3.Connection, replace_existing:bool=True, include_index:bool=True) -> None:
         """

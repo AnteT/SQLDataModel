@@ -427,6 +427,15 @@ def test_to_from_excel(sample_data):
         assert input_data[i] == output_data[i]
 
 @pytest.mark.ext
+def test_to_from_pyarrow(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel.from_pyarrow(SQLDataModel(input_data, input_headers).to_pyarrow())
+    output_data, output_headers = sdm.data(), sdm.get_headers()
+    assert output_headers == input_headers
+    for i in range(len(input_data)):
+        assert output_data[i] == input_data[i]    
+
+@pytest.mark.ext
 def test_to_from_parquet(sample_data):
     input_data, input_headers = sample_data[1:], tuple(sample_data[0])
     sdm = SQLDataModel(input_data,input_headers)
@@ -440,7 +449,7 @@ def test_to_from_parquet(sample_data):
     output_data, output_headers = output_data[1:], output_data[0]
     assert input_headers == output_headers
     for i in range(len(input_data)):
-        assert input_data[i] == output_data[i]
+        assert output_data[i] == input_data[i]
 
 @pytest.mark.ext
 def test_to_from_pandas():
@@ -448,7 +457,7 @@ def test_to_from_pandas():
     df_in = pd.DataFrame(data=input_data,columns=input_headers)
     df_out = SQLDataModel.from_pandas(df_in).to_pandas()
     for i in range(len(df_in.index)):
-        assert df_in.iloc[i].tolist() == df_out.iloc[i].tolist()     
+        assert df_out.iloc[i].tolist() == df_in.iloc[i].tolist()     
 
 @pytest.mark.ext
 def test_to_from_numpy():
@@ -456,7 +465,7 @@ def test_to_from_numpy():
     sdm = SQLDataModel(input_data)
     output_data = SQLDataModel.from_numpy(sdm.to_numpy()).data()
     for i in range(len(input_data)):
-        assert input_data[i] == output_data[i]
+        assert output_data[i] == input_data[i]
         
 @pytest.mark.core
 def test_to_from_pickle(sample_data):
@@ -471,9 +480,9 @@ def test_to_from_pickle(sample_data):
     finally:
         os.unlink(pkl_file)
     output_data, output_headers = output_data[1:], output_data[0]
-    assert input_headers == output_headers
+    assert output_headers == input_headers
     for i in range(len(input_data)):
-        assert input_data[i] == output_data[i]
+        assert output_data[i] == input_data[i]
 
 @pytest.mark.core
 def test_to_from_text(sample_data):
