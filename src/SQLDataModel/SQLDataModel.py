@@ -3725,22 +3725,22 @@ class SQLDataModel:
         return cls.from_dict(table.to_pydict(), **kwargs)  
 
     @classmethod
-    def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, dtypes:dict=None, **kwargs) -> SQLDataModel:
+    def from_sql(cls, sql: str, con: sqlite3.Connection|Any, dtypes:dict=None, **kwargs) -> SQLDataModel:
         """
         Create a ``SQLDataModel`` object by executing the provided SQL query using the specified SQL connection.
-        If a single word is provided as the ``sql_query``, the method wraps it and executes a select all treating the text as the target table.
+        If a single word is provided as the ``sql``, the method wraps it and executes a select all treating the text as the target table.
         
         Supported Connection APIs:
-            - ``sqlite3``
-            - ``psycopg2``
-            - ``pyodbc``
-            - ``cx_Oracle``
-            - ``teradatasql``
+            - SQLite using ``sqlite3``
+            - PostgreSQL using ``psycopg2``
+            - SQL Server ODBC using ``pyodbc``
+            - Oracle using ``cx_Oracle``
+            - Teradata using ``teradatasql``
 
         Parameters:
-            ``sql_query`` (str): The SQL query to execute and create the SQLDataModel.
-            ``sql_connection`` (sqlite3.Connection): The SQLite3 database connection object.
-            ``dtypes`` (dict, optional): A dictionary of the format 'column': 'python dtype' to assign to values.
+            ``sql`` (str): The SQL query to execute and use to create the SQLDataModel.
+            ``con`` (sqlite3.Connection | Any): The database connection object, supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
+            ``dtypes`` (dict, optional): A dictionary of the format ``'column': 'python dtype'`` to assign to values. Default is None, mapping types from source connection.
             ``**kwargs``: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
@@ -3748,7 +3748,6 @@ class SQLDataModel:
 
         Raises:
             ``TypeError``: If dtypes argument is provided and is not of type ``dict`` representing python data types to assign to values.
-            ``WarnFormat``: If the provided SQL connection has not been tested, a warning is issued.
             ``SQLProgrammingError``: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
             ``DimensionError``: If the provided SQL query returns no data.
 
@@ -3756,6 +3755,7 @@ class SQLDataModel:
 
         From SQL Table
         --------------
+        
         ```python
             from SQLDataModel import SQLDataModel
 
@@ -3765,6 +3765,7 @@ class SQLDataModel:
             # Equilavent query executed
             sdm = SQLDataModel.from_sql("select * from table_name", sqlite3.Connection)
         ```
+
         From SQLite Database
         --------------------
 
@@ -3798,6 +3799,7 @@ class SQLDataModel:
             # When a single word is provided, it is treated as a table name for a select all query
             sdm_table = SQLDataModel.from_sql("my_table", pg_db_conn)
         ```
+
         From SQL Server Databse
         -----------------------
 
@@ -3806,14 +3808,15 @@ class SQLDataModel:
             from SQLDataModel import SQLDataModel
 
             # Create connection object
-            sqls_db_conn = pyodbc.connect("DRIVER={SQL Server};SERVER=host;DATABASE=db;UID=user;PWD=pw;")
+            con = pyodbc.connect("DRIVER={SQL Server};SERVER=host;DATABASE=db;UID=user;PWD=pw;")
             
             # Basic usage with a select query
-            sdm = SQLDataModel.from_sql("SELECT * FROM my_table", sqls_db_conn)
+            sdm = SQLDataModel.from_sql("SELECT * FROM my_table", con)
 
             # When a single word is provided, it is treated as a table name for a select all query
-            sdm_table = SQLDataModel.from_sql("my_table", sqls_db_conn)
+            sdm_table = SQLDataModel.from_sql("my_table", con)
         ```
+
         Note:
             - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types.
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
@@ -3823,20 +3826,20 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', argument for ``dtypes`` must be of type 'dict' representing 'column': 'python dtype' values to assign model")
             )
-        db_dialect = type(sql_connection).__module__.split('.')[0].lower()
+        db_dialect = type(con).__module__.split('.')[0].lower()
         if db_dialect not in cls.get_supported_sql_connections():
             print(SQLDataModel.WarnFormat(f"""SQLDataModelWarning: provided SQL connection has not been tested, behavior for "{db_dialect}" may be unpredictable or unstable"""))
-        if len(sql_query.split()) == 1:
-            sql_query = f""" select * from {sql_query} """
+        if len(sql.split()) == 1:
+            sql = f""" select * from "{sql}" """
         try:
-            sql_c = sql_connection.cursor()
+            sql_c = con.cursor()
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL connection is not opened or valid, failed with: '{e}'")
             ) from None
         if db_dialect == 'sqlite3' and dtypes is None:
             try:
-                table_name = sql_query.lower().split("from",1)[-1].split()[0].replace('"','')
+                table_name = sql.lower().split("from",1)[-1].split()[0].replace('"','')
                 sql_c.execute(f"""
                 select "name" as "column_name"
                 ,case upper(substr("type",1,3)) 
@@ -3852,7 +3855,7 @@ class SQLDataModel:
             except:
                 dtypes = None
         try:
-            sql_c.execute(sql_query)
+            sql_c.execute(sql)
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: '{e}'")
@@ -5273,13 +5276,13 @@ class SQLDataModel:
             ) from None        
         return table
 
-    def to_sql(self, table:str, con:sqlite3.Connection, *, schema:str=None, if_exists:Literal['fail','replace','append']='fail', index:bool=True) -> None:
+    def to_sql(self, table:str, con:sqlite3.Connection|Any, *, schema:str=None, if_exists:Literal['fail','replace','append']='fail', index:bool=True) -> None:
         """
         Insert the ``SQLDataModel`` into the specified table using the provided database connection. Currently supported database connection APIs are SQLite using ``sqlite3``, PostgreSQL using ``psycopg2``, SQL Server ODBC using ``pyodbc``, Oracle using ``cx_oracle`` and Teradata using ``teradatasql``.
 
         Parameters:
             ``table`` (str): The name of the table where data will be inserted.
-            ``con`` (sqlite3.Connection): The database connection object. Supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
+            ``con`` (sqlite3.Connection | Any): The database connection object. Supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
             ``schema`` (str, optional): The schema to use for PostgreSQL and ODBC SQL Server connections, ignored otherwise. Default is None.
             ``if_exists`` (Literal['fail', 'replace', 'append'], optional): Action to take if the table already exists. If ``fail`` an error is raised if table exists and no inserts occur. If ``replace`` any existing table is dropped prior to inserts. If ``append`` existing table is appended to by subsequent inserts.
             ``index`` (bool, optional): If the model index should be included in the target table. Default is True.
