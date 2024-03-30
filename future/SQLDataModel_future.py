@@ -194,6 +194,7 @@ class SQLDataModel:
 
     ``SQLDataModel`` seamlessly interacts with a wide range of data formats providing a versatile platform for data extraction, conversion, and writing. Supported formats include:
 
+        - ``Arrow``: Convert to and from Apache Arrow format, ``pyarrow`` required.
         - ``CSV``: Extract from and write to comma separated value, ``.csv``, files.
         - ``Excel``: Extract from and write to Excel ``.xlsx`` files, ``openpyxl`` required.
         - ``HTML``: Extract from web and write to and from ``.html`` files including formatted string literals.
@@ -3710,7 +3711,7 @@ class SQLDataModel:
         ```            
 
         Note:
-            - To convert an existing ``SQLDataModel`` instance to Apache Arrow format, see :meth:`SQLDataModel.from_pyarrow()`.
+            - To convert an existing ``SQLDataModel`` instance to Apache Arrow format, see :meth:`SQLDataModel.to_pyarrow()`.
             - This method is only for in-memory Apache Arrow table objects, for reading and writing parquet see :meth:`SQLDataModel.from_parquet()`.
         """
         if not _has_pa:
@@ -3724,22 +3725,22 @@ class SQLDataModel:
         return cls.from_dict(table.to_pydict(), **kwargs)  
 
     @classmethod
-    def from_sql(cls, sql_query: str, sql_connection: sqlite3.Connection, dtypes:dict=None, **kwargs) -> SQLDataModel:
+    def from_sql(cls, sql: str, con: sqlite3.Connection|Any, dtypes:dict=None, **kwargs) -> SQLDataModel:
         """
         Create a ``SQLDataModel`` object by executing the provided SQL query using the specified SQL connection.
-        If a single word is provided as the ``sql_query``, the method wraps it and executes a select all treating the text as the target table.
+        If a single word is provided as the ``sql``, the method wraps it and executes a select all treating the text as the target table.
         
         Supported Connection APIs:
-            - ``sqlite3``
-            - ``psycopg2``
-            - ``pyodbc``
-            - ``cx_Oracle``
-            - ``teradatasql``
+            - SQLite using ``sqlite3``
+            - PostgreSQL using ``psycopg2``
+            - SQL Server ODBC using ``pyodbc``
+            - Oracle using ``cx_Oracle``
+            - Teradata using ``teradatasql``
 
         Parameters:
-            ``sql_query`` (str): The SQL query to execute and create the SQLDataModel.
-            ``sql_connection`` (sqlite3.Connection): The SQLite3 database connection object.
-            ``dtypes`` (dict, optional): A dictionary of the format 'column': 'python dtype' to assign to values.
+            ``sql`` (str): The SQL query to execute and use to create the SQLDataModel.
+            ``con`` (sqlite3.Connection | Any): The database connection object, supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
+            ``dtypes`` (dict, optional): A dictionary of the format ``'column': 'python dtype'`` to assign to values. Default is None, mapping types from source connection.
             ``**kwargs``: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
@@ -3747,7 +3748,6 @@ class SQLDataModel:
 
         Raises:
             ``TypeError``: If dtypes argument is provided and is not of type ``dict`` representing python data types to assign to values.
-            ``WarnFormat``: If the provided SQL connection has not been tested, a warning is issued.
             ``SQLProgrammingError``: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
             ``DimensionError``: If the provided SQL query returns no data.
 
@@ -3755,6 +3755,7 @@ class SQLDataModel:
 
         From SQL Table
         --------------
+        
         ```python
             from SQLDataModel import SQLDataModel
 
@@ -3764,6 +3765,7 @@ class SQLDataModel:
             # Equilavent query executed
             sdm = SQLDataModel.from_sql("select * from table_name", sqlite3.Connection)
         ```
+
         From SQLite Database
         --------------------
 
@@ -3797,6 +3799,7 @@ class SQLDataModel:
             # When a single word is provided, it is treated as a table name for a select all query
             sdm_table = SQLDataModel.from_sql("my_table", pg_db_conn)
         ```
+
         From SQL Server Databse
         -----------------------
 
@@ -3805,37 +3808,38 @@ class SQLDataModel:
             from SQLDataModel import SQLDataModel
 
             # Create connection object
-            sqls_db_conn = pyodbc.connect("DRIVER={SQL Server};SERVER=host;DATABASE=db;UID=user;PWD=pw;")
+            con = pyodbc.connect("DRIVER={SQL Server};SERVER=host;DATABASE=db;UID=user;PWD=pw;")
             
             # Basic usage with a select query
-            sdm = SQLDataModel.from_sql("SELECT * FROM my_table", sqls_db_conn)
+            sdm = SQLDataModel.from_sql("SELECT * FROM my_table", con)
 
             # When a single word is provided, it is treated as a table name for a select all query
-            sdm_table = SQLDataModel.from_sql("my_table", sqls_db_conn)
+            sdm_table = SQLDataModel.from_sql("my_table", con)
         ```
+
         Note:
-            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types.
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
             - The ``dtypes``, if provided, are only applied to ``sqlite3`` connection objects as remaining supported connections implement SQL to python adapters.
+            - See related :meth:`SQLDataModel.to_sql()` for writing to SQL database connections.
         """
         if dtypes is not None and not isinstance(dtypes, dict):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', argument for ``dtypes`` must be of type 'dict' representing 'column': 'python dtype' values to assign model")
             )
-        db_dialect = type(sql_connection).__module__.split('.')[0].lower()
+        db_dialect = type(con).__module__.split('.')[0].lower()
         if db_dialect not in cls.get_supported_sql_connections():
             print(SQLDataModel.WarnFormat(f"""SQLDataModelWarning: provided SQL connection has not been tested, behavior for "{db_dialect}" may be unpredictable or unstable"""))
-        if len(sql_query.split()) == 1:
-            sql_query = f""" select * from {sql_query} """
+        if len(sql.split()) == 1:
+            sql = f""" select * from "{sql}" """
         try:
-            sql_c = sql_connection.cursor()
+            sql_c = con.cursor()
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL connection is not opened or valid, failed with: '{e}'")
             ) from None
         if db_dialect == 'sqlite3' and dtypes is None:
             try:
-                table_name = sql_query.lower().split("from",1)[-1].split()[0].replace('"','')
+                table_name = sql.lower().split("from",1)[-1].split()[0].replace('"','')
                 sql_c.execute(f"""
                 select "name" as "column_name"
                 ,case upper(substr("type",1,3)) 
@@ -3851,7 +3855,7 @@ class SQLDataModel:
             except:
                 dtypes = None
         try:
-            sql_c.execute(sql_query)
+            sql_c.execute(sql)
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: '{e}'")
@@ -4029,18 +4033,25 @@ class SQLDataModel:
             └────────┴──────┴─────────┘
             [3 rows x 3 columns]
         ```
+
+        Get data for specific row:
+
         ```python
-            # Grab data from specific row
+            # Grab data from single row
             row_data = sdm[0].data()
 
             # View it
             print(row_data)
         ```
+
         This will output:
 
         ```text
             ('John', 30, 175.3)
         ```
+
+        Get data for specific column:
+
         ```python
             # Grab data from single column
             col_data = sdm['Name'].data()
@@ -4048,13 +4059,16 @@ class SQLDataModel:
             # View it
             print(col_data)
         ```
+
         This will output:
 
         ```text        
             [('John',), ('Alice',), ('Travis',)]
         ```
+        
         Note:
-            - Many other SQLDataModel methods rely on this method, changing it will lead to undefined behavior.
+            - Many other ``SQLDataModel`` methods rely on this method, changing it will lead to undefined behavior.
+            - See related :meth:`SQLDataModel.from_data()` for creating a new ``SQLDataModel`` from existing data sources.
 
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
@@ -5272,25 +5286,27 @@ class SQLDataModel:
             ) from None        
         return table
 
-    def to_sql(self, table:str, extern_conn:sqlite3.Connection, replace_existing:bool=True, include_index:bool=True) -> None:
+    def to_sql(self, table:str, con:sqlite3.Connection|Any, *, schema:str=None, if_exists:Literal['fail','replace','append']='fail', index:bool=True) -> None:
         """
-        Insert the ``SQLDataModel`` into the specified table using the provided SQLite database connection object.
-
-        Warning:
-            - ``replace_existing=True``: Deletes the existing table and replaces it with the SQLDataModel's data.
-            - ``replace_existing=False``: Appends to the existing table and performs deduplication immediately after.
-
-        Use :meth:`SQLDataModel.get_supported_sql_connections()` to view supported connections.
-        Use ``include_index=True`` to retain the model index in the target table.
+        Insert the ``SQLDataModel`` into the specified table using the provided database connection.
+        
+        Supported Connection APIs:
+            - SQLite using ``sqlite3``
+            - PostgreSQL using ``psycopg2``
+            - SQL Server ODBC using ``pyodbc``
+            - Oracle using ``cx_Oracle``
+            - Teradata using ``teradatasql``
 
         Parameters:
             ``table`` (str): The name of the table where data will be inserted.
-            ``extern_conn`` (sqlite3.Connection): The SQLite database connection object. Supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
-            ``replace_existing`` (bool, optional): If True, replaces the existing table; if False, appends to the existing table. Default is True.
-            ``include_index`` (bool, optional): If True, retains the model index in the target table. Default is True.
+            ``con`` (sqlite3.Connection | Any): The database connection object. Supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
+            ``schema`` (str, optional): The schema to use for PostgreSQL and ODBC SQL Server connections, ignored otherwise. Default is None.
+            ``if_exists`` (Literal['fail', 'replace', 'append'], optional): Action to take if the table already exists. If ``fail`` an error is raised if table exists and no inserts occur. If ``replace`` any existing table is dropped prior to inserts. If ``append`` existing table is appended to by subsequent inserts.
+            ``index`` (bool, optional): If the model index should be included in the target table. Default is True.
 
         Raises:
-            ``SQLProgrammingError``: If the provided SQL connection is not open.
+            ``SQLProgrammingError``: If an error occurs during cursor accessing, table creation or data insertion into the database.
+            ``ValueError``: If specified ``table`` already exists when using ``if_exists='fail'`` or if ``con`` is not one of the currently supported connection modules.
 
         Returns:
             ``None``
@@ -5300,42 +5316,178 @@ class SQLDataModel:
             import sqlite3
             from SQLDataModel import SQLDataModel
 
+            # Sample data
+            headers = ['Name', 'Age', 'Grade']
+            data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2), ('David', 28, 3.4)]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
             # Create connection object
-            sqlite_db_conn = sqlite3.connect('./database/users.db')
+            sqlite_db_conn = sqlite3.connect('students.db')
 
-            # Basic usage with insert, replace existing table, and exclude index
-            sdm.to_sql("my_table", sqlite_db_conn, replace_existing=True, include_index=False)
+            # Basic usage, creating a new table
+            sdm.to_sql('users', sqlite_db_conn)
 
-            # Append to the existing table and perform deduplication
-            sdm.to_sql("my_table", sqlite_db_conn, replace_existing=False, include_index=True)
+        This will create a new table ``users``, or fail if one already existed:
+
+        ```text
+            sqlite> select * from users;
+
+            idx  Name     Age  Grade
+            ---  -------  ---  -----
+            0    Alice    25   3.8
+            1    Bob      30   3.9
+            2    Charlie  35   3.2
+            3    David    28   3.4
+        ```
+
+        Connect to PostgreSQL, SQL Server, Oracle or Teradata:
+
+        ```python
+            import psycopg2
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Grade']
+            data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2), ('David', 28, 3.4)]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Setup the connection, whether using psycopg2 or other supported modules like pyodbc
+            con = psycopg2.connect(...)
+
+            # Create or replace existing table in database
+            sdm.to_sql('users', con, if_exists='replace', index=False)
+        ```
+
+        This will result in a new table ``users`` in our PostgreSQL database:
+
+        ```text
+            => select * from users;
+
+            Name    | Age | Grade |
+            --------+-----+-------+
+            Alice   |  25 |   3.8 |
+            Bob     |  30 |   3.9 |
+            Charlie |  35 |   3.2 |
+            David   |  28 |   3.4 |
+        ```
+        
+        For SQL Server connections using ``pyodbc``, the example would be almost identical except for which ``con`` object we use:
+
+        ```python
+            import pyodbc
+
+            # For SQL Server ODBC connections using pyodbc
+            con = pyodbc.connect(...)
+        ```
+            
+        The same is true for Oracle and other connections:
+
+        ```python
+            import cx_Oracle
+
+            # For Oracle connections using cx_Oracle
+            con = cx_Oracle.connect(...)
+        ```
+        
+        If table creation is necessary, column types will be mapped according to the destination database by the following conversion:
+        
+        ```text
+            ┌─────────────────┬─────────┬─────────┬────────┬─────────┬────────────────┬──────┬───────────┐
+            │ Database / Type │ NULL    │ INTEGER │ REAL   │ TEXT    │ BLOB           │ DATE │ TIMESTAMP │
+            ├─────────────────┼─────────┼─────────┼────────┼─────────┼────────────────┼──────┼───────────┤
+            │ PostgreSQL      │ UNKNOWN │ INTEGER │ FLOAT  │ TEXT    │ BYTEA          │ DATE │ TIMESTAMP │
+            │ SQL Server ODBC │ UNKNOWN │ INTEGER │ FLOAT  │ TEXT    │ VARBINARY(MAX) │ DATE │ DATETIME  │
+            │ Oracle          │ UNKNOWN │ NUMBER  │ NUMBER │ VARCHAR │ BLOB           │ DATE │ DATETIME  │
+            │ Teradata        │ UNKNOWN │ INTEGER │ FLOAT  │ VARCHAR │ BYTE           │ DATE │ DATETIME  │
+            │ SQLite          │ NULL    │ INTEGER │ REAL   │ TEXT    │ BLOB           │ DATE │ TIMESTAMP │
+            └─────────────────┴─────────┴─────────┴────────┴─────────┴────────────────┴──────┴───────────┘
+            [5 rows x 8 columns]
+        ```
 
         Note:
-            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types.
-            - Unsupported connection objects will output a ``SQLDataModelWarning`` advising unstable or undefined behavior.
-        """
-        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
-        model_data = [x for x in res.fetchall()] # using new process
+            - Any ``con`` or connection object provided is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
+            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types, be careful.
+            - ValueError will be raised if ``table`` already exists, use ``if_exists = 'replace'`` or ``if_exists = 'append'`` to instead replace or append to the table.
+            - See relevant module documentation for additional details or information pertaining to specific database or connection dialect being used.
+            - See related :meth:`SQLDataModel.from_sql()` for creating ``SQLDataModel`` from existing SQL database connections.
+        """        
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=index))
+        model_data = [x for x in res.fetchall()]
         model_headers = [x[0] for x in res.description]
-        created_header_dict = {col:f"{self.header_master[col][0]}" if self.header_master[col][2] else f"{self.header_master[col][0]} PRIMARY KEY" for col in model_headers}
         try:
-            extern_c = extern_conn.cursor()
+            ext_c = con.cursor()
         except Exception as e:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"""SQLProgrammingError: provided SQL connection is not open, please reopen the database connection or resolve "{e}" """)
             ) from None
-        if replace_existing:
-            extern_c.execute(f"""drop table if exists "{table}" """)
-            extern_conn.commit()
-        db_dialect = type(extern_conn).__module__.split('.')[0].lower()
-        dyn_bind = '?' if db_dialect == 'sqlite3' else '%s'
+        if if_exists not in ('fail', 'replace', 'append'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{if_exists}', argument for `if_exists` must be one of 'fail', 'replace' or 'append' to determine appropriate action if table already exists")
+            )
+        dialect = type(con).__module__.split('.')[0].lower() # 'sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql'
+        dyn_table_label = f'"{table}"' if (schema is None or dialect not in ('psycopg2', 'pyodbc')) else f'"{schema}"."{table}"'
+        if if_exists == 'fail':
+            if dialect == 'sqlite3':
+                check_stmt, check_params = "SELECT name FROM sqlite_master WHERE type='table' AND lower(name)=lower(?)", (table,)
+            elif dialect == 'psycopg2':
+                check_stmt = "SELECT table_name from information_schema.tables WHERE lower(table_name) = lower(%s)" if schema is None else "SELECT table_name FROM information_schema.tables WHERE lower(table_schema) = lower(%s) AND lower(table_name) = lower(%s)"
+                check_params = (table,) if schema is None else (schema, table)
+            elif dialect == 'pyodbc':
+                check_stmt = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE lower(TABLE_NAME) = lower(?)" if schema is None else "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE lower(TABLE_SCHEMA) = lower(?) AND lower(TABLE_NAME) = lower(?)"
+                check_params = (table,) if schema is None else (schema, table)
+            elif dialect == 'cx_oracle':
+                check_stmt, check_params = "SELECT TABLE_NAME FROM all_tables WHERE lower(TABLE_NAME)= lower(:1)", (table,)
+            elif dialect == 'teradatasql':
+                check_stmt, check_params = "SELECT TableName FROM DBC.Tables WHERE lower(TableName) = lower(?)", (table,)
+            else:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: unsupported connection '{dialect}', currently only 'sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle' and 'teradatasql' connections are supported")
+                )
+            ext_c.execute(check_stmt, check_params)
+            if ext_c.fetchone() is not None:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: table '{table}' already exists, use `if_exists = 'replace'` or `if_exists = 'append'` to overwrite or modify existing table instead")
+                )
+        elif if_exists == 'replace':
+            ext_c.execute(f"""drop table if exists {dyn_table_label}""")
+            con.commit()
+        if dialect == 'psycopg2':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'TEXT','BLOB': 'BYTEA', 'DATE': 'DATE', 'TIMESTAMP': 'TIMESTAMP'}
+        elif dialect == 'pyodbc':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'TEXT','BLOB': 'VARBINARY(MAX)', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'}
+        elif dialect == 'cx_oracle':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'NUMBER','REAL': 'NUMBER','TEXT': 'VARCHAR','BLOB': 'BLOB', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'}
+        elif dialect == 'teradatasql':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'VARCHAR','BLOB': 'BYTE', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'}
+        else:
+            sdm_dialect_map = {'NULL': 'NULL','INTEGER': 'INTEGER','REAL': 'REAL','TEXT': 'TEXT','BLOB': 'BLOB', 'DATE': 'DATE', 'TIMESTAMP': 'TIMESTAMP'}
+        created_header_dict = {col:f"{sdm_dialect_map[self.header_master[col][0]]}" if self.header_master[col][2] else f"{sdm_dialect_map[self.header_master[col][0]]} PRIMARY KEY" for col in model_headers}
         sql_dtypes_stmt = ", ".join(f""" "{header}" {created_header_dict[header]}""" for header in model_headers) # generates sql create table statement using type mapping dict
-        sql_create_stmt = f"""create table if not exists "{table}" ({sql_dtypes_stmt})"""
-        sql_insert_stmt = f"""insert into "{table}" ({','.join([f'"{col}"' for col in model_headers])}) values ({','.join([dyn_bind for _ in model_headers])})""" # changed to string formatter
-        extern_c.execute(sql_create_stmt)
-        extern_conn.commit()
-        extern_c.executemany(sql_insert_stmt,model_data)
-        extern_conn.commit()
-        return
+        sql_create_stmt = f"""create table if not exists {dyn_table_label} ({sql_dtypes_stmt})""" if dialect != 'pyodbc' else f"""if object_id(N'{table}', N'U') is null create table "{table}" ({sql_dtypes_stmt})""" if schema is None else f"""if object_id(N'{schema}.{table}', N'U') is null create table {dyn_table_label} ({sql_dtypes_stmt})"""
+        dyn_bind = '?' if dialect != 'psycopg2' else '%s'
+        val_params = ','.join([dyn_bind for _ in model_headers]) if dialect != 'cx_oracle' else ','.join([f":{i+1}" for i in range(len(model_headers))])
+        sql_insert_stmt = f"""insert into {dyn_table_label} ({','.join([f'"{col}"' for col in model_headers])}) values ({val_params})""" # changed to string formatter
+        try:
+            ext_c.execute(sql_create_stmt)
+            con.commit()
+        except Exception as e:
+            con.rollback()
+            raise SQLProgrammingError (
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: {e} encountered when trying to create and define table schema")
+            ) from None             
+        try:
+            ext_c.executemany(sql_insert_stmt,model_data)
+            con.commit()
+        except Exception as e:
+            con.rollback()
+            raise SQLProgrammingError (
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: {e} encountered when trying to insert model data into provided connection")
+            ) from None             
+        return  
 
     def to_text(self, filename:str=None, include_index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None) -> str|None:
         """
@@ -7774,7 +7926,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{right_on}', a valid `right_on` column is required, use `get_headers()` to view current valid arguments")
                 )            
         tmp_table_name = "_merge_with"
-        merge_with.to_sql(tmp_table_name, self.sql_db_conn)
+        merge_with.to_sql(tmp_table_name, self.sql_db_conn, if_exists='replace')
         left_headers, right_headers = self.headers, merge_with.headers if include_join_column else [x for x in merge_with.headers if x != right_on]
         all_cols = [*left_headers, *right_headers]
         headers_str = ",".join([f'a."{col}" as "{alias}"' if i < self.column_count else f'b."{col}" as "{alias}"' for i, (col, alias) in enumerate(zip(all_cols,SQLDataModel.alias_duplicates(all_cols)))])

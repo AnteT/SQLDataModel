@@ -4033,18 +4033,25 @@ class SQLDataModel:
             └────────┴──────┴─────────┘
             [3 rows x 3 columns]
         ```
+
+        Get data for specific row:
+
         ```python
-            # Grab data from specific row
+            # Grab data from single row
             row_data = sdm[0].data()
 
             # View it
             print(row_data)
         ```
+
         This will output:
 
         ```text
             ('John', 30, 175.3)
         ```
+
+        Get data for specific column:
+
         ```python
             # Grab data from single column
             col_data = sdm['Name'].data()
@@ -4052,13 +4059,16 @@ class SQLDataModel:
             # View it
             print(col_data)
         ```
+
         This will output:
 
         ```text        
             [('John',), ('Alice',), ('Travis',)]
         ```
+        
         Note:
-            - Many other SQLDataModel methods rely on this method, changing it will lead to undefined behavior.
+            - Many other ``SQLDataModel`` methods rely on this method, changing it will lead to undefined behavior.
+            - See related :meth:`SQLDataModel.from_data()` for creating a new ``SQLDataModel`` from existing data sources.
 
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=include_index))
