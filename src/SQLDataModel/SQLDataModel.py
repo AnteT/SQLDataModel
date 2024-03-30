@@ -3818,9 +3818,9 @@ class SQLDataModel:
         ```
 
         Note:
-            - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types.
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
             - The ``dtypes``, if provided, are only applied to ``sqlite3`` connection objects as remaining supported connections implement SQL to python adapters.
+            - See related :meth:`SQLDataModel.to_sql()` for writing to SQL database connections.
         """
         if dtypes is not None and not isinstance(dtypes, dict):
             raise TypeError(
@@ -5278,7 +5278,14 @@ class SQLDataModel:
 
     def to_sql(self, table:str, con:sqlite3.Connection|Any, *, schema:str=None, if_exists:Literal['fail','replace','append']='fail', index:bool=True) -> None:
         """
-        Insert the ``SQLDataModel`` into the specified table using the provided database connection. Currently supported database connection APIs are SQLite using ``sqlite3``, PostgreSQL using ``psycopg2``, SQL Server ODBC using ``pyodbc``, Oracle using ``cx_oracle`` and Teradata using ``teradatasql``.
+        Insert the ``SQLDataModel`` into the specified table using the provided database connection.
+        
+        Supported Connection APIs:
+            - SQLite using ``sqlite3``
+            - PostgreSQL using ``psycopg2``
+            - SQL Server ODBC using ``pyodbc``
+            - Oracle using ``cx_Oracle``
+            - Teradata using ``teradatasql``
 
         Parameters:
             ``table`` (str): The name of the table where data will be inserted.
@@ -5312,7 +5319,7 @@ class SQLDataModel:
             # Basic usage, creating a new table
             sdm.to_sql('users', sqlite_db_conn)
 
-        This will create a new table ``'users'``, or fail if one already existed:
+        This will create a new table ``users``, or fail if one already existed:
 
         ```text
             sqlite> select * from users;
@@ -5345,7 +5352,7 @@ class SQLDataModel:
             sdm.to_sql('users', con, if_exists='replace', index=False)
         ```
 
-        This will result in a new table ``'users'`` in our PostgreSQL database:
+        This will result in a new table ``users`` in our PostgreSQL database:
 
         ```text
             => select * from users;
@@ -5396,6 +5403,7 @@ class SQLDataModel:
             - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types, be careful.
             - ValueError will be raised if ``table`` already exists, use ``if_exists = 'replace'`` or ``if_exists = 'append'`` to instead replace or append to the table.
             - See relevant module documentation for additional details or information pertaining to specific database or connection dialect being used.
+            - See related :meth:`SQLDataModel.from_sql()` for creating ``SQLDataModel`` from existing SQL database connections.
         """        
         res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=index))
         model_data = [x for x in res.fetchall()]
