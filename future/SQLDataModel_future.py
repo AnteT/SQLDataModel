@@ -294,7 +294,7 @@ class SQLDataModel:
             
             # Display the model
             print(model)
-        
+
         ```shell
             ┌────────┬──────┬──────┐
             │ Name   │  Age │ Sex  │
@@ -408,7 +408,7 @@ class SQLDataModel:
         """``int``: The current column count of the model."""
         self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         """``ANSIColor``: The display color to use for string representations of the model. Default is ``None``, using the standard terminal color."""
-        self.static_py_to_sql_map_dict = {'None': 'NULL','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date':'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
+        self.static_py_to_sql_map_dict = {'None': 'TEXT','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date': 'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
         """``dict``: The data type mapping to use when converting python types to SQL column types."""
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         """``dict``: The data type mapping to use when converting SQL column types to python types."""
@@ -5286,7 +5286,7 @@ class SQLDataModel:
             ) from None        
         return table
 
-    def to_sql(self, table:str, con:sqlite3.Connection|Any, *, schema:str=None, if_exists:Literal['fail','replace','append']='fail', index:bool=True) -> None:
+    def to_sql(self, table:str, con:sqlite3.Connection|Any, *, schema:str=None, if_exists:Literal['fail','replace','append']='fail', index:bool=True, primary_key:str|int=None) -> None:
         """
         Insert the ``SQLDataModel`` into the specified table using the provided database connection.
         
@@ -5303,10 +5303,13 @@ class SQLDataModel:
             ``schema`` (str, optional): The schema to use for PostgreSQL and ODBC SQL Server connections, ignored otherwise. Default is None.
             ``if_exists`` (Literal['fail', 'replace', 'append'], optional): Action to take if the table already exists. If ``fail`` an error is raised if table exists and no inserts occur. If ``replace`` any existing table is dropped prior to inserts. If ``append`` existing table is appended to by subsequent inserts.
             ``index`` (bool, optional): If the model index should be included in the target table. Default is True.
+            ``primary_key`` (str | int, optional): Column name or index to use as table primary key. Default is None, using the index column as the primary key when ``index=True``.
 
         Raises:
             ``SQLProgrammingError``: If an error occurs during cursor accessing, table creation or data insertion into the database.
             ``ValueError``: If specified ``table`` already exists when using ``if_exists='fail'`` or if ``con`` is not one of the currently supported connection modules.
+            ``IndexError``: If ``primary_key`` is provided as an ``int`` representing a column index but is out of range of the current model :py:attr:`SQLDataModel.column_count`.
+            ``TypeError``: If ``primary_key`` argument provided is not of type 'str' or 'int' representing a valid column name or index to use as the primary key column for the target table.
 
         Returns:
             ``None``
@@ -5329,7 +5332,7 @@ class SQLDataModel:
             # Basic usage, creating a new table
             sdm.to_sql('users', sqlite_db_conn)
 
-        This will create a new table ``users``, or fail if one already existed:
+        This will create a new table ``users``, or fail if one already exists:
 
         ```text
             sqlite> select * from users;
@@ -5393,6 +5396,46 @@ class SQLDataModel:
             con = cx_Oracle.connect(...)
         ```
         
+        Using a Primary Key
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['ID', 'User']
+            data = [(1001, 'Alice'), (1002, 'Bob'), (1003, 'Charlie'), (1004, 'David')]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Create connection object
+            sqlite_db_conn = sqlite3.connect('students.db')
+
+            # Create the table using the 'ID' column as the primary key
+            sdm.to_sql('users', sqlite_db_conn, if_exists='replace', index=False, primary_key='ID')
+        ```
+
+        This will create a ``users`` table with the schema: 
+
+        ```text
+            sqlite> .schema users
+
+            CREATE TABLE "users" ( "ID" INTEGER PRIMARY KEY,  "User" TEXT);
+        ```
+
+        With an ``ID`` column as its Primary Key:
+
+        ```text
+            sqlite> select * from users;
+
+            ID    User   
+            ----  -------
+            1001  Alice
+            1002  Bob
+            1003  Charlie
+            1004  David
+        ```
+
         If table creation is necessary, column types will be mapped according to the destination database by the following conversion:
         
         ```text
@@ -5409,15 +5452,13 @@ class SQLDataModel:
         ```
 
         Note:
+            - When providing a ``primary_key`` column it will be assumed unique and the model will not perform any unique-ness constraints.
             - Any ``con`` or connection object provided is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
             - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types, be careful.
             - ValueError will be raised if ``table`` already exists, use ``if_exists = 'replace'`` or ``if_exists = 'append'`` to instead replace or append to the table.
             - See relevant module documentation for additional details or information pertaining to specific database or connection dialect being used.
             - See related :meth:`SQLDataModel.from_sql()` for creating ``SQLDataModel`` from existing SQL database connections.
-        """        
-        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=index))
-        model_data = [x for x in res.fetchall()]
-        model_headers = [x[0] for x in res.description]
+        """       
         try:
             ext_c = con.cursor()
         except Exception as e:
@@ -5428,25 +5469,56 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{if_exists}', argument for `if_exists` must be one of 'fail', 'replace' or 'append' to determine appropriate action if table already exists")
             )
+        if primary_key is not None and not isinstance(primary_key, (str,int)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(primary_key).__name__}', argument for `primary_key` must be of type 'str' or 'int' representing a column name or index to use as the table primary key")
+            )
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(include_index=index))
+        model_data = [x for x in res.fetchall()]
+        model_headers = [x[0] for x in res.description]    
+        if isinstance(primary_key, int):
+            try:
+                primary_key = model_headers[primary_key]
+            except IndexError:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{primary_key}', index for `primary_key` is outside of current model range '0:{self.column_count}', use `get_headers()` to view current valid arguments")
+                ) from None
+        if isinstance(primary_key, str):
+            if primary_key not in model_headers:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{primary_key}', a valid column is required when providing a `primary_key` argument, use `get_headers()` to view current valid columns")
+                )
+        primary_key = self.sql_idx if primary_key is None else primary_key
         dialect = type(con).__module__.split('.')[0].lower() # 'sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql'
         dyn_table_label = f'"{table}"' if (schema is None or dialect not in ('psycopg2', 'pyodbc')) else f'"{schema}"."{table}"'
-        if if_exists == 'fail':
-            if dialect == 'sqlite3':
+        check_exists = True if if_exists == 'fail' else False
+        if dialect == 'sqlite3':
+            sdm_dialect_map = {'NULL': 'NULL','INTEGER': 'INTEGER','REAL': 'REAL','TEXT': 'TEXT','BLOB': 'BLOB', 'DATE': 'DATE', 'TIMESTAMP': 'TIMESTAMP'} # sqlite / else
+            if check_exists:
                 check_stmt, check_params = "SELECT name FROM sqlite_master WHERE type='table' AND lower(name)=lower(?)", (table,)
-            elif dialect == 'psycopg2':
+        elif dialect == 'psycopg2':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'TEXT','BLOB': 'BYTEA', 'DATE': 'DATE', 'TIMESTAMP': 'TIMESTAMP'} # pgsql
+            if check_exists:
                 check_stmt = "SELECT table_name from information_schema.tables WHERE lower(table_name) = lower(%s)" if schema is None else "SELECT table_name FROM information_schema.tables WHERE lower(table_schema) = lower(%s) AND lower(table_name) = lower(%s)"
                 check_params = (table,) if schema is None else (schema, table)
-            elif dialect == 'pyodbc':
+        elif dialect == 'pyodbc':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'TEXT','BLOB': 'VARBINARY(MAX)', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'} # odbc
+            if check_exists:
                 check_stmt = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE lower(TABLE_NAME) = lower(?)" if schema is None else "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE lower(TABLE_SCHEMA) = lower(?) AND lower(TABLE_NAME) = lower(?)"
                 check_params = (table,) if schema is None else (schema, table)
-            elif dialect == 'cx_oracle':
+        elif dialect == 'cx_oracle':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'NUMBER','REAL': 'NUMBER','TEXT': 'VARCHAR','BLOB': 'BLOB', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'} # oracle
+            if check_exists:
                 check_stmt, check_params = "SELECT TABLE_NAME FROM all_tables WHERE lower(TABLE_NAME)= lower(:1)", (table,)
-            elif dialect == 'teradatasql':
+        elif dialect == 'teradatasql':
+            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'VARCHAR','BLOB': 'BYTE', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'} # teradata
+            if check_exists:
                 check_stmt, check_params = "SELECT TableName FROM DBC.Tables WHERE lower(TableName) = lower(?)", (table,)
-            else:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: unsupported connection '{dialect}', currently only 'sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle' and 'teradatasql' connections are supported")
-                )
+        else:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: unsupported connection '{dialect}', currently only 'sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle' and 'teradatasql' connections are supported")
+            )
+        if if_exists == 'fail':
             ext_c.execute(check_stmt, check_params)
             if ext_c.fetchone() is not None:
                 raise ValueError(
@@ -5455,17 +5527,7 @@ class SQLDataModel:
         elif if_exists == 'replace':
             ext_c.execute(f"""drop table if exists {dyn_table_label}""")
             con.commit()
-        if dialect == 'psycopg2':
-            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'TEXT','BLOB': 'BYTEA', 'DATE': 'DATE', 'TIMESTAMP': 'TIMESTAMP'}
-        elif dialect == 'pyodbc':
-            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'TEXT','BLOB': 'VARBINARY(MAX)', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'}
-        elif dialect == 'cx_oracle':
-            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'NUMBER','REAL': 'NUMBER','TEXT': 'VARCHAR','BLOB': 'BLOB', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'}
-        elif dialect == 'teradatasql':
-            sdm_dialect_map = {'NULL': 'UNKNOWN','INTEGER': 'INTEGER','REAL': 'FLOAT','TEXT': 'VARCHAR','BLOB': 'BYTE', 'DATE': 'DATE', 'TIMESTAMP': 'DATETIME'}
-        else:
-            sdm_dialect_map = {'NULL': 'NULL','INTEGER': 'INTEGER','REAL': 'REAL','TEXT': 'TEXT','BLOB': 'BLOB', 'DATE': 'DATE', 'TIMESTAMP': 'TIMESTAMP'}
-        created_header_dict = {col:f"{sdm_dialect_map[self.header_master[col][0]]}" if self.header_master[col][2] else f"{sdm_dialect_map[self.header_master[col][0]]} PRIMARY KEY" for col in model_headers}
+        created_header_dict = {col:f"{sdm_dialect_map[self.header_master[col][0]]}" if col != primary_key else f"{sdm_dialect_map[self.header_master[col][0]]} PRIMARY KEY" for col in model_headers}    
         sql_dtypes_stmt = ", ".join(f""" "{header}" {created_header_dict[header]}""" for header in model_headers) # generates sql create table statement using type mapping dict
         sql_create_stmt = f"""create table if not exists {dyn_table_label} ({sql_dtypes_stmt})""" if dialect != 'pyodbc' else f"""if object_id(N'{table}', N'U') is null create table "{table}" ({sql_dtypes_stmt})""" if schema is None else f"""if object_id(N'{schema}.{table}', N'U') is null create table {dyn_table_label} ({sql_dtypes_stmt})"""
         dyn_bind = '?' if dialect != 'psycopg2' else '%s'
@@ -5486,8 +5548,8 @@ class SQLDataModel:
             con.rollback()
             raise SQLProgrammingError (
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: {e} encountered when trying to insert model data into provided connection")
-            ) from None             
-        return  
+            ) from None   
+        return
 
     def to_text(self, filename:str=None, include_index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None) -> str|None:
         """
