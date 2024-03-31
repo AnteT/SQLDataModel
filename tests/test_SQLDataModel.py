@@ -487,7 +487,7 @@ def test_to_from_pickle(sample_data):
 @pytest.mark.core
 def test_to_from_text(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
-    sdm = SQLDataModel(input_data, input_headers)
+    sdm = SQLDataModel(input_data, input_headers, display_float_precision=4)
     output_data, output_headers = SQLDataModel.from_text(sdm.to_text(),infer_types=True).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
@@ -496,7 +496,7 @@ def test_to_from_text(sample_data):
 @pytest.mark.core
 def test_to_from_markdown(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
-    sdm = SQLDataModel(input_data, input_headers)
+    sdm = SQLDataModel(input_data, input_headers, display_float_precision=4)
     output_data, output_headers = SQLDataModel.from_markdown(sdm.to_markdown(),infer_types=True).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
@@ -505,7 +505,7 @@ def test_to_from_markdown(sample_data):
 @pytest.mark.core
 def test_to_from_latex(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
-    sdm = SQLDataModel(input_data, input_headers)
+    sdm = SQLDataModel(input_data, input_headers, display_float_precision=4)
     output_data, output_headers = SQLDataModel.from_latex(sdm.to_latex(),infer_types=True).data(), sdm.get_headers()
     assert input_headers == output_headers
     for i in range(len(input_data)):
