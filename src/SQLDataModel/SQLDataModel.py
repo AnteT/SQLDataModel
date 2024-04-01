@@ -389,15 +389,15 @@ class SQLDataModel:
         self.display_max_rows = display_max_rows
         """``int``: The maximum number of rows to display. Default is 1,000 rows."""
         self.min_column_width = min_column_width
-        """``int``: The minimum column width in characters to use for string representations of the data. Default is 4."""
+        """``int``: The minimum column width in characters to use for string representations of the data. Default is 3."""
         self.max_column_width = max_column_width
-        """``int``: The maximum column width in characters to use for string representations of the data. Default is 32."""
+        """``int``: The maximum column width in characters to use for string representations of the data. Default is 38."""
         self.column_alignment = column_alignment # 'dynamic','left','center','right'
         """``str``: The column alignment to use for string representations of the data, value must be one of ``['dynamic','left','center','right']`` Default is ``'dynamic'``, using right-alignment for numeric columns and left-aligned for all others."""
         self.display_index = display_index
         """``bool``: Determines whether the index column is displayed when string representations of the table are generated. Default is True."""
         self.display_float_precision = display_float_precision
-        """``int``: The floating point precision to use for string representations of the table, does not affect the actual floating point values stored in the model. Default is 4."""
+        """``int``: The floating point precision to use for string representations of the table, does not affect the actual floating point values stored in the model. Default is 2."""
         self.row_count = len(data) if had_data else 0
         """``int``: The current row count of the model."""
         had_idx = True if headers[0] == self.sql_idx else False
