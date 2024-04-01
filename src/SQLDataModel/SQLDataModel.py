@@ -4554,9 +4554,6 @@ class SQLDataModel:
                 {"id": 1, "color": "red", "value": "#f00", "notes": "primary"}
                 ,{"id": 2, "color": "green", "value": "#0f0", "notes": None}
                 ,{"id": 3, "color": "blue", "value": "#00f", "notes": "primary"}
-                ,{"id": 4, "color": "cyan", "value": "#0ff", "notes": None}
-                ,{"id": 5, "color": "yellow", "value": "#ff0", "notes": None}
-                ,{"id": 5, "color": "black", "value": "#000", "notes": None}
             ]
 
             # Create the model
@@ -4569,17 +4566,14 @@ class SQLDataModel:
         This will output:
 
         ```shell            
-            ┌──────┬────────┬───────┬─────────┐
-            │   id │ color  │ value │ notes   │
-            ├──────┼────────┼───────┼─────────┤
-            │    1 │ red    │ #f00  │ primary │
-            │    2 │ green  │ #0f0  │         │
-            │    3 │ blue   │ #00f  │ primary │
-            │    4 │ cyan   │ #0ff  │         │
-            │    5 │ yellow │ #ff0  │         │
-            │    5 │ black  │ #000  │         │
-            └──────┴────────┴───────┴─────────┘
-            [6 rows x 4 columns]
+            ┌─────┬───────┬───────┬─────────┐
+            │  id │ color │ value │ notes   │
+            ├─────┼───────┼───────┼─────────┤
+            │   1 │ red   │ #f00  │ primary │
+            │   2 │ green │ #0f0  │         │
+            │   3 │ blue  │ #00f  │ primary │
+            └─────┴───────┴───────┴─────────┘
+            [3 rows x 4 columns]
         ```
             
         Write JSON File
@@ -4599,15 +4593,30 @@ class SQLDataModel:
         This will output:
 
         ```shell
-            [{'id': 1, 'color': 'red', 'value': '#f00', 'notes': 'primary'}
-            ,{'id': 2, 'color': 'green', 'value': '#0f0', 'notes': None}
-            ,{'id': 3, 'color': 'blue', 'value': '#00f', 'notes': 'primary'}
-            ,{'id': 4, 'color': 'cyan', 'value': '#0ff', 'notes': None}
-            ,{'id': 5, 'color': 'yellow', 'value': '#ff0', 'notes': None}
-            ,{'id': 5, 'color': 'black', 'value': '#000', 'notes': None}]
+            [{
+                "id": 1,
+                "color": "red",
+                "value": "#f00",
+                "notes": "primary"
+            },
+            {
+                "id": 2,
+                "color": "green",
+                "value": "#0f0",
+                "notes": null
+            },
+            {
+                "id": 3,
+                "color": "blue",
+                "value": "#00f",
+                "notes": "primary"
+            }]
         ```
         
         Change Log:
+            - Version 0.3.3 (2024-04-02):
+                - Changed return object to JSON string literal when ``filename=None`` to convert to valid literal object.
+
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -4632,7 +4641,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write json")
                 ) from None
         else:
-            return json_data
+            return json.dumps(json_data, cls=DataTypesEncoder, **kwargs)
 
     def to_latex(self, filename:str=None, index:bool=False, bold_headers:bool=False, min_column_width:int=None, max_column_width:int=None, format_output_as:Literal['table', 'document']='table', column_alignment:Literal['left', 'center', 'right', 'dynamic']=None) -> str | None:
         """
