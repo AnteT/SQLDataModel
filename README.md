@@ -432,7 +432,7 @@ sqlite_conn = sqlite3.connect(...)
 sdm = SQLDataModel.from_sql("SELECT * FROM pg_table", pg_conn)
 
 # Import it into our sqlite3 connection, appending to existing data
-sdm.to_sql("local_table", sqlite_conn, replace_existing=False)
+sdm.to_sql("local_table", sqlite_conn, if_exists='append')
 ```
 Thats it! What once required installing packages like `pandas`, `numpy`, and `SQLAlchemy`, plus all of their dependencies, just to able to use a nice DataFrame API when interacting with SQL data, is now just a single package, `SQLDataModel`. While I **love** all three of those packages, 99% of what I consistently use them for can be done with far less "package baggage".
 
