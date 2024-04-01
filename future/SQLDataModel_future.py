@@ -2373,6 +2373,7 @@ class SQLDataModel:
               - ``'.tex'``: passed to :meth:`SQLDataModel.from_latex()` as latex source data.
               - ``'.tsv'``: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
               - ``'.txt'``: passed to :meth:`SQLDataModel.from_text()` as text source data.
+              - ``'.xlsx'``: passed to :meth:`SQLDataModel.from_excel()` as excel source data.
 
         Returns:
             ``SQLDataModel``: The SQLDataModel object created from the provided data.
@@ -2433,28 +2434,30 @@ class SQLDataModel:
             )
         supported_ext = ('.csv','.html','.json','.md','.parquet','.pkl','.sdm','.tex','.tsv','.txt','.xlsx')
         ext_operation = {
-             '.csv': SQLDataModel.from_csv
-            ,'.html': SQLDataModel.from_html
-            ,'.json': SQLDataModel.from_json
-            ,'.md': SQLDataModel.from_markdown
-            ,'.parquet': SQLDataModel.from_parquet
-            ,'.pkl': SQLDataModel.from_pickle
-            ,'.sdm': SQLDataModel.from_pickle
-            ,'.tex': SQLDataModel.from_latex
-            ,'.tsv': SQLDataModel.from_csv
-            ,'.txt': SQLDataModel.from_text
-            ,'.xlsx': SQLDataModel.from_excel
+             '.csv': cls.from_csv
+            ,'.html': cls.from_html
+            ,'.json': cls.from_json
+            ,'.md': cls.from_markdown
+            ,'.parquet': cls.from_parquet
+            ,'.pkl': cls.from_pickle
+            ,'.sdm': cls.from_pickle
+            ,'.tex': cls.from_latex
+            ,'.tsv': cls.from_csv
+            ,'.txt': cls.from_text
+            ,'.xlsx': cls.from_excel
         }
         if isinstance(data, dict):
             if all(value in ('None','int','float','str','bytes','date','datetime','NoneType','bool') for value in data.values()):
-                return SQLDataModel(dtypes=data, **kwargs)
+                return cls(dtypes=data, **kwargs)
             else:
-                return SQLDataModel.from_dict(data, **kwargs)            
+                return cls.from_dict(data, **kwargs)            
         elif isinstance(data, (list,tuple)):
-            if len(data) == 1:
-                return SQLDataModel(headers=data, **kwargs)
+            if len(data) == 1 and not isinstance(data[0], dict):
+                return cls(headers=data, **kwargs)
+            elif len(data) >= 1 and isinstance(data[0], dict):
+                return cls.from_json(json_source=data, **kwargs)
             else:
-                return SQLDataModel(data=data, **kwargs)
+                return cls(data=data, **kwargs)
         elif isinstance(data, str):
             if data.startswith('http'):
                 return ext_operation['.html'](data, **kwargs)
@@ -2476,7 +2479,7 @@ class SQLDataModel:
                 return ext_operation[ext.lower()](data, **kwargs)
             html_pattern = r'</table>'
             latex_pattern = r'\\begin\{tabular\}'
-            markdown_pattern = r'\| *(:?-{3,}:? *\|)+'
+            markdown_pattern = r'\|?:?-+:?\|:?-+:?\|?' # changed from: r'\| *(:?-{3,}:? *\|)+'
             json_pattern = r'\{.*\}'
             if bool(re.search(html_pattern, data)):
                 return ext_operation['.html'](data, **kwargs)
@@ -2492,15 +2495,15 @@ class SQLDataModel:
                     is_json = False
                 if is_json:
                     return ext_operation['.json'](data, **kwargs)
-            return SQLDataModel.from_text(data, **kwargs)
+            return cls.from_text(data, **kwargs)
         else:
             arg_type = type(data).__name__
             if arg_type == 'ndarray':
-                return SQLDataModel.from_numpy(data, **kwargs)
+                return cls.from_numpy(data, **kwargs)
             elif arg_type == 'DataFrame':
-                return SQLDataModel.from_pandas(data, **kwargs)
+                return cls.from_pandas(data, **kwargs)
             elif arg_type == 'Table':
-                return SQLDataModel.from_pyarrow(data, **kwargs)
+                return cls.from_pyarrow(data, **kwargs)
             else:
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: unsupported type '{arg_type}', current supported external types are 'numpy.ndarray' or 'pandas.DataFrame' objects")
@@ -7538,6 +7541,52 @@ class SQLDataModel:
 
     def count(self) -> SQLDataModel:
         """
+        Returns a new ``SQLDataModel`` containing the counts of non-null values for each column in a row-wise orientation.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel containing the counts of non-null values in each column.
+
+        Example::
+            
+            from SQLDataModel import SQLDataModel
+
+            # Sample data with missing values
+            headers = ['Name', 'Age', 'Gender', 'Tenure']
+            data = [
+                ('Alice', 25, 'Female', 1.0),
+                ('Bob', None, 'Male', 2.7),
+                ('Charlie', 30, 'Male', None),
+                ('David', None, 'Male', 3.8)
+            ]   
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Get counts
+            counts = sdm.count()
+
+            # View result
+            print(counts)
+
+        This will output the count of all non-null values for each column:
+
+        ```shell
+            ┌──────┬─────┬────────┬────────┐
+            │ Name │ Age │ Gender │ Tenure │
+            ├──────┼─────┼────────┼────────┤
+            │    4 │   2 │      4 │      3 │
+            └──────┴─────┴────────┴────────┘
+            [1 rows x 4 columns]
+        ```
+
+        Note:
+            - See :meth:`SQLDataModel.column_counts()` for column-wise count of unique, null and total values for each column.
+        """
+        fetch_stmt = " ".join(("select",",".join([f"""sum(case when "{col}" is null then 0 else 1 end) as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
+        return self.execute_fetch(fetch_stmt, dtypes={col:'int' for col in self.headers})
+
+    def column_counts(self) -> SQLDataModel:
+        """
         Returns a new ``SQLDataModel`` containing the total counts and unique values for each column in the model for both null and non-null values.
 
         Metrics:
@@ -7566,7 +7615,7 @@ class SQLDataModel:
             sdm = SQLDataModel(data, headers)
 
             # Get the value count information
-            count_model = sdm.count()
+            count_model = sdm.column_counts()
 
             # View the count information
             print(count_model)
@@ -7583,6 +7632,13 @@ class SQLDataModel:
             └────────┴──────┴────────┴───────┴───────┘
             [3 rows x 5 columns]
         ```
+
+        Change Log:
+            - Version 0.3.1 (2024-04-01):
+                - Renamed method from ``counts`` to ``column_counts`` for more precise definition.
+
+        Note:
+            - See :meth:`SQLDataModel.count()` for the count of non-null values for each column in a row-wise orientation.
         """
         fetch_stmt = " UNION ALL ".join([f"""select '{col}' as 'column', sum(case when "{col}" is null then 1 else 0 end) as 'na', count(distinct "{col}") as 'unique', count("{col}") as 'count',sum(case when "{col}" is null then 1 else 1 end) as 'total' from "{self.sql_model}" """ for col in self.headers])
         return self.execute_fetch(fetch_stmt)
@@ -7921,6 +7977,100 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=include_idx_col))
         yield from (Row(*x) for x in res.fetchall())
     
+    def min(self) -> SQLDataModel:
+        """
+        Returns a new ``SQLDataModel`` containing the minimum value of all non-null values for each column in a row-wise orientation.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel containing the minimum non-null value for each column.
+
+        Example::
+            
+            from SQLDataModel import SQLDataModel
+
+            # Sample data with missing values
+            headers = ['Name', 'Age', 'Gender', 'Tenure']
+            data = [
+                ('Alice', 25, 'Female', 1.0),
+                ('Bob', None, 'Male', 2.7),
+                ('Charlie', 30, 'Male', None),
+                ('David', None, 'Male', 3.8)
+            ]   
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Get minimum values
+            min_values = sdm.min()
+
+            # View result
+            print(min_values)
+
+        This will output the minimum value of all non-null values for each column:
+
+        ```shell
+            ┌───────┬─────┬────────┬────────┐
+            │ Name  │ Age │ Gender │ Tenure │
+            ├───────┼─────┼────────┼────────┤
+            │ Alice │  25 │ Female │   1.00 │
+            └───────┴─────┴────────┴────────┘
+            [1 rows x 4 columns]
+        ```
+
+        Note:
+            - See :meth:`SQLDataModel.column_counts()` for column-wise count of unique, null and total values for each column.
+            - See :meth:`SQLDataModel.max()` for returning the maximum values in each column.
+        """
+        fetch_stmt = " ".join(("select",",".join([f"""min("{col}") as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
+        return self.execute_fetch(fetch_stmt) 
+
+    def max(self) -> SQLDataModel:
+        """
+        Returns a new ``SQLDataModel`` containing the maximum value of all non-null values for each column in a row-wise orientation.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel containing the maximum non-null value for each column.
+
+        Example::
+            
+            from SQLDataModel import SQLDataModel
+
+            # Sample data with missing values
+            headers = ['Name', 'Age', 'Gender', 'Tenure']
+            data = [
+                ('Alice', 25, 'Female', 1.0),
+                ('Bob', None, 'Male', 2.7),
+                ('Charlie', 30, 'Male', None),
+                ('David', None, 'Male', 3.8)
+            ]   
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Get maximum values
+            min_values = sdm.min()
+
+            # View result
+            print(min_values)
+
+        This will output the maximum value of all non-null values for each column:
+
+        ```shell
+            ┌───────┬─────┬────────┬────────┐
+            │ Name  │ Age │ Gender │ Tenure │
+            ├───────┼─────┼────────┼────────┤
+            │ David │  30 │ Male   │   3.80 │
+            └───────┴─────┴────────┴────────┘
+            [1 rows x 4 columns]
+        ```
+
+        Note:
+            - See :meth:`SQLDataModel.column_counts()` for column-wise count of unique, null and total values for each column.
+            - See :meth:`SQLDataModel.min()` for returning the minimum values in each column.
+        """
+        fetch_stmt = " ".join(("select",",".join([f"""max("{col}") as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
+        return self.execute_fetch(fetch_stmt)     
+
     def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None, include_join_column:bool=False) -> SQLDataModel:
         """
         Merges two ``SQLDataModel`` instances based on specified columns and merge type, ``how``, returning the result as a new instance. 
