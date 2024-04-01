@@ -2480,7 +2480,7 @@ class SQLDataModel:
             html_pattern = r'</table>'
             latex_pattern = r'\\begin\{tabular\}'
             markdown_pattern = r'\|?:?-+:?\|:?-+:?\|?' # changed from: r'\| *(:?-{3,}:? *\|)+'
-            json_pattern = r'\{.*\}'
+            json_pattern = r'[?\{.*\}]?'
             if bool(re.search(html_pattern, data)):
                 return ext_operation['.html'](data, **kwargs)
             elif bool(re.search(latex_pattern, data)):
