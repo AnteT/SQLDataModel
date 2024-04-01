@@ -4614,7 +4614,7 @@ class SQLDataModel:
         ```
         
         Change Log:
-            - Version 0.3.3 (2024-04-02):
+            - Version 0.3.2 (2024-04-02):
                 - Changed return object to JSON string literal when ``filename=None`` to convert to valid literal object.
 
             - Version 0.3.0 (2024-03-31):
