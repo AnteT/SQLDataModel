@@ -4614,7 +4614,7 @@ class SQLDataModel:
         ```
         
         Change Log:
-            - Version 0.3.3 (2024-04-02):
+            - Version 0.3.2 (2024-04-02):
                 - Changed return object to JSON string literal when ``filename=None`` to convert to valid literal object.
 
             - Version 0.3.0 (2024-03-31):
@@ -7589,12 +7589,12 @@ class SQLDataModel:
         ```
 
         Note:
-            - See :meth:`SQLDataModel.column_counts()` for column-wise count of unique, null and total values for each column.
+            - See :meth:`SQLDataModel.count_unique()` for column-wise count of unique, null and total values for each column.
         """
         fetch_stmt = " ".join(("select",",".join([f"""sum(case when "{col}" is null then 0 else 1 end) as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
         return self.execute_fetch(fetch_stmt, dtypes={col:'int' for col in self.headers})
 
-    def column_counts(self) -> SQLDataModel:
+    def count_unique(self) -> SQLDataModel:
         """
         Returns a new ``SQLDataModel`` containing the total counts and unique values for each column in the model for both null and non-null values.
 
@@ -7624,7 +7624,7 @@ class SQLDataModel:
             sdm = SQLDataModel(data, headers)
 
             # Get the value count information
-            count_model = sdm.column_counts()
+            count_model = sdm.count_unique()
 
             # View the count information
             print(count_model)
@@ -7643,8 +7643,8 @@ class SQLDataModel:
         ```
 
         Change Log:
-            - Version 0.3.1 (2024-04-01):
-                - Renamed method from ``counts`` to ``column_counts`` for more precise definition.
+            - Version 0.3.2 (2024-04-02):
+                - Renamed method from ``counts`` to ``count_unique`` for more precise definition.
 
         Note:
             - See :meth:`SQLDataModel.count()` for the count of non-null values for each column in a row-wise orientation.
@@ -8027,7 +8027,7 @@ class SQLDataModel:
         ```
 
         Note:
-            - See :meth:`SQLDataModel.column_counts()` for column-wise count of unique, null and total values for each column.
+            - See :meth:`SQLDataModel.count_unique()` for column-wise count of unique, null and total values for each column.
             - See :meth:`SQLDataModel.max()` for returning the maximum values in each column.
         """
         fetch_stmt = " ".join(("select",",".join([f"""min("{col}") as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
@@ -8074,7 +8074,7 @@ class SQLDataModel:
         ```
 
         Note:
-            - See :meth:`SQLDataModel.column_counts()` for column-wise count of unique, null and total values for each column.
+            - See :meth:`SQLDataModel.count_unique()` for column-wise count of unique, null and total values for each column.
             - See :meth:`SQLDataModel.min()` for returning the minimum values in each column.
         """
         fetch_stmt = " ".join(("select",",".join([f"""max("{col}") as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
