@@ -427,7 +427,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in ``data`` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
             ) from None
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
-        sql_insert_params = ','.join([f'''cast(nullif(nullif(?,'None'),'') as TEXT)''' if headers_to_py_dtypes_dict[col] in ('str','None','NoneType') else f"cast(nullif(?,'None') as {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]})" if headers_to_py_dtypes_dict[col] in ('int','float','bytes') else "datetime(?)" if headers_to_py_dtypes_dict[col] == 'datetime' else "date(?)" if headers_to_py_dtypes_dict[col] == 'date' else "cast(case coalesce(?,'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)" if headers_to_py_dtypes_dict[col] == 'bool' else "nullif(?,'None')" for col in self.headers])
+        sql_insert_params = ",".join([SQLDataModel.sqlite_cast_type_format(dtype=headers_to_py_dtypes_dict[col], as_binding=True) for col in self.headers])        
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         """``sqlite3.Connection``: The in-memory sqlite3 connection object in use by the model."""
@@ -696,6 +696,42 @@ class SQLDataModel:
                     parsed_dtypes[cid] = 'float'
                     continue
         return parsed_dtypes
+
+    @staticmethod
+    def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','str','bytes','date','datetime','NoneType','bool']='str', as_binding:bool=True, as_alias:bool=False):
+        """
+        Formats the specified param to be cast consistently into the python type specified for insert params or as a named alias param.
+
+        Parameters:
+            ``param`` (str): The parameter to be formatted.
+            ``dtype`` (Literal['None', 'int', 'float', 'str', 'bytes', 'date', 'datetime', 'NoneType', 'bool']): The python data type of the parameter as a string.
+            ``as_binding`` (bool, optional): Whether to format as a binding parameter (default is True).
+            ``as_alias`` (bool, optional): Whether to include an alias for the parameter (default is False).
+
+        Returns:
+            ``str``: The parameter formatted for SQL type casting.
+
+        Note:
+            - This function provides consistent formatting for casting parameters into specific data types for SQLite, changing it will lead to unexpected behaviors.
+        """
+        param_alias =  f'''as "{param}"''' if as_alias else ''''''
+        if dtype in ('str','None','NoneType'):
+            return '''cast(nullif(nullif(?,'None'),'') as TEXT)''' if as_binding else f'''cast(nullif(nullif("{param}",'None'),'') as TEXT) {param_alias}'''
+        elif dtype == 'int':
+            return '''cast(nullif(nullif(?,'None'),'') as INTEGER)''' if as_binding else f'''cast(nullif(nullif("{param}",'None'),'') as INTEGER) {param_alias}'''
+        elif dtype == 'float':
+            return '''cast(nullif(nullif(?,'None'),'') as REAL)''' if as_binding else f'''cast(nullif(nullif("{param}",'None'),'') as REAL) {param_alias}'''
+        elif dtype == 'bytes':
+            return '''cast(nullif(nullif(?,'None'),'') as BLOB)''' if as_binding else f"""cast(CASE WHEN (SUBSTR("{param}",1,2) = 'b''' AND SUBSTR("{param}",-1,1) ='''') THEN SUBSTR("{param}",3,LENGTH("{param}")-3) ELSE nullif(nullif("{param}",'None'),'') END as BLOB) {param_alias} """
+        elif dtype == 'date':
+            return '''DATE(nullif(nullif(?,'None'),''))''' if as_binding else f'''DATE(nullif(nullif("{param}",'None'),'')) {param_alias}'''
+        elif dtype == 'datetime':
+            return '''DATETIME(nullif(nullif(?,'None'),''))''' if as_binding else f'''DATETIME(nullif(nullif("{param}",'None'),'')) {param_alias}'''
+        elif dtype == 'bool':
+            return '''cast(case coalesce(nullif(?,''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as INTEGER)''' if as_binding else f'''cast(case coalesce(nullif("{param}",''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as INTEGER) {param_alias}'''
+        else:
+            return '''nullif(nullif(?,'None'),'')''' if as_binding else f'''nullif(nullif("{param}",'None'),'') {param_alias}'''
+
 
     @staticmethod
     def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None) -> str:
@@ -8966,7 +9002,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                 )
         col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        dyn_dtype_cast = f"""cast(nullif(nullif("{column}",'None'),'') as {col_sql_dtype})""" if dtype not in ('bool','bytes','datetime','date','None') else f'datetime("{column}")' if dtype == 'datetime' else f'date("{column}")' if dtype == 'date' else f"""cast(case coalesce(nullif("{column}",''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int)""" if dtype == 'bool' else f"""cast(CASE WHEN (SUBSTR("{column}",1,2) = 'b''' AND SUBSTR("{column}",-1,1) ='''') THEN SUBSTR("{column}",3,LENGTH("{column}")-3) ELSE "{column}" END as {col_sql_dtype})""" if dtype == 'bytes' else f"""nullif(trim(nullif("{column}",'None')),'')""" if dtype == 'None' else f'"{column}"'
+        dyn_dtype_cast = SQLDataModel.sqlite_cast_type_format(param=column, dtype=dtype, as_binding=False, as_alias=False)
         update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
         self.execute_transaction(update_col_sql)
         
@@ -10211,8 +10247,7 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{type(dtype).__name__}', argument for `dtype` must be one of 'bool','bytes','date','datetime','float','int','None' or 'str'")
             )        
-        col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        str_col_cast = ",".join([f"""cast(nullif(nullif("{col}",'None'),'') as {col_sql_dtype}) as "{col}" """ if dtype not in ('bool','bytes','datetime','date','None') else f'datetime("{col}") as "{col}" ' if dtype == 'datetime' else f'date("{col}") as "{col}" ' if dtype == 'date' else f"""cast(case coalesce(nullif("{col}",''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as int) as "{col}" """ if dtype == 'bool' else f"""cast(CASE WHEN (SUBSTR("{col}",1,2) = 'b''' AND SUBSTR("{col}",-1,1) ='''') THEN SUBSTR("{col}",3,LENGTH("{col}")-3) ELSE "{col}" END as {col_sql_dtype}) as "{col}" """ if dtype == 'bytes' else f"""nullif(trim(nullif("{col}",'None')),'') as "{col}" """ if dtype == 'None' else f'"{col}" as "{col}" ' for col in self.headers])
+        str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
         sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
         dtype_dict = {col:dtype for col in self.headers}
         return self.execute_fetch(sql_stmt, dtypes=dtype_dict)
