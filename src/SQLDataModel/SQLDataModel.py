@@ -8004,7 +8004,7 @@ class SQLDataModel:
             [2 rows x 4 columns]
         ```
 
-        Multiple models can be stacked simultaneously, here was stack a total of 3 models:
+        Multiple models can be stacked simultaneously, here we stack a total of 3 models:
 
         ```python
             # Create a third model C
