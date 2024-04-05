@@ -674,3 +674,95 @@ def test_count_min_max():
     assert output_count == expected_count
     assert output_min == expected_min
     assert output_max == expected_max
+
+@pytest.mark.core
+def test_hstack():
+    data_0, headers_0 = [('U_qF', -36, 62.04), ('4Z7w', 36, 80.43), ('ErUL', 80, -37.97)], ['string', 'int', 'float']
+    data_1, headers_1 = [('IXdh', 84, 89.05), ('CxnD', -42, 80.29), ('AVaB', 51, -93.88)], ['string_2', 'int_2', 'float_2']
+    data_2, headers_2 = [('fwkX', -5, 0.41), ('pncP', 39, 80.24), ('NX1F', 13, 74.21)], ['string_3', 'int_3', 'float_3']
+    data_3, headers_3 = [('Ki4C', 63, 26.97), ('L4CH', -62, 73.61), ('9CZD', -41, 4.64)], ['string_4', 'int_4', 'float_4']
+    sdm_0 = SQLDataModel(data=data_0, headers=headers_0, display_float_precision=2)
+    sdm_1 = SQLDataModel(data=data_1, headers=headers_1, display_float_precision=2)
+    sdm_2 = SQLDataModel(data=data_2, headers=headers_2, display_float_precision=2)
+    sdm_3 = SQLDataModel(data=data_3, headers=headers_3, display_float_precision=2)
+    ### single stack test returned as new model ###
+    single_stack_test = sdm_0.hstack(sdm_1, inplace=False)
+    output_data, output_headers = single_stack_test.data(), single_stack_test.get_headers()
+    expected_data, expected_headers = [(t1 + t2) for t1, t2 in zip(data_0, data_1)], [*headers_0, *headers_1]
+    assert output_headers == expected_headers
+    assert output_data == expected_data
+    ### multiple stack test returned as new model ###
+    multi_stack_test = sdm_0.hstack([sdm_1, sdm_2, sdm_3], inplace=False)
+    output_data, output_headers = multi_stack_test.data(), multi_stack_test.get_headers()
+    expected_data, expected_headers = [(t1 + t2 + t3 + t4) for t1, t2, t3, t4 in zip(data_0, data_1, data_2, data_3)], [*headers_0, *headers_1, *headers_2, *headers_3]
+    assert output_headers == expected_headers
+    assert output_data == expected_data    
+    ### single stack inplace ###
+    single_stack_test = SQLDataModel(sdm_0.data(), dtypes=sdm_0.get_column_dtypes()) # copy into new sdm to avoid tarnishing remaining tests
+    single_stack_test.hstack(sdm_1, inplace=True)
+    output_data, output_headers = single_stack_test.data(), single_stack_test.get_headers()
+    expected_data, expected_headers = [(t1 + t2) for t1, t2 in zip(data_0, data_1)], [*headers_0, *headers_1]
+    assert output_headers == expected_headers
+    assert output_data == expected_data
+    ### multi stack inplace ###
+    mult_stack_test = SQLDataModel(sdm_0.data(), dtypes=sdm_0.get_column_dtypes()) # copy into new sdm to avoid tarnishing remaining tests
+    mult_stack_test.hstack([sdm_1, sdm_2, sdm_3], inplace=True)
+    output_data, output_headers = multi_stack_test.data(), multi_stack_test.get_headers()
+    expected_data, expected_headers = [(t1 + t2 + t3 + t4) for t1, t2, t3, t4 in zip(data_0, data_1, data_2, data_3)], [*headers_0, *headers_1, *headers_2, *headers_3]
+    assert output_headers == expected_headers
+    assert output_data == expected_data   
+    ### test dimension coercion ###
+    sdm_0[sdm_0.row_count] = ['new', 99, 3.1415]
+    single_stack_test = sdm_0.hstack(sdm_1, inplace=False)
+    output_data, output_headers = single_stack_test.data(), single_stack_test.get_headers()
+    data_0 += [('new', 99, 3.1415)] # simulate required padding for dim coercion
+    data_1 += [(None, None, None)]
+    expected_data, expected_headers = [(t1 + t2) for t1, t2 in zip(data_0, data_1)], [*headers_0, *headers_1]
+    assert output_headers == expected_headers
+    assert output_data == expected_data
+    
+@pytest.mark.core
+def test_vstack():
+    data_0, headers_0 = [('U_qF', -36, 62.04), ('4Z7w', 36, 80.43), ('ErUL', 80, -37.97)], ['string', 'int', 'float']
+    data_1, headers_1 = [('IXdh', 84, 89.05), ('CxnD', -42, 80.29), ('AVaB', 51, -93.88)], ['string_2', 'int_2', 'float_2']
+    data_2, headers_2 = [('fwkX', -5, 0.41), ('pncP', 39, 80.24), ('NX1F', 13, 74.21)], ['string_3', 'int_3', 'float_3']
+    data_3, headers_3 = [('Ki4C', 63, 26.97), ('L4CH', -62, 73.61), ('9CZD', -41, 4.64)], ['string_4', 'int_4', 'float_4']
+    sdm_0 = SQLDataModel(data=data_0, headers=headers_0, display_float_precision=2)
+    sdm_1 = SQLDataModel(data=data_1, headers=headers_1, display_float_precision=2)
+    sdm_2 = SQLDataModel(data=data_2, headers=headers_2, display_float_precision=2)
+    sdm_3 = SQLDataModel(data=data_3, headers=headers_3, display_float_precision=2)
+    ### single stack test returned as new model ###
+    single_stack_test = sdm_0.vstack(sdm_1, inplace=False)
+    output_data, output_headers = single_stack_test.data(), single_stack_test.get_headers()
+    expected_data, expected_headers = data_0 + data_1, headers_0
+    assert output_headers == expected_headers
+    assert output_data == expected_data
+    ### multiple stack test returned as new model ###
+    multi_stack_test = sdm_0.vstack([sdm_1, sdm_2, sdm_3], inplace=False)
+    output_data, output_headers = multi_stack_test.data(), multi_stack_test.get_headers()
+    expected_data, expected_headers = data_0 + data_1 + data_2 + data_3, headers_0
+    assert output_headers == expected_headers
+    assert output_data == expected_data  
+    ### single stack inplace ###
+    single_stack_test = SQLDataModel(sdm_0.data(), dtypes=sdm_0.get_column_dtypes()) # copy into new sdm to avoid tarnishing remaining tests
+    single_stack_test.vstack(sdm_1, inplace=True)
+    output_data, output_headers = single_stack_test.data(), single_stack_test.get_headers()
+    expected_data, expected_headers = data_0 + data_1, headers_0
+    assert output_headers == expected_headers
+    assert output_data == expected_data
+    ### multi stack inplace ###
+    mult_stack_test = SQLDataModel(sdm_0.data(), dtypes=sdm_0.get_column_dtypes()) # copy into new sdm to avoid tarnishing remaining tests
+    mult_stack_test.vstack([sdm_1, sdm_2, sdm_3], inplace=True)
+    output_data, output_headers = multi_stack_test.data(), multi_stack_test.get_headers()
+    expected_data, expected_headers = data_0 + data_1 + data_2 + data_3, headers_0
+    assert output_headers == expected_headers
+    assert output_data == expected_data   
+    ### test dimension coercion ###
+    sdm_0['bytes'] = b'pad test'
+    single_stack_test = sdm_0.vstack(sdm_1, inplace=False)
+    output_data, output_headers = single_stack_test.data(), single_stack_test.get_headers()
+    data_0 = [tuple([*row, b'pad test']) for row in data_0]
+    data_1 = [tuple([*row, None]) for row in data_1]
+    expected_data, expected_headers = data_0 + data_1, [*headers_0, 'bytes']
+    assert output_headers == expected_headers
+    assert output_data == expected_data    
