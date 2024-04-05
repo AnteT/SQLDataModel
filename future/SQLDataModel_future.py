@@ -10251,3 +10251,217 @@ class SQLDataModel:
         sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
         dtype_dict = {col:dtype for col in self.headers}
         return self.execute_fetch(sql_stmt, dtypes=dtype_dict)
+    
+    def vstack(self, *other:SQLDataModel, inplace:bool=False) -> SQLDataModel:
+        """
+        Vertically stacks one or more ``SQLDataModel`` objects to the current model.
+
+        Parameters:
+            ``other`` (SQLDataModel or sequence of): The SQLDataModel objects to vertically stack.
+            ``inplace`` (bool, optional): If True, performs the vertical stacking in-place, modifying the current model. Defaults to False, returning a new ``SQLDataModel``.
+
+        Returns:
+            ``SQLDataModel``: The vertically stacked SQLDataModel instance when inplace is False.
+
+        Raises:
+            ``ValueError``: If no additional SQLDataModels are provided for vertical stacking.
+            ``TypeError``: If any argument in 'other' is not of type SQLDataModel, list, or tuple.
+            ``SQLProgrammingError``: If an error occurs when updating the model values in place.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Create models A and B
+            sdm_a = SQLDataModel([('A', 1), ('B', 2)], headers=['A1', 'A2'])
+            sdm_b = SQLDataModel([('C', 3), ('D', 4)], headers=['B1', 'B2'])
+
+            # Vertically stack B onto A
+            sdm_ab = sdm_a.vstack(sdm_b)
+
+            # View stacked model
+            print(sdm_ab)
+
+        This will output the result of stacking B onto A, using the base model columns and dtypes:
+
+        ```shell
+            ┌─────┬─────┐
+            │ A1  │  A2 │
+            ├─────┼─────┤
+            │ A   │   1 │
+            │ B   │   2 │
+            │ C   │   3 │
+            │ D   │   4 │
+            └─────┴─────┘
+            [4 rows x 2 columns]
+        ```
+
+        Multiple models can be stacked simultaneously, here we vertically stack 3 models:
+
+        ```python
+            # Create a third model C
+            sdm_c = SQLDataModel([('E', 5), ('F', 6)], headers=['C1', 'C2'])
+
+            # Vertically stack all three models
+            sdm_abc = sdm_a.vstack([sdm_b, sdm_c])
+
+            # View stacked result
+            print(sdm_abc)
+        ```
+
+        This will output the result of stacking C and B onto A:
+
+        ```shell
+            ┌─────┬─────┐
+            │ A1  │  A2 │
+            ├─────┼─────┤
+            │ A   │   1 │
+            │ B   │   2 │
+            │ C   │   3 │
+            │ D   │   4 │
+            │ E   │   5 │
+            │ F   │   6 │
+            └─────┴─────┘
+            [6 rows x 2 columns]
+        ```
+
+        Note:
+            - Headers and data types are inherited from the model calling the :meth:`SQLDataModel.vstack()` method, casting stacked values corresponding to the base model types.
+            - Model dimensions will be truncated or padded to coerce compatible dimensions when stacking, use :meth:`SQLDataModel.concat()` for strict concatenation instead of vstack.
+            - See :meth:`SQLDataModel.insert_row()` for inserting new values or types other than ``SQLDataModel`` directly into the current model.
+            - See :meth:`SQLDataModel.hstack()` for horizontal stacking.
+        """
+        other = list(other[0]) if len(other) == 1 and isinstance(other[0], (list,tuple)) else list(other)
+        if len(other) < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: insufficient model count '{len(other)}', at least 1 additional 'SQLDataModel' is required to vertically stack against")
+            )
+        if not all(isinstance(sdm, SQLDataModel) for sdm in other):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type encountered in '{[type(other[n]).__name__ for n in other]}', arguments for `other` must all be of type 'SQLDataModel' to vertically stack")
+            )
+        other_data = [[cell for cell in sublist] + [None] * (self.column_count - len(sublist)) for sublist in [item for sublist in [sdm[:,:self.column_count].data(index=False,include_headers=False) for sdm in other] for item in sublist]]
+        if inplace:
+            sql_insert_stmt = f"""insert into "{self.sql_model}" ({','.join([f'"{col}"' for col in self.headers])}) values ({",".join([SQLDataModel.sqlite_cast_type_format(dtype=self.header_master[col][1], as_binding=True) for col in self.headers])})"""
+            try:
+                self.sql_db_conn.executemany(sql_insert_stmt, other_data)
+                self.sql_db_conn.commit()
+            except sqlite3.ProgrammingError as e:
+                self.sql_db_conn.rollback()
+                raise SQLProgrammingError(
+                    SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with '{e}'")
+                ) from None            
+            self._update_model_metadata(update_row_meta=True)
+            return
+        else:
+            other_data = (*self.data(index=False, include_headers=False),*other_data)
+            return type(self)(data=other_data, headers=self.headers, dtypes=self.get_column_dtypes(), **self._get_display_args())
+                    
+    def hstack(self, *other:SQLDataModel, inplace:bool=False) -> SQLDataModel:
+        """
+        Horizontally stacks one or more ``SQLDataModel`` objects to the current model.
+
+        Parameters:
+            ``other`` (SQLDataModel or sequence of): The SQLDataModel objects to horizontally stack.
+            ``inplace`` (bool, optional): If True, performs the horizontal stacking in-place, modifying the current model. Defaults to False, returning a new ``SQLDataModel``.
+
+        Returns:
+            ``SQLDataModel``: The horizontally stacked SQLDataModel instance when inplace is False.
+
+        Raises:
+            ``ValueError``: If no additional SQLDataModels are provided for horizontal stacking.
+            ``TypeError``: If any argument in 'other' is not of type SQLDataModel, list, or tuple.
+            ``SQLProgrammingError``: If an error occurs when updating the model values in place.            
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Create models A and B
+            sdm_a = SQLDataModel([('A', 'B'), ('1', '2')], headers=['A1', 'A2'])
+            sdm_b = SQLDataModel([('C', 'D'), ('3', '4')], headers=['B1', 'B2'])
+
+            # Horizontally stack B onto A
+            sdm_ab = sdm_a.hstack(sdm_b)
+
+            # View stacked model
+            print(sdm_ab)
+
+        This will output the result of stacking B onto A, using the each model's headers and dtypes:    
+
+        ```shell
+            ┌─────┬─────┬─────┬─────┐
+            │ A1  │ A2  │ B1  │ B2  │
+            ├─────┼─────┼─────┼─────┤
+            │ A   │ B   │ C   │ D   │
+            │ 1   │ 2   │ 3   │ 4   │
+            └─────┴─────┴─────┴─────┘
+            [2 rows x 4 columns]
+        ```
+
+        Multiple models can be stacked simultaneously, here was stack a total of 3 models:
+
+        ```python
+            # Create a third model C
+            sdm_c = SQLDataModel([('E', 'F'), ('5', '6')], headers=['C1', 'C2'])
+
+            # Horizontally stack three models
+            sdm_abc = sdm_a.hstack([sdm_b, sdm_c])
+
+            # View stacked result
+            print(sdm_abc)
+        ```
+
+        This will output the result of stacking C and B onto A:
+
+        ```shell
+            ┌─────┬─────┬─────┬─────┬─────┬─────┐
+            │ A1  │ A2  │ B1  │ B2  │ C1  │ C2  │
+            ├─────┼─────┼─────┼─────┼─────┼─────┤
+            │ A   │ B   │ C   │ D   │ E   │ F   │
+            │ 1   │ 2   │ 3   │ 4   │ 5   │ 6   │
+            └─────┴─────┴─────┴─────┴─────┴─────┘
+            [2 rows x 6 columns]
+        ```
+
+        Note:
+            - Model dimensions will be truncated or padded to coerce compatible dimensions when stacking, use :meth:`SQLDataModel.merge()` for strict SQL joins instead of hstack.
+            - Headers and data types are inherited from all the models being stacked, this requires aliasing duplicate column names if present, see :meth:`SQLDataModel.alias_duplicates()` for aliasing rules.
+            - Use ``setitem`` syntax such as ``sdm['New Column'] = values`` to create new columns directly into the currently model instead of stacking or see :meth:`SQLDataModel.add_column_with_values()` for convenience method accomplishing the same.
+            - See :meth:`SQLDataModel.vstack()` for vertical stacking.
+        """
+        other = list(other[0]) if len(other) == 1 and isinstance(other[0], (list,tuple)) else list(other)
+        if len(other) < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: insufficient model count '{len(other)}', at least 1 additional 'SQLDataModel' is required to horizontally stack against")
+            )
+        if not all(isinstance(sdm, SQLDataModel) for sdm in other):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type encountered in '{[type(other[n]).__name__ for n in other]}', arguments for `other` must all be of type 'SQLDataModel' to horizontally stack")
+            )
+        other_headers, other_dtypes = zip(*[(col[0], col[1]) for sdm in other for col in sdm.get_column_dtypes().items()])
+        other_headers, other_dtypes = list(SQLDataModel.alias_duplicates([*self.headers,*other_headers])), [*self.get_column_dtypes().values(), *other_dtypes]
+        other_data = [(sdm[:self.row_count].data() if sdm.row_count > 1 else [sdm[:self.row_count].data()]) + [tuple(None for _ in range(sdm.column_count)) for _ in range(self.row_count - sdm.row_count)] for sdm in other]
+        other_data = [tuple(item for sublist in row for item in sublist) for row in list(zip(*other_data))]
+        if inplace:
+            other_headers = other_headers[self.column_count:] # since in place remove current model's headers
+            other_dtypes = other_dtypes[self.column_count:] # since in place remove current model's dtypes
+            update_sql_script = ";".join([f"""alter table "{self.sql_model}" add column "{col_name}" {self.static_py_to_sql_map_dict.get(col_type, 'TEXT')}""" for col_name, col_type in zip(other_headers, other_dtypes)])
+            col_val_param = ','.join([f""" "{col}" = {SQLDataModel.sqlite_cast_type_format(param='?', dtype=dtype)} """ for col,dtype in zip(other_headers, other_dtypes)])
+            update_stmt = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} = ?"""
+            update_params = [(*other_data[i], row) for i,row in enumerate(self.indicies)]
+            try:
+                self.execute_transaction(update_sql_script)
+                self.sql_db_conn.executemany(update_stmt, update_params)
+                self.sql_db_conn.commit()
+            except sqlite3.ProgrammingError as e:
+                self.sql_db_conn.rollback()
+                raise SQLProgrammingError(
+                    SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with '{e}'")
+                ) from None
+            self._update_model_metadata()
+            return
+        else:
+            other_data = [(t1 + t2) for t1, t2 in zip(self.data(index=False, include_headers=False), other_data)]
+            dtype_dict = dict(zip(other_headers, other_dtypes))
+            return type(self)(data=other_data, headers=other_headers, dtypes=dtype_dict, **self._get_display_args())    

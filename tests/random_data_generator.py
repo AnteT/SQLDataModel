@@ -12,7 +12,7 @@ def number_duplicates(values):
         else:
             yield v
 
-def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_000, max_numeric_value:int=1_000, min_literal_length:int=2, max_literal_length:int=12, float_precision:int=6, seed:int=None, return_header_type:Literal['list','tuple']='list', return_row_type:Literal['list','tuple']='list', return_format:Literal["separate","combined"]="separate") -> tuple[list[list], list[str]]:
+def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_000, max_numeric_value:int=1_000, min_literal_length:int=2, max_literal_length:int=12, float_precision:int=6, seed:int=None, return_header_type:Literal['list','tuple']='list', return_row_type:Literal['list','tuple']='list', return_format:Literal["separate","combined"]="separate", as_str:bool=False, nullify_prob:float|None=None) -> tuple[list[list], list[str]]:
     """
     Returns randomly generated data for each Python type.
 
@@ -34,6 +34,8 @@ def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_
         - `return_format` (Literal['separate','combined']): Return format of data:
             - `'separate'`: Returns in the format of `(data, headers)`
             - `'combined'`: Returns in the format of `(data)` with headers at `data[0]`
+        - `as_str` (bool): Overrides data types as type str, used for testing type inferencing methods. Defaults to False.
+        - `nullify_prob` (float | None): Percentage of data to be randomly nullified, used for simulating missing or null values. Defaults to None.
 
     Returns:
         - `tuple[list[list], list[str]]`: A tuple containing the generated data as a list of lists and headers as a list of strings.
@@ -131,6 +133,38 @@ def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_
     data = list(map(row_type, zip(*columns)))
     header_type = list if return_header_type == 'list' else tuple
     headers = header_type(number_duplicates(dtypes))
+    if as_str:
+        data = [row_type(str(cell) for cell in row) for row in data]
+    if nullify_prob is not None:
+        data = data_nullifier(data, replace_prob=nullify_prob)
     if return_format == 'combined':
         return [headers, *data]
     return data, headers
+
+def data_nullifier(input_data: list[list], replace_prob: float) -> list[list]:
+    """
+    Randomly replace values in a list of lists with `None` to replicate missing or null values for testing.
+
+    Parameters:
+        - `input_data` (list[list]): A list of lists containing the input data.
+        - `replace_prob` (float): The probability of replacing each value with None.
+
+    Returns:
+        - `list[list]`: A list of lists with values randomly replaced with None.
+
+    This function iterates over each element in the input_data and
+    randomly replaces each value with None based on the specified
+    probability (replace_prob).
+    """
+    row_type = type(input_data[0])
+    replaced_data = []
+    for row in input_data:
+        replaced_row = []
+        for value in row:
+            if random.random() < replace_prob:
+                replaced_row.append(None)
+            else:
+                replaced_row.append(value)
+        replaced_data.append(replaced_row)
+    replaced_data = [row_type(str(cell) for cell in row) for row in replaced_data]
+    return replaced_data
