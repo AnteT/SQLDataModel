@@ -257,7 +257,7 @@ class SQLDataModel:
         - Use :meth:`SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
 
     """
-    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies')
+    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies','dtypes','shape')
     
     def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False):
         """
@@ -308,7 +308,7 @@ class SQLDataModel:
 
         Note:
             - If ``data`` is not provided, an empty model is created with headers, at least one of ``data``, ``headers`` or ``dtypes`` are required to instantiate the model.
-            - If ``headers`` are not provided, default headers will be generated using the the format `'col_0', ..., col_N` where N is the column count.
+            - If ``headers`` are not provided, default headers will be generated using the the format ``'0', '1', ..., N`` where ``N`` is the column count.
             - If ``dtypes`` is provided, it must be a dictionary with column names as keys and Python data types as string values, e.g., `{'first_name': 'str', 'weight': 'float'}`
             - If ``infer_types = True`` and ``dtypes`` are provided, the order will be resolved by first inferring the types, then overriding the inferred types for each ``{col:type}`` provided in the ``dtypes`` argument. If one is not provided, then the inferred type will be used as a fallback.
         """
@@ -407,6 +407,8 @@ class SQLDataModel:
         """``list[str]``: The current column names of the model. If not provided, default column names will be used."""
         self.column_count = len(self.headers)
         """``int``: The current column count of the model."""
+        self.shape = (self.row_count, self.column_count)
+        """``tuple[int, int]``: The current dimensions of the model as a tuple of ``(rows, columns)``."""
         self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         """``ANSIColor``: The display color to use for string representations of the model. Default is ``None``, using the standard terminal color."""
         self.static_py_to_sql_map_dict = {'None': 'TEXT','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date': 'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
@@ -424,13 +426,15 @@ class SQLDataModel:
             headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
         except KeyError as e:
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in ``data`` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in `data` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
             ) from None
+        self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
+        """``sqlite3.Connection``: The in-memory sqlite3 connection object in use by the model."""
+        self.dtypes = headers_to_py_dtypes_dict
+        """``dict[str, str]``: The current model data types mapped to each column in the format of ``{'col': 'dtype'}`` where ``'dtype'`` is a string representing the corresponding python type."""
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_params = ",".join([SQLDataModel.sqlite_cast_type_format(dtype=headers_to_py_dtypes_dict[col], as_binding=True) for col in self.headers])        
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
-        self.sql_db_conn = sqlite3.connect(":memory:", uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
-        """``sqlite3.Connection``: The in-memory sqlite3 connection object in use by the model."""
         try:
             self.sql_db_conn.execute(sql_create_stmt)
         except sqlite3.OperationalError as e:
@@ -438,7 +442,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid model structure, failed to create table due to '{e}'")
             ) from None           
         self.header_master = None
-        """``dict``: Maps the current model's column metadata in the format of ``'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')``, updated by :meth:`SQLDataModel._update_model_metadata`."""
+        """``dict[str, tuple]``: Maps the current model's column metadata in the format of ``'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')``, updated by :meth:`SQLDataModel._update_model_metadata`."""
         self._update_model_metadata()
         if not had_data:
             trig_zero_init = f"""CREATE TRIGGER 'zero_init' AFTER INSERT 
@@ -1685,12 +1689,12 @@ class SQLDataModel:
                 )
         self.display_index = display_index
     
-    def get_shape(self) -> tuple[int]:
+    def get_shape(self) -> tuple[int, int]:
         """
         Returns the current shape of the ``SQLDataModel`` as a tuple of ``(rows x columns)``.
 
         Returns:
-            ``tuple[int]``: A tuple representing the number of rows and columns in the SQLDataModel.
+            ``tuple[int, int]``: A tuple representing the current dimensions of rows and columns in the ``SQLDataModel``.
 
         Example::
 
@@ -1739,11 +1743,15 @@ class SQLDataModel:
             [3 rows x 3 columns] <-- shape is also visible here
         ```
 
+        Change Log:
+            - Version 0.3.6 (2024-04-08):
+                - Returns the new `:py:attr:`SQLDataModel.shape` directly, making this method redundant.
+
         Note:
             - If an empty model is initialized, the :py:attr:`SQLDataModel.rowcount` will be 0 until the first row is inserted.
             - Using the :meth:`SQLDataModel.__getitem__` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
         """
-        return (self.row_count,self.column_count)
+        return self.shape
     
     def get_display_float_precision(self) -> int:
         """
@@ -9182,9 +9190,10 @@ class SQLDataModel:
         ```
 
         Note:
-            - SQLDataModel index column is not included, only columns specified in the :py:attr:`SQLDataModel.headers` attribute are in scope
-            - Only the dtypes are returned, any primary key references are removed to ensure compatability with external calls
-            - Python datatypes are returned in lower case, while SQL dtypes are returned in upper case to reflect convention
+            - SQLDataModel index column is not included, only columns specified in the :py:attr:`SQLDataModel.headers` attribute are in scope.
+            - Only the dtypes are returned, any primary key references are removed to ensure compatability with external calls.
+            - Python datatypes are returned in lower case, while SQL dtypes are returned in upper case to reflect convention.
+            - See :py:attr:`SQLDataModel.dtypes` for direct mapping from column to data type returned as ``{'col': 'dtype'}``.
         """        
         dtypes = 1 if dtypes == "python" else 0
         if columns is None:
@@ -9906,6 +9915,8 @@ class SQLDataModel:
             - :py:attr:`SQLDataModel.header_master`: Master dictionary of column metadata.
             - :py:attr:`SQLDataModel.headers`: List of current model headers, order retained.
             - :py:attr:`SQLDataModel.column_count`: Number of columns in current model.
+            - :py:attr:`SQLDataModel.shape`: The current ``(rows, cols)`` dimensions of the model.
+            - :py:attr:`SQLDataModel.dtype`: The current ``{'col': 'dtype'}`` mapping of the model.
 
               - :py:attr:`SQLDataModel.indicies`: Optionally updated, represents current valid row indicies.
               - :py:attr:`SQLDataModel.row_count`: Optionally updated, represents current row count.
@@ -9982,7 +9993,9 @@ class SQLDataModel:
         self.column_count = len(self.headers)
         # format: 'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')
         self.header_master = header_master 
-        """`dict`: Maps the current model's column metadata in the format of ``'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')``, updated by :meth:`SQLDataModel._update_model_metadata`."""
+        """``dict[str, tuple]``: Maps the current model's column metadata in the format of ``'column_name': ('sql_dtype', 'py_dtype', is_regular_column, 'default_alignment')``, updated by :meth:`SQLDataModel._update_model_metadata`."""
+        self.dtypes = {k:v[1] for k,v in self.header_master.items() if v[2]}
+        self.shape = (self.shape[0], self.column_count)
         if update_row_meta:
             self._update_indicies()
 
@@ -10068,6 +10081,7 @@ class SQLDataModel:
         fetch_stmt = f"""select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc"""
         self.indicies = tuple([x[0] for x in self.sql_db_conn.execute(fetch_stmt).fetchall()])
         self.row_count = len(self.indicies)
+        self.shape = (self.row_count,self.shape[1])
     
     def get_indicies(self) -> tuple:
         """
