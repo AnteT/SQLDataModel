@@ -308,7 +308,7 @@ class SQLDataModel:
 
         Note:
             - If ``data`` is not provided, an empty model is created with headers, at least one of ``data``, ``headers`` or ``dtypes`` are required to instantiate the model.
-            - If ``headers`` are not provided, default headers will be generated using the the format `'col_0', ..., col_N` where N is the column count.
+            - If ``headers`` are not provided, default headers will be generated using the the format ``'0', '1', ..., N`` where ``N`` is the column count.
             - If ``dtypes`` is provided, it must be a dictionary with column names as keys and Python data types as string values, e.g., `{'first_name': 'str', 'weight': 'float'}`
             - If ``infer_types = True`` and ``dtypes`` are provided, the order will be resolved by first inferring the types, then overriding the inferred types for each ``{col:type}`` provided in the ``dtypes`` argument. If one is not provided, then the inferred type will be used as a fallback.
         """
@@ -381,7 +381,7 @@ class SQLDataModel:
                         SQLDataModel.ErrorFormat(f"ValueError: invalid character in column '{col}', headers must be of type 'str' consisting of valid SQL column identifiers")
                     )
         else:
-            headers = list(dtypes.keys()) if dtypes is not None else [f"col_{x}" for x in range(len(data[0]))]
+            headers = list(dtypes.keys()) if dtypes is not None else [f"{x}" for x in range(len(data[0]))]
         self.sql_idx = "idx"
         """``str``: The index column name applied to the sqlite3 in-memory representation of the model. Default is ``'idx'``"""
         self.sql_model = "sdm"
@@ -424,7 +424,7 @@ class SQLDataModel:
             headers_with_sql_dtypes_str = ",".join(f'"{col}" {self.static_py_to_sql_map_dict[headers_to_py_dtypes_dict[col]]}' for col in self.headers)
         except KeyError as e:
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in ``data`` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid data type {e}, values in `data` must be a list of lists comprised of types 'str', 'int', 'float', 'bytes', 'datetime' or 'bool' ")
             ) from None
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
         sql_insert_params = ",".join([SQLDataModel.sqlite_cast_type_format(dtype=headers_to_py_dtypes_dict[col], as_binding=True) for col in self.headers])        
@@ -2612,7 +2612,7 @@ class SQLDataModel:
             return cls.from_json(data)
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
         if rowwise:
-            headers = ['idx',*[f'col_{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
+            headers = ['idx',*[f'{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
             return cls([tuple([k,*v]) for k,v in data.items()], headers, **kwargs)
         else:
             first_key_val = data[next(iter(data))]
@@ -8766,6 +8766,63 @@ class SQLDataModel:
         """
         return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
   
+    def transpose(self, infer_types:bool=True, include_headers:bool=False) -> SQLDataModel:
+        """
+        Transposes the model and returns as a new ``SQLDataModel``.
+
+        Parameters:
+            ``infer_types`` (bool, optional): If types should be inferred after the transposition. Defaults to True.
+            ``include_headers`` (bool, optional): If headers are included in the transposed data. Defaults to False.
+
+        Returns:
+            ``SQLDataModel``: The transposition of the model as a new SQLDataModel instance.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Create the model
+            sdm = SQLDataModel([('A1', 'A2'), ('B1', 'B2'), ('C1', 'C2')])
+
+            # Transpose it
+            sdm_transposed = sdm.transpose()
+
+            # View original
+            print(f"Original:\\n{sdm}")
+
+            # Along with transposed
+            print(f"Transposed:\\n{sdm_transposed}")
+
+        This will output the result of the transposition:
+
+        ```shell
+            Original:
+            ┌───┬─────┬─────┐
+            │   │ 0   │ 1   │
+            ├───┼─────┼─────┤
+            │ 0 │ A1  │ A2  │
+            │ 1 │ B1  │ B2  │
+            │ 2 │ C1  │ C2  │
+            └───┴─────┴─────┘
+            [3 rows x 2 columns]
+            
+            Transposed:
+            ┌───┬─────┬─────┬─────┐
+            │   │ 0   │ 1   │ 2   │
+            ├───┼─────┼─────┼─────┤
+            │ 0 │ A1  │ B1  │ C1  │
+            │ 1 │ A2  │ B2  │ C2  │
+            └───┴─────┴─────┴─────┘
+            [2 rows x 3 columns]            
+        ```
+
+        Note:
+            - When ``infer_types=False``, the first row of the transposed result will be used to set the ``dtypes`` of the new model. This is generally a poor choice considering the nature of transposing data.
+            - If ``include_headers=True``, the headers will be included as the first row in the transposed data.
+            - Running this method sequentially should return the original model, ``sdm == sdm.transpose().transpose()``
+        """
+        return type(self)(data=[row for row in zip(*self.data(include_headers=include_headers, index=False))], infer_types=infer_types, **self._get_display_args())
+
     def vstack(self, *other:SQLDataModel, inplace:bool=False) -> SQLDataModel:
         """
         Vertically stacks one or more ``SQLDataModel`` objects to the current model.

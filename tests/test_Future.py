@@ -55,9 +55,9 @@ def test_setitem():
     test_corners = [('top left', 'top right'),('bottom left', 'bottom right')] # corner values
     test_indicies_and_values = [
         [(0), tuple([f'0,{i}' for i in range(sdm.column_count)])] # rowwise updates
-        ,['col_0', [(f'{i},0',) for i in range(sdm.row_count)]] # columnwise updates
+        ,['0', [(f'{i},0',) for i in range(sdm.row_count)]] # columnwise updates
         ,[(grid_size), tuple([f'{grid_size},{i}' for i in range(sdm.column_count)])] # new row
-        ,[f'col_{grid_size}', [(f'{i},{grid_size}',) for i in range(sdm.row_count + 1)]] # new column
+        ,[f'{grid_size}', [(f'{i},{grid_size}',) for i in range(sdm.row_count + 1)]] # new column
         ,[(slice(1,-1),slice(1,-1)), [tuple([fill_char for _ in range(sdm.column_count-1)]) for _ in range(sdm.row_count-1)]] # new interior values
         ,[(0,0), test_corners[0][0]] # top left
         ,[(0,-1), test_corners[0][-1]] # top right
@@ -766,3 +766,10 @@ def test_vstack():
     expected_data, expected_headers = data_0 + data_1, [*headers_0, 'bytes']
     assert output_headers == expected_headers
     assert output_data == expected_data    
+
+@pytest.mark.core
+def test_transpose():
+    num_rows, num_cols = 10, 5
+    input_data = [tuple(f"{i},{j}" for j in range(num_cols)) for i in range(num_rows)]
+    output_data = SQLDataModel(input_data).transpose(infer_types=True,include_headers=False).transpose(infer_types=True,include_headers=False).data()
+    assert output_data == input_data
