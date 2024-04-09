@@ -1744,11 +1744,11 @@ class SQLDataModel:
         ```
 
         Change Log:
-            - Version 0.3.6 (2024-04-08):
-                - Returns the new `:py:attr:`SQLDataModel.shape` directly, making this method redundant.
+            - Version 0.3.6 (2024-04-09):
+                - Returns the new :py:attr:`SQLDataModel.shape` directly, making this method redundant.
 
         Note:
-            - If an empty model is initialized, the :py:attr:`SQLDataModel.rowcount` will be 0 until the first row is inserted.
+            - If an empty model is initialized, the :py:attr:`SQLDataModel.row_count` will be 0 until the first row is inserted.
             - Using the :meth:`SQLDataModel.__getitem__` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
         """
         return self.shape
@@ -2038,7 +2038,7 @@ class SQLDataModel:
         Return a random sample of size ``n_samples`` as a new ``SQLDataModel``.
 
         Parameters:
-            ``n_samples`` (float | int): Number of rows or proportion of rows to sample. Default set to ``0.05``, proportional to 5% of the current :py:attr:`SQLDataModel.rowcount`.
+            ``n_samples`` (float | int): Number of rows or proportion of rows to sample. Default set to ``0.05``, proportional to 5% of the current :py:attr:`SQLDataModel.row_count`.
                 If ``n_samples`` is an integer, it represents the exact number of rows to sample where ``0 < n_samples <= row_count``.
                 If ``n_samples`` is a float, it represents the proportion of rows to sample where ``0.0 < n_samples <= 1.0``.
 
@@ -2070,8 +2070,7 @@ class SQLDataModel:
             sample_result2 = sdm2.sample(n_samples=0.2)
 
         Note:
-            - If the current model's :py:attr:`SQLDataModel.rowcount` value is less than the sample size, the current row count will be used instead.
-
+            - If the current model's :py:attr:`SQLDataModel.row_count` value is less than the sample size, the current row count will be used instead.
         """
         if not isinstance(n_samples, (float,int)):
             raise TypeError(
@@ -9748,7 +9747,7 @@ class SQLDataModel:
     
     def insert_row(self, values:list|tuple=None) -> None:
         """
-        Inserts a row in the ``SQLDataModel`` at index :py:attr:`self.rowcount + 1 <SQLDataModel.rowcount>` with provided ``values``. If ``values=None``, an empty row with SQL ``null`` values will be used.
+        Inserts a row in the ``SQLDataModel`` at index :py:attr:`self.rowcount + 1 <SQLDataModel.row_count>` with provided ``values``. If ``values=None``, an empty row with SQL ``null`` values will be used.
 
         Parameters:
             ``values`` (list or tuple, optional): The values to be inserted into the row. If not provided or set to None, an empty row with SQL ``null`` values will be inserted.
