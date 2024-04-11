@@ -10,6 +10,13 @@ def sample_data() -> tuple[list[list], list[str]]:
     """Returns sample data in format `(data, headers)` to use for testing."""
     return data_generator(num_rows=120, float_precision=4, num_columns=8, seed=42, return_header_type='list', return_row_type='tuple', return_format='combined')
 
+@pytest.fixture
+def sample_data_parameterized() -> tuple[list[list], list[str]]:
+    """Returns sample data from data_generator function with pass through parameters for customizing output for testing."""
+    def _data_generator(num_rows=12, float_precision=2, num_columns=8, seed=42, return_header_type='list', return_row_type='tuple', return_format='separate', exclude_nonetype=True):
+        return data_generator(num_rows=num_rows, float_precision=float_precision, num_columns=num_columns, seed=seed, return_header_type=return_header_type, return_row_type=return_row_type, return_format=return_format, exclude_nonetype=exclude_nonetype)
+    return _data_generator
+
 @pytest.mark.core
 def test_init(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
@@ -773,3 +780,25 @@ def test_transpose():
     input_data = [tuple(f"{i},{j}" for j in range(num_cols)) for i in range(num_rows)]
     output_data = SQLDataModel(input_data).transpose(infer_types=True,include_headers=False).transpose(infer_types=True,include_headers=False).data()
     assert output_data == input_data
+
+@pytest.mark.core
+def test_min(sample_data_parameterized):
+    data, headers = sample_data_parameterized(exclude_nonetype=True)
+    expected_data = tuple(min([row[j] for row in data]) for j in range(len(data[0])))
+    output_data = SQLDataModel(data, headers).min().data()
+    assert output_data == expected_data
+
+@pytest.mark.core
+def test_max(sample_data_parameterized):
+    data, headers = sample_data_parameterized(exclude_nonetype=True)
+    expected_data = tuple(max([row[j] for row in data]) for j in range(len(data[0])))
+    output_data = SQLDataModel(data, headers).max().data()
+    assert output_data == expected_data    
+
+@pytest.mark.core
+def test_mean():
+    data = [('QNkrwWcsJnL', -633, 996.8432, 1, datetime.date(1962, 6, 7), b'3S7Z8ZcCeSc', datetime.datetime(1948, 10, 13, 9, 42, 47), 'waRB660S'), ('C5', -380, -585.4195, 1, datetime.date(1944, 9, 6), b'VceF78VXuWI', datetime.datetime(2020, 4, 23, 20, 14, 56), 'rABpuXdI'), ('FfeWNVq', -378, 575.8778, 0, datetime.date(1998, 3, 3), b'YyPoUKrPK', datetime.datetime(1958, 4, 18, 3, 11, 46), 'j2lb'), ('Xx', -744, 972.1331, 1, datetime.date(1994, 1, 19), b'PJyDr', datetime.datetime(2022, 12, 17, 14, 49, 10), 'KpWirYfv'), ('SuzgO', -627, 332.6614, 1, datetime.date(2011, 9, 14), b'b9', datetime.datetime(1922, 2, 25, 23, 23, 58), 'WM1VHoJ25zf'), ('69UEuh0', -954, -906.1676, 1, datetime.date(1980, 7, 26), b'PYesip__', datetime.datetime(1954, 8, 5, 4, 38, 33), 'jUWRBAyJXV')]    
+    expected_data = ('NaN', -619.3333333333334, 230.98806666666667, 0.8333333333333334, datetime.date(1981, 12, 7), 'NaN', datetime.datetime(1971, 3, 8, 16, 40, 11), 'NaN')
+    output_data = SQLDataModel(data).mean().data()
+    assert output_data == expected_data
+    

@@ -8051,8 +8051,8 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type encountered in '{[type(other[n]).__name__ for n in other]}', arguments for `other` must all be of type 'SQLDataModel' to horizontally stack")
             )
-        other_headers, other_dtypes = zip(*[(col[0], col[1]) for sdm in other for col in sdm.get_column_dtypes().items()])
-        other_headers, other_dtypes = list(SQLDataModel.alias_duplicates([*self.headers,*other_headers])), [*self.get_column_dtypes().values(), *other_dtypes]
+        other_headers, other_dtypes = zip(*[(col[0], col[1]) for sdm in other for col in sdm.dtypes.items()])
+        other_headers, other_dtypes = list(SQLDataModel.alias_duplicates([*self.headers,*other_headers])), [*self.dtypes.values(), *other_dtypes]
         other_data = [(sdm[:self.row_count].data() if sdm.row_count > 1 else [sdm[:self.row_count].data()]) + [tuple(None for _ in range(sdm.column_count)) for _ in range(self.row_count - sdm.row_count)] for sdm in other]
         other_data = [tuple(item for sublist in row for item in sublist) for row in list(zip(*other_data))]
         if inplace:
@@ -8146,6 +8146,75 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=include_idx_col))
         yield from (Row(*x) for x in res.fetchall())
     
+    def mean(self) -> SQLDataModel:
+        """
+        Returns a new ``SQLDataModel`` containing the mean value of all viable columns in the current model. Calculated by ``sum(x_i, ..., x_n) * (1 / N)``
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel containing the mean values of each column.
+
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Birthday', 'Height', 'Date of Hire']
+            data = [
+                ('John', 30, '1994-06-15', 175.3, '2018-03-03 11:20:19'), 
+                ('Alice', 28, '1996-11-20', 162.0, '2023-04-24 08:45:30'), 
+                ('Travis', 37, '1987-01-07', 185.8, '2012-10-06 15:30:40')
+            ]
+
+            # Create the model and infer correct types
+            sdm = SQLDataModel(data, headers, infer_dtypes=True)
+
+            # View full model
+            print(sdm)
+        
+        This will output the sample model we'll be using to calculate mean values for:
+
+        ```shell
+            ┌────────┬─────┬────────────┬─────────┬─────────────────────┐
+            │ Name   │ Age │ Birthday   │  Height │ Date of Hire        │
+            ├────────┼─────┼────────────┼─────────┼─────────────────────┤
+            │ John   │  30 │ 1994-06-15 │  175.30 │ 2018-03-03 11:20:19 │
+            │ Alice  │  28 │ 1996-11-20 │  162.00 │ 2023-04-24 08:45:30 │
+            │ Travis │  37 │ 1987-01-07 │  185.80 │ 2012-10-06 15:30:40 │
+            └────────┴─────┴────────────┴─────────┴─────────────────────┘
+            [3 rows x 5 columns]        
+        ```
+
+        Now let's find the mean values:
+
+        ```python
+            # Calculate the mean values
+            sdm_mean = sdm.mean()
+
+            # View result
+            print(sdm_mean)
+        ```
+
+        This will output the mean values for the "Age", "Birthday", "Height" and "Date of Hire" columns:
+
+        ```shell
+            ┌──────┬────────┬────────────┬─────────┬─────────────────────┐
+            │ Name │    Age │ Birthday   │  Height │ Date of Hire        │
+            ├──────┼────────┼────────────┼─────────┼─────────────────────┤
+            │ NaN  │  31.67 │ 1992-10-14 │  174.37 │ 2018-01-30 11:52:09 │
+            └──────┴────────┴────────────┴─────────┴─────────────────────┘
+            [1 rows x 5 columns]
+        ```
+
+        Note:
+            - Only non-null values are included in the calculation of the sum and the total number of values in the column, use :meth:`SQLDataModel.fillna()` to fill null values.
+            - For ``date`` and ``datetime`` columns values are converted to julian days prior to calculation and recast into original data type, some imprecision may occur as a result.
+            - See :meth:`SQLDataModel.min()` for returning the minimum value, :meth:`SQLDataModel.max()` for maximum value, and :meth:`SQLDataModel.describe()` for descriptive statical values.
+        """
+        fetch_stmt = ",".join([f"""avg("{col}") as "{col}" """ if dtype in ('int', 'float','bool') else f"""{dtype}(avg(julianday("{col}"))) as "{col}" """ if dtype in ('date','datetime') else f"""'NaN' as "{col}" """ for col,dtype in self.dtypes.items()])
+        fetch_stmt = " ".join(["select", fetch_stmt, f"""from "{self.sql_model}" """])
+        dtypes = {col:dtype if dtype not in ('int','bytes') else 'float' if dtype == 'int' else 'str' for col,dtype in self.dtypes.items()}
+        return self.execute_fetch(fetch_stmt, dtypes=dtypes)
+
     def min(self) -> SQLDataModel:
         """
         Returns a new ``SQLDataModel`` containing the minimum value of all non-null values for each column in a row-wise orientation.
@@ -8933,7 +9002,7 @@ class SQLDataModel:
             return
         else:
             other_data = (*self.data(index=False, include_headers=False),*other_data)
-            return type(self)(data=other_data, headers=self.headers, dtypes=self.get_column_dtypes(), **self._get_display_args())
+            return type(self)(data=other_data, headers=self.headers, dtypes=self.dtypes, **self._get_display_args())
 
     def where(self, predicate:str) -> SQLDataModel:
         """
@@ -9397,9 +9466,9 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
             )
         if not kwargs:
-            return type(self)(fetch_result, headers=fetch_headers, dtypes=self.get_column_dtypes(), display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
+            return type(self)(fetch_result, headers=fetch_headers, dtypes=self.dtypes, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
         else:
-            params = {"dtypes":self.get_column_dtypes(),"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
+            params = {"dtypes":self.dtypes,"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
             params.update({k:v for k,v in kwargs.items()})
             return type(self)(fetch_result, headers=fetch_headers, **params)
 

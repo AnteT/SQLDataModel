@@ -12,7 +12,7 @@ def number_duplicates(values):
         else:
             yield v
 
-def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_000, max_numeric_value:int=1_000, min_literal_length:int=2, max_literal_length:int=12, float_precision:int=6, seed:int=None, return_header_type:Literal['list','tuple']='list', return_row_type:Literal['list','tuple']='list', return_format:Literal["separate","combined"]="separate", as_str:bool=False, nullify_prob:float|None=None) -> tuple[list[list], list[str]]:
+def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_000, max_numeric_value:int=1_000, min_literal_length:int=2, max_literal_length:int=12, float_precision:int=6, seed:int=None, return_header_type:Literal['list','tuple']='list', return_row_type:Literal['list','tuple']='list', return_format:Literal["separate","combined"]="separate", as_str:bool=False, nullify_prob:float|None=None, exclude_nonetype:bool=False) -> tuple[list[list], list[str]]:
     """
     Returns randomly generated data for each Python type.
 
@@ -99,7 +99,7 @@ def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_
     """
     if seed is not None:
         random.seed(seed)
-    pytypes = ['string', 'int', 'float', 'bool', 'date', 'bytes', 'nonetype', 'datetime']
+    pytypes = ['string', 'int', 'float', 'bool', 'date', 'bytes', 'nonetype', 'datetime'] if not exclude_nonetype else ['string', 'int', 'float', 'bool', 'date', 'bytes', 'datetime']
     dtypes = list(islice(cycle(pytypes), num_columns))
     columns = [[] for _ in range(num_columns)]
     for col_index, dtype in enumerate(dtypes):
