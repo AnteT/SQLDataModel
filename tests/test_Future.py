@@ -1,6 +1,7 @@
 import datetime, os, tempfile, csv, sqlite3, random
 import pytest
 import pandas as pd
+import polars as pl
 import numpy as np
 from .random_data_generator import data_generator
 from future.SQLDataModel_future import SQLDataModel
@@ -467,6 +468,15 @@ def test_to_from_pandas():
         assert df_out.iloc[i].tolist() == df_in.iloc[i].tolist()     
 
 @pytest.mark.ext
+def test_to_from_polars():
+    input_headers, input_data = ['A','B','C','D'], [(1, 'foo', 4.5, datetime.date(1999, 11, 9)),(2, 'bar', 6.7, datetime.date(2024, 8, 24)),(3, 'baz', 8.9, datetime.date(1985, 1, 13))]
+    df_in = pl.DataFrame(data=input_data,schema=input_headers)
+    df_out = SQLDataModel.from_polars(df_in).to_polars()
+    output_data, output_headers = df_out.rows(), df_out.columns
+    assert output_headers == input_headers
+    assert output_data == input_data
+
+@pytest.mark.ext
 def test_to_from_numpy():
     input_data = [('1', 'foo', '4.5', '1999-11-09'),('2', 'bar', '6.7', '2024-08-24'),('3', 'baz', '8.9', '1985-01-13')]
     sdm = SQLDataModel(input_data)
@@ -801,4 +811,3 @@ def test_mean():
     expected_data = ('NaN', -619.3333333333334, 230.98806666666667, 0.8333333333333334, datetime.date(1981, 12, 7), 'NaN', datetime.datetime(1971, 3, 8, 16, 40, 11), 'NaN')
     output_data = SQLDataModel(data).mean().data()
     assert output_data == expected_data
-    

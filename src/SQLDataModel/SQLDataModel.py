@@ -31,6 +31,12 @@ except ModuleNotFoundError:
     _has_pd = False
 
 try:
+    import polars as _pl
+    _has_pl = True
+except ModuleNotFoundError:
+    _has_pl = False
+
+try:
     import pyarrow as _pa, pyarrow.parquet as _pq
     _has_pa = True
 except ModuleNotFoundError:
@@ -3578,11 +3584,11 @@ class SQLDataModel:
     @classmethod
     def from_pandas(cls, df, headers:list[str]=None, **kwargs) -> SQLDataModel:
         """
-        Returns a ``SQLDataModel`` object created from the provided ``df`` representing a pandas ``DataFrame`` object. Note that ``pandas`` must be installed in order to use this class method.
+        Returns a ``SQLDataModel`` object created from the provided ``df`` representing a Pandas ``DataFrame`` object. Note that ``pandas`` must be installed in order to use this method.
 
         Parameters:
             ``df`` (pandas.DataFrame): The pandas DataFrame to convert to a SQLDataModel.
-            ``headers`` (list of str, optional): The list of headers to use for the SQLDataModel. If None, the columns of the DataFrame will be used. Default is None.
+            ``headers`` (list[str], optional): The list of headers to use for the SQLDataModel. Default is None, using the columns from the ``df`` object.
             ``**kwargs``: Additional arguments to be passed to the SQLDataModel constructor.
 
         Returns:
@@ -3590,7 +3596,7 @@ class SQLDataModel:
 
         Raises:
             ``ModuleNotFoundError``: If the required package ``pandas`` is not found.
-            ``TypeError``: If ``df`` argument is not of type 'pandas.DataFrame'.
+            ``TypeError``: If ``df`` argument is not of type ``pandas.DataFrame``.
 
         Example::
 
@@ -3609,7 +3615,7 @@ class SQLDataModel:
         """
         if not _has_pd:
             raise ModuleNotFoundError(
-                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use the `from_pandas()` method""")
+                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, Pandas must be installed in order to use the `from_pandas()` method""")
                 )
         if (obj_type := type(df).__name__) != 'DataFrame':
             raise TypeError(
@@ -3755,6 +3761,73 @@ class SQLDataModel:
             sdm_deserialized.update(**kwargs)
         return cls(**sdm_deserialized)
  
+    @classmethod
+    def from_polars(cls, df, headers:list[str]=None, **kwargs) -> SQLDataModel:
+        """
+        Returns a ``SQLDataModel`` object created from the provided ``df`` representing a Polars ``DataFrame`` object. Note that ``polars`` must be installed in order to use this method.
+
+        Parameters:
+            ``df`` (polars.DataFrame): The Polars DataFrame to convert to a SQLDataModel.
+            ``headers`` (list[str], optional): The list of headers to use for the SQLDataModel. Default is None, using the columns from the ``df`` object.
+            ``**kwargs``: Additional arguments to be passed to the SQLDataModel constructor.
+
+        Returns:
+            ``SQLDataModel``: The SQLDataModel object created from the Polars DataFrame.
+
+        Raises:
+            ``ModuleNotFoundError``: If the required package ``polars`` is not found.
+            ``TypeError``: If ``df`` argument is not of type ``polars.DataFrame``.
+
+        Example::
+
+            import polars as pl
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            data = {
+                'Name': ['Beth', 'John', 'Alice', 'Travis'], 
+                'Age': [27, 30, 28, 35], 
+                'Height': [172.4, 175.3, 162.0, 185.8]
+            }
+
+            # Create the polars DataFrame
+            df = pl.DataFrame(data)
+            
+            # Create a SQLDataModel object
+            sdm = SQLDataModel.from_polars(df)
+        
+            # View result
+            print(sdm)
+
+        This will output a ``SQLDataModel`` constructed from the Polars ``df``:
+
+        ```shell
+            ┌────────┬─────┬─────────┐
+            │ Name   │ Age │  Height │
+            ├────────┼─────┼─────────┤
+            │ Beth   │  27 │  172.40 │
+            │ John   │  30 │  175.30 │
+            │ Alice  │  28 │  162.00 │
+            │ Travis │  35 │  185.80 │
+            └────────┴─────┴─────────┘
+            [4 rows x 3 columns]
+        ```
+
+        Note:
+            - If ``headers`` are not provided, the columns from the provided DataFrame's columns will be used as the new ``SQLDataModel`` headers.
+            - Polars uses different data types than those used by ``SQLDataModel``, see :meth:`SQLDataModel.set_column_dtypes()` for specific casting rules.
+        """
+        if not _has_pl:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, Polars must be installed in order to use the `from_polars()` method""")
+                )
+        if (obj_type := type(df).__name__) != 'DataFrame':
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{obj_type}', argument for `df` must be of type 'DataFrame'")
+            )        
+        return cls(data=df.rows(), headers=df.columns if headers is None else headers, **kwargs)
+
+
     @classmethod
     def from_pyarrow(cls, table, **kwargs) -> SQLDataModel:
         """
@@ -5259,7 +5332,6 @@ class SQLDataModel:
 
         Note:
             - SQLDataModel uses different data types than those used in ``pandas``, see :meth:`SQLDataModel.set_column_dtypes()` for more information about casting rules.
-
         """
         if not _has_pd:
             raise ModuleNotFoundError(
@@ -5397,6 +5469,72 @@ class SQLDataModel:
                 )
         with open(filename, 'wb') as handle:
             pickle.dump(serialized_sdm, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def to_polars(self, index:bool=False, include_headers:bool=True) -> _pl.DataFrame:
+        """
+        Converts ``SQLDataModel`` to a Polars ``DataFrame`` object.
+        Note that the ``polars`` package must be installed to use this method.
+
+        Parameters:
+            ``index`` (bool, optional): If True, includes the model index in the result. Default is False.
+            ``include_headers`` (bool, optional): If True, includes column headers in the result. Default is True.
+
+        Raises:
+            ``ModuleNotFoundError``: If Polars is not installed.
+
+        Returns:
+            ``polars.DataFrame``: The model's data converted to a Polars DataFrame.
+        
+        Example::
+
+            import polars
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Height']
+            data = [
+                ('Beth', 27, 172.4),
+                ('John', 30, 175.3), 
+                ('Alice', 28, 162.0), 
+                ('Travis', 35, 185.8)
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Convert the model to a polars df with the index
+            df = sdm.to_polars(index=True)
+
+            # View result
+            print(df)
+
+        This will output:
+
+        ```shell
+            shape: (4, 4)
+            ┌─────┬────────┬─────┬────────┐
+            │ idx ┆ Name   ┆ Age ┆ Height │
+            │ --- ┆ ---    ┆ --- ┆ ---    │
+            │ i64 ┆ str    ┆ i64 ┆ f64    │
+            ╞═════╪════════╪═════╪════════╡
+            │ 0   ┆ Beth   ┆ 27  ┆ 172.4  │
+            │ 1   ┆ John   ┆ 30  ┆ 175.3  │
+            │ 2   ┆ Alice  ┆ 28  ┆ 162.0  │
+            │ 3   ┆ Travis ┆ 35  ┆ 185.8  │
+            └─────┴────────┴─────┴────────┘
+        ```
+
+        Note:
+            - See related :meth:`SQLDataModel.from_polars()` for the inverse method of converting a Polars ``DataFrame`` object into to a ``SQLDataModel``.
+            - SQLDataModel uses different data types than those used in ``polars``, see :meth:`SQLDataModel.set_column_dtypes()` for more information about casting rules.
+            - Polars does not really have a concept of an index column, therefore when using ``index=True``, the SQLDataModel index is just an additional column in the returned DataFrame object.
+        """
+        if not _has_pl:
+            raise ModuleNotFoundError(
+                SQLDataModel.ErrorFormat(f"""ModuleNotFoundError: required package not found, polars must be installed in order to use `.to_polars()` method""")
+                )
+        data = self.data(index=index, include_headers=include_headers)
+        return _pl.DataFrame(data=data[1:] if include_headers else data,schema=data[0] if include_headers else None)
 
     def to_pyarrow(self, index:bool=False) -> _pa.Table:
         """
