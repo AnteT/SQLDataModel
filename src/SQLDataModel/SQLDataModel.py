@@ -265,9 +265,9 @@ class SQLDataModel:
         - Use :meth:`SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
 
     """
-    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies','dtypes','shape')
+    __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies','dtypes','shape','table_style')
     
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False, table_style:Literal['ascii','bare','default','double','markdown','outline','pandas','polars','postgresql','round','thick']='default'):
         """
         Initializes a new instance of ``SQLDataModel``.
 
@@ -423,6 +423,8 @@ class SQLDataModel:
         """``dict``: The data type mapping to use when converting python types to SQL column types."""
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         """``dict``: The data type mapping to use when converting SQL column types to python types."""
+        self.table_style = table_style
+        """``str``: The table style used for string representations of the model. Available styles are ``'ascii'``, ``'bare'``, ``'default'``, ``'double'``, ``'markdown'``, ``'outline'``, ``'pandas'``, ``'polars'``, ``'postgresql'``, ``'round'`` or ``'thick'``. Defaults to ``'default'`` table style."""
         if infer_types and self.row_count > 0:
             inferred_dtypes = SQLDataModel.infer_types_from_data(input_data=random.sample(data, min(self.row_count, 16)))
             headers_to_py_dtypes_dict = {self.headers[i]:inferred_dtypes[i+dyn_idx_offset] for i in range(self.column_count)}
@@ -3822,6 +3824,7 @@ class SQLDataModel:
         Note:
             - If ``headers`` are not provided, the columns from the provided DataFrame's columns will be used as the new ``SQLDataModel`` headers.
             - Polars uses different data types than those used by ``SQLDataModel``, see :meth:`SQLDataModel.set_column_dtypes()` for specific casting rules.
+            - See related :meth:`SQLDataModel.to_polars()` for the inverse method of converting a ``SQLDataModel`` into a Polars ``DataFrame`` object.
         """
         if not _has_pl:
             raise ModuleNotFoundError(
@@ -7438,6 +7441,186 @@ class SQLDataModel:
         """        
         return self.row_count
 
+    def set_table_style(self, style:Literal['ascii','bare','default','double','markdown','outline','pandas','polars','postgresql','round','thick']='default') -> None:
+        """
+        Sets the table style used for string representations of ``SQLDataModel``.
+        
+        Parameters:
+            ``style`` (Literal['ascii','bare','default','double','markdown','outline','pandas','polars','postgresql','round','thick']): The table styling to set, use ``'default'`` for original style.
+
+        Raises:
+            ``ValueError``: If ``style`` provided is not one of the currently supported options 'ascii','bare','default','double','markdown','outline','pandas','polars','postgresql','round' or 'thick'.
+        
+        Returns:
+            ``None``
+
+        Examples::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Height', 'Birthday']
+            data = [
+                ('Alice', 28, 162.08, '1996-11-20'), 
+                ('Bobby', 30, 175.36, '1994-06-15'), 
+                ('Craig', 37, 185.82, '1987-01-07'),
+                ('David', 32, 179.75, '1992-12-28')
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Lets try the round style
+            sdm.set_table_style('round')
+
+            # View it
+            print(sdm)
+
+        This outputs the ``'round'`` table style:
+
+        ```shell
+            ╭───────┬─────┬─────────┬────────────╮
+            │ Name  │ Age │  Height │ Birthday   │
+            ├───────┼─────┼─────────┼────────────┤
+            │ Alice │  28 │  162.08 │ 1996-11-20 │
+            │ Bobby │  30 │  175.36 │ 1994-06-15 │
+            │ Craig │  37 │  185.82 │ 1987-01-07 │
+            │ David │  32 │  179.75 │ 1992-12-28 │
+            ╰───────┴─────┴─────────┴────────────╯
+        ```
+
+        Alternatively, set ``style = 'ascii'`` to format ``SQLDataModel`` in the ASCII style, the OG of terminal tables:        
+
+        ```shell
+            +-------+-----+---------+------------+
+            | Name  | Age |  Height | Birthday   |
+            +-------+-----+---------+------------+
+            | Alice |  28 |  162.08 | 1996-11-20 |
+            | Bobby |  30 |  175.36 | 1994-06-15 |
+            | Craig |  37 |  185.82 | 1987-01-07 |
+            | David |  32 |  179.75 | 1992-12-28 |
+            +-------+-----+---------+------------+
+        ```
+
+        Set ``style = 'bare'`` to format ``SQLDataModel`` in the following style:
+
+        ```shell
+            Name   Age   Height  Birthday
+            -------------------------------
+            Alice   28   162.08  1996-11-20
+            Bobby   30   175.36  1994-06-15
+            Craig   37   185.82  1987-01-07
+            David   32   179.75  1992-12-28
+        ```
+
+        Set ``style = 'default'`` to format ``SQLDataModel`` in the following style, which also happens to be the default styling applied:
+
+        ```shell
+            ┌───────┬─────┬─────────┬────────────┐
+            │ Name  │ Age │  Height │ Birthday   │
+            ├───────┼─────┼─────────┼────────────┤
+            │ Alice │  28 │  162.08 │ 1996-11-20 │
+            │ Bobby │  30 │  175.36 │ 1994-06-15 │
+            │ Craig │  37 │  185.82 │ 1987-01-07 │
+            │ David │  32 │  179.75 │ 1992-12-28 │
+            └───────┴─────┴─────────┴────────────┘
+            [4 rows x 4 columns]
+        ```        
+
+        Set ``style = 'double'`` to format ``SQLDataModel`` using double line borders:
+
+        ```shell
+            ╔═══════╦═════╦═════════╦════════════╗
+            ║ Name  ║ Age ║  Height ║ Birthday   ║
+            ╠═══════╬═════╬═════════╬════════════╣
+            ║ Alice ║  28 ║  162.08 ║ 1996-11-20 ║
+            ║ Bobby ║  30 ║  175.36 ║ 1994-06-15 ║
+            ║ Craig ║  37 ║  185.82 ║ 1987-01-07 ║
+            ║ David ║  32 ║  179.75 ║ 1992-12-28 ║
+            ╚═══════╩═════╩═════════╩════════════╝
+        ```
+
+        Set ``style = 'markdown'`` to format ``SQLDataModel`` in the Markdown style:
+
+        ```shell
+            | Name  | Age |  Height | Birthday   |
+            |-------|-----|---------|------------|
+            | Alice |  28 |  162.08 | 1996-11-20 |
+            | Bobby |  30 |  175.36 | 1994-06-15 |
+            | Craig |  37 |  185.82 | 1987-01-07 |
+            | David |  32 |  179.75 | 1992-12-28 |
+        ```
+
+        Set ``style = 'outline'`` to format ``SQLDataModel`` in the following style:
+
+        ```shell
+            ┌─────────────────────────────────┐
+            │ Name   Age   Height  Birthday   │
+            ├─────────────────────────────────┤
+            │ Alice   28   162.08  1996-11-20 │
+            │ Bobby   30   175.36  1994-06-15 │
+            │ Craig   37   185.82  1987-01-07 │
+            │ David   32   179.75  1992-12-28 │
+            └─────────────────────────────────┘
+        ```
+
+        Set ``style = 'pandas'`` to format ``SQLDataModel`` in the style used by Pandas DataFrames:
+
+        ```shell
+            Name   Age   Height  Birthday
+            Alice   28   162.08  1996-11-20
+            Bobby   30   175.36  1994-06-15
+            Craig   37   185.82  1987-01-07
+            David   32   179.75  1992-12-28
+        ```
+
+        Set ``style = 'polars'`` to format ``SQLDataModel`` in the style used by Polars DataFrames:
+
+        ```shell
+            ┌───────┬─────┬─────────┬────────────┐
+            │ Name  ┆ Age ┆  Height ┆ Birthday   │
+            ╞═══════╪═════╪═════════╪════════════╡
+            │ Alice ┆  28 ┆  162.08 ┆ 1996-11-20 │
+            │ Bobby ┆  30 ┆  175.36 ┆ 1994-06-15 │
+            │ Craig ┆  37 ┆  185.82 ┆ 1987-01-07 │
+            │ David ┆  32 ┆  179.75 ┆ 1992-12-28 │
+            └───────┴─────┴─────────┴────────────┘
+        ```
+
+        Set ``style = 'postgresql'`` to format ``SQLDataModel`` in the style used by PostgreSQL:
+
+        ```shell
+            Name  | Age |  Height | Birthday
+            ------+-----+---------+-----------
+            Alice |  28 |  162.08 | 1996-11-20
+            Bobby |  30 |  175.36 | 1994-06-15
+            Craig |  37 |  185.82 | 1987-01-07
+            David |  32 |  179.75 | 1992-12-28
+        ```
+
+        Set ``style = 'thick'`` to format ``SQLDataModel`` using thick borders:
+
+        ```shell
+            ┏━━━━━━━┳━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┓
+            ┃ Name  ┃ Age ┃  Height ┃ Birthday   ┃
+            ┣━━━━━━━╋━━━━━╋━━━━━━━━━╋━━━━━━━━━━━━┫
+            ┃ Alice ┃  28 ┃  162.08 ┃ 1996-11-20 ┃
+            ┃ Bobby ┃  30 ┃  175.36 ┃ 1994-06-15 ┃
+            ┃ Craig ┃  37 ┃  185.82 ┃ 1987-01-07 ┃
+            ┃ David ┃  32 ┃  179.75 ┃ 1992-12-28 ┃
+            ┗━━━━━━━┻━━━━━┻━━━━━━━━━┻━━━━━━━━━━━━┛
+        ```
+
+        Note:
+            - The labels given to certain styles are entirely subjective and do not in any way express original design or ownership of the styling used.
+            - Legacy character sets on older terminals may not support all the character encodings required for some styles.
+        """
+        if style not in ('ascii','bare','default','double','markdown','outline','pandas','polars','postgresql','round','thick'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{style}', argument for `style` must be one of 'ascii', 'bare', 'default', 'double', 'markdown', 'outline', 'pandas', 'polars', 'postgresql', 'round' or 'thick'")
+            )
+        self.table_style = style
+
     def __repr__(self) -> str:
         """
         Returns a formatted string representation of the SQLDataModel instance.
@@ -7553,6 +7736,18 @@ class SQLDataModel:
             - The number of displayed rows is limited to either the row count or the specified maximum rows.
             - The output includes column headers, row data, and information about the total number of rows and columns.
         """         
+        table_format = self._generate_table_style()
+        top_lh, top_hbar, top_sep, top_rh = table_format[0]
+        mid_lh, mid_hbar, mid_sep, mid_rh = table_format[1]
+        row_lh, row_sep, row_rh = table_format[2]
+        low_lh, low_hbar, low_sep, low_rh = table_format[3]
+        table_repr = """""" # big things...
+        row_lh_width = len(row_lh)
+        row_rh_width = len(row_rh)
+        row_sep_width = len(row_sep)
+        table_truncated_ellipses = """⠤⠄"""
+        table_truncated_ellipses_width = len(table_truncated_ellipses) + 1 # added extra space after truncation mark before ellipses, looks better
+        table_bare_newline = """\n"""
         total_available_width, total_available_height = shutil.get_terminal_size()
         display_max_rows = self.display_max_rows if self.display_max_rows is not None else (total_available_height - 6) if (total_available_height - 6 > 0) else 1
         vertical_truncation_required = display_max_rows < self.row_count
@@ -7571,21 +7766,12 @@ class SQLDataModel:
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
         header_length_dict = {display_headers[i]:width for i, width in enumerate(length_meta)}
-        table_repr = """""" # big things...
-        table_left_edge = """│ """
-        table_left_edge_width = 2
-        table_right_edge = """ │"""
-        table_right_edge_width = 2
-        table_column_interval_width = 3
-        table_truncated_ellipses = """⠤⠄"""
-        table_truncated_ellipses_width = 3 # added extra space after truncation mark before ellipses, looks better
-        table_bare_newline = """\n"""
-        total_required_width = table_left_edge_width + sum((table_column_interval_width + length) for length in header_length_dict.values()) + table_right_edge_width - table_column_interval_width
+        total_required_width = row_lh_width + sum((row_sep_width + length) for length in header_length_dict.values()) + row_rh_width - row_sep_width
         table_truncation_required = False if total_available_width > total_required_width else True
         # print(f'truncation info: {total_required_width} of {total_available_width}, truncation: {table_truncation_required}')
         if table_truncation_required:
             total_available_width -= table_truncated_ellipses_width
-            max_cols, max_width = 0, (table_left_edge_width + table_right_edge_width + table_truncated_ellipses_width) # max width starts with the tax of index and border already included, around 5-7 depending on index width
+            max_cols, max_width = 0, (row_lh_width + row_rh_width + table_truncated_ellipses_width) # max width starts with the tax of index and border already included, around 5-7 depending on index width
             for v in header_length_dict.values():
                 if max_width < total_available_width:
                     max_width += (v+3)
@@ -7599,11 +7785,11 @@ class SQLDataModel:
             table_dynamic_newline = f""" {table_truncated_ellipses}\n"""
         else:
             table_dynamic_newline = """\n"""
-        vconcat_column_separator = """|| ' │ ' ||"""
-        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if display_index else ""
-        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        row_sep_concat = f"""|| '{row_sep}' ||"""
+        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
+        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
         vertical_sep_chars = '⠒⠂' # '⠐⠒⠂'
-        vertical_sep_fmt_str = vconcat_column_separator.join([f"""printf("%!{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
+        vertical_sep_fmt_str = row_sep_concat.join([f"""printf("%!{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
         if vertical_truncation_required:
             fetch_fmt_stmt = f"""
             with "_repr" as (
@@ -7614,21 +7800,30 @@ class SQLDataModel:
                 order by "{self.sql_idx}" asc limit {max_display_rows}+1)
                 ,"_trigger" as (select "{self.sql_idx}" as "_sep" from "{self.sql_model}" order by "{self.sql_idx}" asc limit 1 offset {split_row})
             select CASE WHEN "{self.sql_idx}" <> (select "_sep" from "_trigger") THEN "_full_row" 
-            ELSE '{table_left_edge}' || {vertical_sep_fmt_str} ||' │{table_dynamic_newline}' 
-            END from (select "{self.sql_idx}",'{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
+            ELSE '{row_lh}' || {vertical_sep_fmt_str} ||'{row_rh}{table_dynamic_newline}' 
+            END from (select "{self.sql_idx}",'{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
         else:
-            fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' │{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
+            fetch_fmt_stmt = f"""select '{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if column_alignment is None: # dynamic alignment
             formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
         else: # left, center, right alignment
             formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
-        table_cross_bar = """┌─""" + """─┬─""".join(["""─""" * header_length_dict[col] for col in display_headers]) + """─┐""" + table_bare_newline
-        table_repr = "".join([table_repr, table_cross_bar])
-        table_repr = "".join([table_repr, table_left_edge + """ │ """.join(formatted_headers) + table_right_edge + table_dynamic_newline])
-        table_repr = "".join([table_repr, table_cross_bar.replace("┌","├").replace("┬","┼").replace("┐","┤")])
+        # table_top_bar = "".join([top_lh, top_sep.join([top_hbar * header_length_dict[col] for col in display_headers]), top_rh, table_bare_newline])
+        col_lengths = [val for val in header_length_dict.values()]
+        table_top_bar = "".join([top_lh, top_sep.join([top_hbar * length for length in col_lengths]), top_rh, table_bare_newline])
+        table_top_bar = table_top_bar if len(table_top_bar.strip()) >=1 else """"""
+        table_repr = "".join([table_repr, table_top_bar])
+        table_repr = "".join([table_repr, row_lh, row_sep.join(formatted_headers), row_rh, table_dynamic_newline])
+        # table_mid_bar = "".join([mid_lh, mid_sep.join([mid_hbar * header_length_dict[col] for col in display_headers]), mid_rh, table_bare_newline])
+        table_mid_bar = "".join([mid_lh, mid_sep.join([mid_hbar * length for length in col_lengths]), mid_rh, table_bare_newline])
+        table_mid_bar = table_mid_bar if len(table_mid_bar.strip()) >=1 else """"""
+        table_repr = "".join([table_repr, table_mid_bar])
         table_repr = "".join([table_repr,*[row[0] for row in formatted_response]])
-        table_repr = "".join([table_repr, table_cross_bar.replace("┌","└").replace("┬","┴").replace("┐","┘")])
+        # table_low_bar = "".join([low_lh, low_sep.join([low_hbar * header_length_dict[col] for col in display_headers]), low_rh, table_bare_newline])
+        table_low_bar = "".join([low_lh, low_sep.join([low_hbar * length for length in col_lengths]), low_rh, table_bare_newline])
+        table_low_bar = table_low_bar if len(table_low_bar.strip()) >=1 else """"""
+        table_repr = "".join([table_repr, table_low_bar])
         table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
         table_repr = "".join([table_repr, table_caption])
         return table_repr if self.display_color is None else self.display_color.wrap(table_repr)
@@ -10279,6 +10474,77 @@ class SQLDataModel:
         fetch_stmt = " ".join(("select",f'"{self.sql_idx}",' if index else '',columns_str,f'from "{self.sql_model}"', ordering_str, f"limit {n_rows}"))
         return fetch_stmt
 
+    def _generate_table_style(self) -> tuple[tuple[str]]:
+        """
+        Generates the character sets required for formatting ``SQLDataModel`` according to the value currently set at :py:attr:`SQLDataModel.table_style`.
+        
+        Returns:
+            ``tuple[tuple[str]]``: A 4-tuple containing the characters required for top, middle, row and lower table sections.
+        
+        Note:
+            - This method is called by :meth:`SQLDataModel.__repr__()` to parse the characters necessary for constructing the tabular representation of the ``SQLDataModel``, any modifications or changes to this method may result in unexpected behavior.
+        """
+        if self.table_style == 'ascii':    
+            return  (('+-','-','-+-','-+') 
+                    ,('+-','-','-+-','-+') 
+                    ,('| ',    ' | ',' |') 
+                    ,('+-','-','-+-','-+'))
+        if self.table_style == 'bare':     
+            return  (('','','','')
+                    ,('','-','--','')      
+                    ,('',    '  ','')      
+                    ,('','','',''))        
+        if self.table_style == 'default':  
+            return  (('┌─','─','─┬─','─┐') 
+                    ,('├─','─','─┼─','─┤') 
+                    ,('│ ',    ' │ ',' │') 
+                    ,('└─','─','─┴─','─┘'))
+        if self.table_style == 'double':   
+            return  (('╔═','═','═╦═','═╗') 
+                    ,('╠═','═','═╬═','═╣') 
+                    ,('║ ',    ' ║ ',' ║') 
+                    ,('╚═','═','═╩═','═╝'))
+        if self.table_style == 'markdown': 
+            return  (('','','','')
+                    ,('|-','-','-|-','-|')
+                    ,('| ',    ' | ',' |')
+                    ,('','','',''))
+        if self.table_style == 'outline':
+            return  (('┌─','─','──','─┐')
+                    ,('├─','─','──','─┤')
+                    ,('│ ',    '  ',' │')
+                    ,('└─','─','──','─┘'))
+        if self.table_style == 'pandas':
+            return  (('','','','')
+                    ,('','','','')
+                    ,('',    '  ','')
+                    ,('','','',''))
+        if self.table_style == 'polars':
+            return  (('┌─','─','─┬─','─┐')
+                    ,('╞═','═','═╪═','═╡')
+                    ,('│ ',    ' ┆ ',' │')
+                    ,('└─','─','─┴─','─┘'))
+        if self.table_style == 'postgresql':
+            return  (('','','','')
+                    ,('','-','-+-','')
+                    ,('',    ' | ','')
+                    ,('','','',''))
+        if self.table_style == 'round':
+            return  (('╭─','─','─┬─','─╮')
+                    ,('├─','─','─┼─','─┤')
+                    ,('│ ',    ' │ ',' │')
+                    ,('╰─','─','─┴─','─╯'))
+        if self.table_style == 'thick':
+            return  (('┏━','━','━┳━','━┓')
+                    ,('┣━','━','━╋━','━┫')
+                    ,('┃ ',    ' ┃ ',' ┃')
+                    ,('┗━','━','━┻━','━┛'))
+        else:
+            return  (('┌─','─','─┬─','─┐') 
+                    ,('├─','─','─┼─','─┤') 
+                    ,('│ ',    ' │ ',' │') 
+                    ,('└─','─','─┴─','─┘'))   
+
     def _update_indicies(self) -> None:
         """
         Updates the :py:attr:`SQLDataModel.indicies` and :py:attr:`SQLDataModel.row_count` properties of the ``SQLDataModel`` instance representing the current valid row indicies and count.
@@ -10472,8 +10738,9 @@ class SQLDataModel:
             - :py:attr:`SQLDataModel.display_color`: True if color formatting is enabled, False otherwise.
             - :py:attr:`SQLDataModel.display_index`: True if displaying index column, False otherwise.
             - :py:attr:`SQLDataModel.display_float_precision`: The precision for displaying floating-point numbers.
+            - :py:attr:`SQLDataModel.table_style`: The table styling format to use for strng representations of the model.
         """        
-        return {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
+        return {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision, "table_style":self.table_style}
 
     def validate_indicies(self, indicies) -> tuple[int|slice, list[str]]:
         """
