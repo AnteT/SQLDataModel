@@ -476,6 +476,7 @@ Regardless of where the data originated or where it ends up, `SQLDataModel`'s be
 - **Pandas**: Convert to and from `pandas.DataFrame` objects, `pandas` required.
 - **Parquet**: Extract from and write to `.parquet` files, `pyarrow` required.
 - **Pickle**: Extract from and write to `.pkl` files, package uses `.sdm` extension when pickling for `SQLDataModel` metadata.
+- **Polars**: Convert to and from `polars.DataFrame` objects, `polars` required.
 - **SQL**: Extract from and write to the following popular SQL databases:
     - **SQLite**: Using the built-in `sqlite3` module.
     - **PostgreSQL**: Using the `psycopg2` package.

@@ -190,6 +190,7 @@ class SQLDataModel:
         sdm = SQLDataModel.from_markdown("output.md")
         sdm = SQLDataModel.from_numpy(np_arr)
         sdm = SQLDataModel.from_pandas(pd_df)
+        sdm = SQLDataModel.from_polars(pl_df)
         sdm = SQLDataModel.from_parquet("output.parquet")
         sdm = SQLDataModel.from_pickle("output.sdm")
         sdm = SQLDataModel.from_sql("output", sqlite3.connect('output.db'))
@@ -211,6 +212,7 @@ class SQLDataModel:
         - ``Pandas``: Convert to and from ``pandas.DataFrame`` objects, ``pandas`` required.
         - ``Parquet``: Extract from and write to ``.parquet`` files, ``pyarrow`` required.
         - ``Pickle``: Extract from and write to ``.pkl`` files, package uses ``.sdm`` extension when pickling for ``SQLDataModel`` metadata.
+        - ``Polars``: Convert to and from ``polars.DataFrame`` objects, ``polars`` required.
         - ``SQL``: Extract from and write to the following popular SQL databases:
 
           - ``SQLite``: Using the built-in ``sqlite3`` module.
@@ -2418,6 +2420,7 @@ class SQLDataModel:
             - ``tuple``: Same as with list, if single dimension passed as ``headers``, otherwise as ``data`` containing tuple of lists.
             - ``numpy.ndarray``: passed to :meth:`SQLDataModel.from_numpy()` as array data.
             - ``pandas.DataFrame``: passed to :meth:`SQLDataModel.from_pandas()` as dataframe data.
+            - ``polars.DataFrame``: passed to :meth:`SQLDataModel.from_polars()` as dataframe data.
             - ``str``: If starts with 'http', passed to :meth:`SQLDataModel.from_html()` as url, otherwise:
         
               - ``'.csv'``: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
@@ -2558,7 +2561,10 @@ class SQLDataModel:
             if arg_type == 'ndarray':
                 return cls.from_numpy(data, **kwargs)
             elif arg_type == 'DataFrame':
-                return cls.from_pandas(data, **kwargs)
+                if 'pandas' in type(data).__module__:
+                    return cls.from_pandas(data, **kwargs)
+                else:
+                    return cls.from_polars(data, **kwargs)
             elif arg_type == 'Table':
                 return cls.from_pyarrow(data, **kwargs)
             else:
@@ -10749,4 +10755,4 @@ class SQLDataModel:
         str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
         sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
         dtype_dict = {col:dtype for col in self.headers}
-        return self.execute_fetch(sql_stmt, dtypes=dtype_dict)    
+        return self.execute_fetch(sql_stmt, dtypes=dtype_dict)
