@@ -336,15 +336,46 @@ class SQLDataModel:
             data = [tuple(None for _ in range(len(headers)))]
         else:
             had_data = True
-        if not isinstance(data, (list,tuple)) and had_data:
+        if not isinstance(data, (list,tuple,dict)) and had_data:  
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list or tuple")
+                SQLDataModel.ErrorFormat(f"TypeError: type mismatch, '{type(data).__name__}' is not a valid type for data, which must be of type list, tuple or dict")
                 )
         if len(data) < 1 and had_data:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: data not found, data of length '{len(data)}' is insufficient to construct a valid model, additional rows of data required")
                 )
         if had_data:
+            if isinstance(data, dict) or isinstance(data[0], dict):
+                if isinstance(data, list):
+                    data = SQLDataModel.flatten_json(data)
+                rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
+                if rowwise:
+                    col_count = len(data[next(iter(data))])
+                    if headers is None:
+                        headers = ['idx',*[f'{i}' for i in range(col_count)]] # get column count from first key value pair in provided dict
+                    elif (col_count) == len(headers):
+                        headers = ['idx',*headers]
+                    data = [tuple([k,*v]) for k,v in data.items()]
+                else:
+                    first_key_val = data[next(iter(data))]
+                    if isinstance(first_key_val, dict):
+                        inferred_headers = list(data.keys())
+                        data = [[data[col][val] for col in inferred_headers] for val in data.keys()]
+                    elif isinstance(first_key_val, (list,tuple)):
+                        inferred_headers = [k for k in data.keys()]
+                        column_count = len(inferred_headers)
+                        row_count = len(first_key_val)
+                        data = [x for x in data.values()]
+                        data = [tuple([data[j][row] for j in range(column_count)]) for row in range(row_count)]
+                        if headers is None:
+                            headers = inferred_headers
+                        else:
+                            if len(headers) + 1 == column_count:
+                                headers = ['idx',*headers]
+                    else:
+                        raise TypeError(
+                            SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
+                        )
             try:
                 _ = data[0]
             except Exception as e:
@@ -2664,11 +2695,11 @@ class SQLDataModel:
         if isinstance(data, list):
             if len(data) < 1:
                 raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient data length '{len(data)}', if ``data`` is of type 'list' at least 1 row is required for `from_dict()` method")
+                    SQLDataModel.ErrorFormat(f"ValueError: insufficient data length '{len(data)}', if `data` is of type 'list' at least 1 row is required for `from_dict()` method")
                 )
             if not isinstance(data[0], dict):
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid type in list '{type(data[0].__name__)}', if ``data`` is of type 'list' its items must be of type 'dict' to use the `from_dict()` method")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type in list '{type(data[0].__name__)}', if `data` is of type 'list' its items must be of type 'dict' to use the `from_dict()` method")
                 )
             return cls.from_json(data)
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False

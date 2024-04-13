@@ -27,6 +27,28 @@ def test_init(sample_data):
     assert sdm.headers == input_headers
 
 @pytest.mark.core
+def test_init_dict(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    ### dict with rows orientation ###
+    input_rows_dict = {i:list(row) for i, row in enumerate(input_data)}
+    sdm = SQLDataModel(data=input_rows_dict, headers=input_headers)
+    output_data, output_headers = sdm.data(), sdm.headers
+    assert output_headers == input_headers
+    assert output_data == input_data
+    ### dict with columns orientation ###
+    input_cols_dict = {f'{col}': [row[idx] for row in input_data] for idx,col in enumerate(input_headers)}
+    sdm = SQLDataModel(data=input_cols_dict, headers=input_headers)
+    output_data, output_headers = sdm.data(), sdm.headers
+    assert output_headers == input_headers
+    assert output_data == input_data    
+    ### json like list of dicts ###
+    input_list_dict = [{col:row[i] for i,col in enumerate(input_headers)} for row in input_data]    
+    sdm = SQLDataModel(data=input_list_dict, headers=input_headers)
+    output_data, output_headers = sdm.data(), sdm.headers
+    assert output_headers == input_headers
+    assert output_data == input_data        
+
+@pytest.mark.core
 def test_data(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(data=input_data, headers=input_headers)
