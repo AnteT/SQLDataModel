@@ -2591,35 +2591,75 @@ class SQLDataModel:
             ``ValueError``: If the provided data appears to be a list of dicts but is empty.
 
         Example::
-            
-            from SQLDataModel import SQLDataModel
 
-            # Sample data
-            data_dict = {1: [10, 'A'], 2: [20, 'B'], 3: [30, 'C']}
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data with column orientation
+            data = {
+                'Name': ['Beth', 'John', 'Alice', 'Travis'], 
+                'Height': [172.4, 175.3, 162.0, 185.8],
+                'Age': [27, 30, 28, 35]
+            }
 
             # Create the model
-            sdm_obj = SQLDataModel.from_dict(data_dict)
+            sdm = SQLDataModel.from_dict(data)
 
-            # View output
-            print(sdm_obj)
+            # View it
+            print(sdm)
         
         This will output:
+
+        ```shell
+            ┌────────┬─────────┬─────┐
+            │ Name   │  Height │ Age │
+            ├────────┼─────────┼─────┤
+            │ Beth   │  172.40 │  27 │
+            │ John   │  175.30 │  30 │
+            │ Alice  │  162.00 │  28 │
+            │ Travis │  185.80 │  35 │
+            └────────┴─────────┴─────┘
+            [4 rows x 3 columns]
+        ```
+
+        We can also create a model using a dictionary with row orientation:
+        
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Sample data with row orientation
+            data = {
+                 0: ['Mercury', 0.38]
+                ,1: ['Venus', 0.91]
+                ,2: ['Earth', 1.00]
+                ,3: ['Mars', 0.38]
+            }
+
+            # Create the model with custom headers
+            sdm = SQLDataModel.from_dict(data, headers=['Planet', 'Gravity'])
+
+            # View output
+            print(sdm)
+        ```
+
+        This will output the model created using row-wise dictionary data:
         
         ```shell            
-            ┌───┬───────┬───────┐
-            │   │ col_0 │ col_1 │
-            ├───┼───────┼───────┤
-            │ 1 │    10 │ A     │
-            │ 2 │    20 │ B     │
-            │ 3 │    30 │ C     │
-            └───┴───────┴───────┘
-            [3 rows x 2 columns]
+            ┌─────────┬─────────┐
+            │ Planet  │ Gravity │
+            ├─────────┼─────────┤
+            │ Mercury │    0.38 │
+            │ Venus   │    0.91 │
+            │ Earth   │    1.00 │
+            │ Mars    │    0.38 │
+            └─────────┴─────────┘
+            [4 rows x 2 columns]
         ```
 
         Note:
+            - Dictionaries in list like orientation can also be used with structures similar to JSON objects.
             - The method determines the structure of the SQLDataModel based on the format of the provided dictionary.
             - If the keys are integers, they are used as row indexes; otherwise, keys are used as headers.
-            
+            - See :meth:`SQLDataModel.to_dict()` for converting existing instances of ``SQLDataModel`` to dictionaries.
         """
         if isinstance(data, list):
             if len(data) < 1:
@@ -2633,8 +2673,9 @@ class SQLDataModel:
             return cls.from_json(data)
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
         if rowwise:
-            headers = ['idx',*[f'{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
-            return cls([tuple([k,*v]) for k,v in data.items()], headers, **kwargs)
+            if 'headers' not in kwargs:
+                kwargs['headers'] = ['idx',*[f'{i}' for i in range(len(data[next(iter(data))]))]] # get column count from first key value pair in provided dict
+            return cls([tuple([k,*v]) for k,v in data.items()], **kwargs)
         else:
             first_key_val = data[next(iter(data))]
             if isinstance(first_key_val, dict):
@@ -2650,7 +2691,9 @@ class SQLDataModel:
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
                 )
-            return cls(data, headers, **kwargs)  
+            if 'headers' not in kwargs:
+                kwargs['headers'] = headers
+            return cls(data=data, **kwargs)  
 
     @classmethod
     def from_excel(cls, filename:str, worksheet:int|str=0, min_row:int|None=None, max_row:int|None=None, min_col:int|None=None, max_col:int|None=None, headers:list[str]=None, **kwargs) -> SQLDataModel:
@@ -3835,7 +3878,6 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{obj_type}', argument for `df` must be of type 'DataFrame'")
             )        
         return cls(data=df.rows(), headers=df.columns if headers is None else headers, **kwargs)
-
 
     @classmethod
     def from_pyarrow(cls, table, **kwargs) -> SQLDataModel:
