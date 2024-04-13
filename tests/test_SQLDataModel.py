@@ -835,6 +835,17 @@ def test_table_styles():
 3  text 4    4   4.40  2004-04-14
 [4 rows x 4 columns]
 """,
+'dash':"""
+┌───┬────────┬─────┬───────┬────────────┐
+│   ╎ string ╎ int ╎ float ╎ date       │
+├╴╴╴┼╴╴╴╴╴╴╴╴┼╴╴╴╴╴┼╴╴╴╴╴╴╴┼╴╴╴╴╴╴╴╴╴╴╴╴┤
+│ 0 ╎ text 1 ╎   1 ╎  1.10 ╎ 2001-01-11 │
+│ 1 ╎ text 2 ╎   2 ╎  2.20 ╎ 2002-02-12 │
+│ 2 ╎ text 3 ╎   3 ╎  3.30 ╎ 2003-03-13 │
+│ 3 ╎ text 4 ╎   4 ╎  4.40 ╎ 2004-04-14 │
+└───┴────────┴─────┴───────┴────────────┘
+[4 rows x 4 columns]
+""",
 'default':"""
 ┌───┬────────┬─────┬───────┬────────────┐
 │   │ string │ int │ float │ date       │
@@ -935,8 +946,8 @@ def test_table_styles():
         ,('text 3', 3, 3.3, datetime.date(2003, 3, 13))
         ,('text 4', 4, 4.4, datetime.date(2004, 4, 14))
     ]
-    sdm = SQLDataModel(data,headers, min_column_width=3, max_column_width=38, display_index=True, display_float_precision=2, table_style='markdown')
-    repr_styles = ['ascii','bare','default','double','markdown','outline','pandas','polars','postgresql','round','thick']   
+    sdm = SQLDataModel(data,headers, min_column_width=3, max_column_width=38, display_index=True, display_float_precision=2)
+    repr_styles = ['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick']   
     for style in repr_styles:
         sdm.set_table_style(style=style)
         expected_repr = style_output_dict[style].strip('\n')
