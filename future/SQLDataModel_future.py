@@ -324,16 +324,16 @@ class SQLDataModel:
             if headers is None:
                 if dtypes is None:
                     raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: insufficient data, an empty header-less model cannot be created, to create a model with zero rows a ``headers`` or ``dtypes`` argument is required")
+                        SQLDataModel.ErrorFormat(f"ValueError: insufficient data, an empty header-less model cannot be created, to create a model with zero rows a `headers` or `dtypes` argument is required")
                     )
                 else:
                     if not isinstance(dtypes,dict):
                         raise TypeError(
-                            SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', ``dtypes`` must be of type 'dict' with format of `{{'column':'dtype'}}` where 'dtype' must be a string representing a valid python datatype")
+                            SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', `dtypes` must be of type 'dict' with format of `{{'column':'dtype'}}` where 'dtype' must be a string representing a valid python datatype")
                         )
                     headers = list(dtypes.keys())
-            had_data = False
             data = [tuple(None for _ in range(len(headers)))]
+            had_data = False
         else:
             had_data = True
         if not isinstance(data, (list,tuple,dict)) and had_data:  
@@ -361,17 +361,11 @@ class SQLDataModel:
                     if isinstance(first_key_val, dict):
                         inferred_headers = list(data.keys())
                         data = [[data[col][val] for col in inferred_headers] for val in data.keys()]
-                    elif isinstance(first_key_val, (list,tuple)):
-                        inferred_headers = [k for k in data.keys()]
-                        column_count = len(inferred_headers)
-                        row_count = len(first_key_val)
-                        data = [x for x in data.values()]
-                        data = [tuple([data[j][row] for j in range(column_count)]) for row in range(row_count)]
-                        if headers is None:
-                            headers = inferred_headers
-                        else:
-                            if len(headers) + 1 == column_count:
-                                headers = ['idx',*headers]
+                    elif isinstance(first_key_val, (list, tuple)):
+                        inferred_headers = list(data.keys())
+                        data = list(data.values())
+                        data = [tuple(data[j][i] for j in range(len(inferred_headers))) for i in range(len(first_key_val))]
+                        headers = inferred_headers if headers is None else ['idx', *headers] if len(headers) + 1 == len(inferred_headers) else headers
                     else:
                         raise TypeError(
                             SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
