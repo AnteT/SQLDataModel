@@ -490,7 +490,9 @@ Regardless of where the data originated or where it ends up, `SQLDataModel`'s be
     - **tuples**: Convert to and from collections of python `tuple` objects.
     - **namedtuples**: Convert to and from collections of `namedtuples` objects.
 
-Note that `SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
+```{note}        
+`SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
+```
 
 ---
 
@@ -502,55 +504,7 @@ SQLDataModel's documentation can be found at https://sqldatamodel.readthedocs.io
   * [`JSONEncoder`](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.JSONEncoder.DataTypesEncoder) for type casting and encoding JSON data.
   * [`SQLDataModel`](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.SQLDataModel.SQLDataModel) for wrapping it all up.
 
-
-However, to skip over the less relevant modules and jump straight to the meat of the package, the ``SQLDataModel`` module, click [here](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.SQLDataModel.SQLDataModel). 
-
----
-
-### Motivation
-
-While there are packages/dependencies out there that can accomplish some of the same tasks as `SQLDataModel`, they're either missing key features or end up being overkill for common tasks like grabbing and converting tables from source A to destination B, or they don't quite handle the full process and require additional dependencies to make it all work. When you find yourself doing the same thing over and over again, eventually you sit down and write a package to do it for you.
-
----
-
-### Contributing
-
-Pull requests are welcome. For major changes, please open an issue first
-to discuss what you would like to change.
-
-Please make sure to update tests as appropriate.
-
----
-
-### License
-
-[MIT](https://choosealicense.com/licenses/mit/)
-
-
-Thank you!  
-Ante Tonkovic-Capin
-    - **`:`**: Colon separated values.
-    - **`,`**: Comma separated values or `.csv` files.
-- **Python** objects:
-    - **dictionaries**: Convert to and from collections of python `dict` objects.
-    - **lists**: Convert to and from collections of python `list` objects.
-    - **tuples**: Convert to and from collections of python `tuple` objects.
-    - **namedtuples**: Convert to and from collections of `namedtuples` objects.
-
-```{note}        
-`SQLDataModel` does not install any additional dependencies by default. This is done to keep the package as light-weight and small as possible. This means that to use package dependent methods like `to_parquet()` or the inverse `from_parquet()` the `pyarrow` package is required. The same goes for other package dependent methods like those converting to and from `pandas` and `numpy` objects.
-```
-
-### Documentation
-SQLDataModel is mainly comprised of 4 separate modules, they are listed below along with links to their respective documentation:
-```{eval-rst}
-  #. :py:mod:`ANSIColor <SQLDataModel.ANSIColor.ANSIColor>` for terminal styling.
-  #. :py:mod:`HTMLParser <SQLDataModel.HTMLParser.HTMLParser>` for parsing tabular data from the web.
-  #. :py:mod:`JSONEncoder <SQLDataModel.JSONEncoder.DataTypesEncoder>` for type casting and encoding JSON data.
-  #. :py:mod:`SQLDataModel <SQLDataModel.SQLDataModel.SQLDataModel>` for wrapping it all up.
-```
-
-However, to skip over the less relevant modules and jump straight to the meat of the package, the ``SQLDataModel`` module, click **[here](#SQLDataModel.SQLDataModel.SQLDataModel)**. 
+However, to skip over the less relevant modules and jump straight to the meat of the package, the ``SQLDataModel`` module, click [here](https://sqldatamodel.readthedocs.io/en/latest/modules.html). 
 
 ---
 

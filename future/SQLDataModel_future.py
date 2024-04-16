@@ -6043,7 +6043,7 @@ class SQLDataModel:
             Unlike output from ``print(sdm)`` or other calls to :meth:`SQLDataModel.__repr__()`, the output from this method includes the full ``SQLDataModel`` and is not restricted by current terminal size or the value set at :py:attr:`SQLDataModel.display_max_rows`. As such, horizontal truncation only occurs on cell values as determined by ``max_column_width`` and no other horizontal or vertical table-wide truncation is performed.
 
         Change Log:
-            - Version 0.3.10 (2024-04-15):
+            - Version 0.3.10 (2024-04-16):
                 - Added ``table_style`` parameter and updated output to reflect new formatting styles introduced in version 0.3.9.
                 - Added ``display_dimensions`` parameter to allow toggling display of table dimensions in output.
 
@@ -10592,7 +10592,7 @@ class SQLDataModel:
             ``tuple[tuple[str]]``: A 4-tuple containing the characters required for top, middle, row and lower table sections.
 
         Change Log:
-            - Version 0.3.10 (2024-04-15):
+            - Version 0.3.10 (2024-04-16):
                 - Added ``style`` parameter to allow use by :meth:`SQLDataModel.to_text()` to generate new formatting styles introduced in version 0.3.9.
                     
         Note:
