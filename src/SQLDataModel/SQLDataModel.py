@@ -267,22 +267,23 @@ class SQLDataModel:
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies','dtypes','shape','table_style')
     
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False, table_style:Literal['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick']='default'):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False, table_style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round']='default'):
         """
         Initializes a new instance of ``SQLDataModel``.
 
         Parameters:
-            ``data`` (list[list]): The data to populate the model. Should be a list of lists or a list of tuples.
+            ``data`` (list[list]): The data to populate the model. Should be a list of lists or a list of tuples or a dictionary orientated by rows or columns.
             ``headers`` (list[str]): The column headers for the model. If not provided, default headers will be used.
             ``dtypes`` (dict): A dictionary specifying the data types for each column. Format: {'column': 'dtype'}.
             ``display_max_rows`` (int): The maximum number of rows to display. If not provided, all rows will be displayed.
             ``min_column_width`` (int): The minimum width for each column. Default is 3.
             ``max_column_width`` (int): The maximum width for each column. Default is 38.
-            ``column_alignment`` (str): The alignment for columns ('dynamic', 'left', 'center', 'right'). Default is 'dynamic'.
+            ``column_alignment`` (str): The alignment for columns, must be 'dynamic', 'left', 'center' or 'right'). Default is 'dynamic'.
             ``display_color`` (str|tuple|None): The color for display as hex code string or rgb tuple.
             ``display_index`` (bool): Whether to display row indices. Default is True.
             ``display_float_precision`` (int): The number of decimal places to display for float values. Default is 2.
             ``infer_types`` (bool): Whether to infer the data types based on a randomly selected sample. Default is False, using first row to derive the corresponding type.
+            ``table_style`` (str): The styling to use when representing the table, must be 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'. Default is 'default'.
 
         Raises:
             ``ValueError``: If ``data`` and ``headers`` are not provided, or if ``data`` is of insufficient length.
@@ -298,7 +299,7 @@ class SQLDataModel:
             data = [('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
 
             # Create the model with custom headers
-            sdm = SQLDataModel(data,headers=['Name','Age','Sex'])
+            sdm = SQLDataModel(data, headers=['Name','Age','Sex'])
             
             # Display the model
             print(model)
@@ -449,7 +450,7 @@ class SQLDataModel:
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         """``dict``: The data type mapping to use when converting SQL column types to python types."""
         self.table_style = table_style
-        """``str``: The table style used for string representations of the model. Available styles are ``'ascii'``, ``'bare'``, ``'dash'``, ``'default'``, ``'double'``, ``'markdown'``, ``'outline'``, ``'pandas'``, ``'polars'``, ``'postgresql'``, ``'round'`` or ``'thick'``. Defaults to ``'default'`` table style."""
+        """``str``: The table style used for string representations of the model. Available styles are ``'ascii'``, ``'bare'``, ``'dash'``, ``'default'``, ``'double'``, ``'list'``, ``'markdown'``, ``'outline'``, ``'pandas'``, ``'polars'``, ``'postgresql'`` or ``'round'``. Defaults to ``'default'`` table style."""
         if infer_types and self.row_count > 0:
             inferred_dtypes = SQLDataModel.infer_types_from_data(input_data=random.sample(data, min(self.row_count, 16)))
             headers_to_py_dtypes_dict = {self.headers[i]:inferred_dtypes[i+dyn_idx_offset] for i in range(self.column_count)}
@@ -5946,7 +5947,7 @@ class SQLDataModel:
             ) from None   
         return
 
-    def to_text(self, filename:str=None, index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None, table_style:Literal['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick']=None, display_dimensions:bool=False) -> str|None:
+    def to_text(self, filename:str=None, index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None, table_style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round']=None, display_dimensions:bool=False) -> str|None:
         """
         Returns a textual representation of the current ``SQLDataModel`` as a string literal or by writing to file if a ``filename`` is provided.
 
@@ -5957,7 +5958,7 @@ class SQLDataModel:
             ``max_column_width`` (int, optional): The maximum column width for table cells. Default is value set on :py:attr:`SQLDataModel.max_column_width`.
             ``float_precision`` (int, optional): The precision for floating-point values. Default is value set on :py:attr:`SQLDataModel.display_float_precision`.
             ``column_alignment`` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is value set on :py:attr:`SQLDataModel.column_alignment`. Use ``'dynamic'`` dynamically aligns column content, right for numeric types and left for remaining types. Use ``'left'`` left-aligns all column content. Use ``'center'`` center-aligns all column content. Use ``'right'`` right-aligns all column content.
-            ``table_style`` (Literal['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick'], optional): The table styling to use. Default is value set on :py:attr:`SQLDataModel.table_style`.
+            ``table_style`` (Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round'], optional): The table styling to use. Default is value set on :py:attr:`SQLDataModel.table_style`.
             ``display_dimensions`` (bool, optional): Whether to include the model dimensions ``[N rows x N cols]`` in the text output. Default is False.
 
         Raises:
@@ -6083,9 +6084,9 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of 'dynamic', 'left', 'center', 'right' representing column alignment for text output")
             )
-        if (table_style is not None) and (table_style not in ('ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick')):
+        if (table_style is not None) and (table_style not in ('ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round')):
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_style}', argument for `table_style` must be one of 'ascii', 'bare', 'dash', 'default', 'double', 'markdown', 'outline', 'pandas', 'polars', 'postgresql', 'round' or 'thick'")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_style}', argument for `table_style` must be one of 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'")
             )
         display_index = self.display_index if index is None else index
         min_column_width = self.min_column_width  if min_column_width is None else min_column_width
@@ -7535,15 +7536,15 @@ class SQLDataModel:
         """        
         return self.row_count
 
-    def set_table_style(self, style:Literal['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick']='default') -> None:
+    def set_table_style(self, style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round']='default') -> None:
         """
         Sets the table style used for string representations of ``SQLDataModel``.
         
         Parameters:
-            ``style`` (Literal['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick']): The table styling to set, use ``'default'`` for original style.
+            ``style`` (Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round']): The table styling to set, use ``'default'`` for original style.
 
         Raises:
-            ``ValueError``: If ``style`` provided is not one of the currently supported options 'ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round' or 'thick'.
+            ``ValueError``: If ``style`` provided is not one of the currently supported options 'ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql' or 'round'.
         
         Returns:
             ``None``
@@ -7633,6 +7634,17 @@ class SQLDataModel:
             └───────┴─────┴─────────┴────────────┘
             [4 rows x 4 columns]
         ```        
+        
+        Set ``style = 'list'`` to format ``SQLDataModel`` as a list of values, similar to the SQLite CLI representation:
+
+        ```shell
+            Name   Age   Height  Birthday  
+            -----  ---  -------  ----------
+            Alice   28   162.08  1996-11-20
+            Bobby   30   175.36  1994-06-15
+            Craig   37   185.82  1987-01-07
+            David   32   179.75  1992-12-28
+        ```
 
         Set ``style = 'double'`` to format ``SQLDataModel`` using double line borders:
 
@@ -7704,27 +7716,18 @@ class SQLDataModel:
             Craig |  37 |  185.82 | 1987-01-07
             David |  32 |  179.75 | 1992-12-28
         ```
-
-        Set ``style = 'thick'`` to format ``SQLDataModel`` using thick borders:
-
-        ```shell
-            ┏━━━━━━━┳━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┓
-            ┃ Name  ┃ Age ┃  Height ┃ Birthday   ┃
-            ┣━━━━━━━╋━━━━━╋━━━━━━━━━╋━━━━━━━━━━━━┫
-            ┃ Alice ┃  28 ┃  162.08 ┃ 1996-11-20 ┃
-            ┃ Bobby ┃  30 ┃  175.36 ┃ 1994-06-15 ┃
-            ┃ Craig ┃  37 ┃  185.82 ┃ 1987-01-07 ┃
-            ┃ David ┃  32 ┃  179.75 ┃ 1992-12-28 ┃
-            ┗━━━━━━━┻━━━━━┻━━━━━━━━━┻━━━━━━━━━━━━┛
-        ```
+        
+        Change Log:
+            - Version 0.3.11 (2024-04-18):
+                - Removed ``'thick'`` style and added ``'list'`` style for greater variety of available formats.
 
         Note:
             - The labels given to certain styles are entirely subjective and do not in any way express original design or ownership of the styling used.
             - Legacy character sets on older terminals may not support all the character encodings required for some styles.
         """
-        if style not in ('ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick'):
+        if style not in ('ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round'):
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{style}', argument for `style` must be one of 'ascii', 'bare', 'dash', 'default', 'double', 'markdown', 'outline', 'pandas', 'polars', 'postgresql', 'round' or 'thick'")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{style}', argument for `style` must be one of 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'")
             )
         self.table_style = style
 
@@ -10581,12 +10584,12 @@ class SQLDataModel:
         fetch_stmt = " ".join(("select",f'"{self.sql_idx}",' if index else '',columns_str,f'from "{self.sql_model}"', ordering_str, f"limit {n_rows}"))
         return fetch_stmt
 
-    def _generate_table_style(self, style:Literal['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick']=None) -> tuple[tuple[str]]:
+    def _generate_table_style(self, style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round']=None) -> tuple[tuple[str]]:
         """
         Generates the character sets required for formatting ``SQLDataModel`` according to the value currently set at :py:attr:`SQLDataModel.table_style`.
         
         Parameters:
-            ``style`` (Literal['ascii','bare','dash','default','double','markdown','outline','pandas','polars','postgresql','round','thick'], optional): The table style to return. Default is value set on :py:attr:`SQLDataModel.table_style`.
+            ``style`` (Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round'], optional): The table style to return. Default is value set on :py:attr:`SQLDataModel.table_style`.
 
         Returns:
             ``tuple[tuple[str]]``: A 4-tuple containing the characters required for top, middle, row and lower table sections.
@@ -10624,6 +10627,11 @@ class SQLDataModel:
                     ,('╠═','═','═╬═','═╣') 
                     ,('║ ',    ' ║ ',' ║') 
                     ,('╚═','═','═╩═','═╝'))
+        if style == 'list':     
+            return  (('',' ','  ','')
+                    ,('','-','  ','')
+                    ,('',    '  ','')
+                    ,('',' ','  ',''))        
         if style == 'markdown': 
             return  (('','','','')
                     ,('|-','-','-|-','-|')
@@ -10654,11 +10662,6 @@ class SQLDataModel:
                     ,('├─','─','─┼─','─┤')
                     ,('│ ',    ' │ ',' │')
                     ,('╰─','─','─┴─','─╯'))
-        if style == 'thick':
-            return  (('┏━','━','━┳━','━┓')
-                    ,('┣━','━','━╋━','━┫')
-                    ,('┃ ',    ' ┃ ',' ┃')
-                    ,('┗━','━','━┻━','━┛'))
         else: # default styling
             return  (('┌─','─','─┬─','─┐') 
                     ,('├─','─','─┼─','─┤') 
