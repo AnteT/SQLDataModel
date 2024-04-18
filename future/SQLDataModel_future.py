@@ -6052,6 +6052,7 @@ class SQLDataModel:
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
+            - See :meth:`SQLDataModel.set_table_style()` for modifying table format and available styles.
             - If ``filename`` is provided, the method writes the text to the specified file; otherwise, it returns the textual representation as a string.
             - If ``index`` is ``None``, the method uses the current value on :py:attr:`SQLDataModel.display_index`.
             - If ``min_column_width`` is ``None``, the method uses the current value on :py:attr:`SQLDataModel.min_column_width`.
