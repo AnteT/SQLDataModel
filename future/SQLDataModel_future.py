@@ -7921,7 +7921,7 @@ class SQLDataModel:
         else: # left, center, right alignment
             formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
         # table_top_bar = "".join([top_lh, top_sep.join([top_hbar * header_length_dict[col] for col in display_headers]), top_rh, table_bare_newline])
-        col_lengths = [val for val in header_length_dict.values()]
+        col_lengths = [header_length_dict[col] for col in display_headers]
         table_top_bar = "".join([top_lh, top_sep.join([top_hbar * length for length in col_lengths]), top_rh, table_bare_newline])
         table_top_bar = table_top_bar if len(table_top_bar.strip()) >=1 else """"""
         table_repr = "".join([table_repr, table_top_bar])
