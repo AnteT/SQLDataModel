@@ -2326,10 +2326,10 @@ class SQLDataModel:
 
         Parameters:
             ``csv_source`` (str): The path to the CSV file or a raw delimited string.
-            ``infer_types`` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
-            ``encoding`` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
-            ``delimiter`` (str, optional): The delimiter to use when parsing CSV source. Default is ``,``.
-            ``quotechar`` (str, optional): The character used for quoting fields. Default is ``"``.
+            ``infer_types`` (bool, optional): Infer column types based on random subset of data. Default is ``True``, when False, all columns are str type.
+            ``encoding`` (str, optional): The encoding used to decode the CSV source if it is a file. Default is ``'Latin1'``.
+            ``delimiter`` (str, optional): The delimiter to use when parsing CSV source. Default is ``','``.
+            ``quotechar`` (str, optional): The character used for quoting fields. Default is ``'"'``.
             ``headers`` (List[str], optional): List of column headers. If None, the first row of the CSV source is assumed to contain headers.
             ``**kwargs``: Additional keyword arguments to be passed to the SQLDataModel constructor.
 
@@ -2398,6 +2398,7 @@ class SQLDataModel:
             - If ``csv_source`` is delimited by characters other than those specified, use :meth:`SQLDataModel.from_delimited()` and provide delimiter to ``delimiters``.
             - If ``headers`` are provided, the first row parsed from source will be the first row in the table and not discarded.
             - The ``infer_types`` argument can be used to infer the appropriate data type for each column:
+            
                 - If ``infer_types = True``, a random subset of the data will be used to infer the correct type and cast values accordingly
                 - If ``infer_types = False``, values from the first row only will be used to assign types, almost always 'str' when reading from CSV.
         """
@@ -2606,7 +2607,7 @@ class SQLDataModel:
             ``infer_types`` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
             ``encoding`` (str, optional): The encoding used to decode the source if it is a file. Default is ``'Latin1'``.
             ``delimiters`` (str, optional): Possible delimiters. Default is ``\\s``, ``\\t``, ``;``, ``|``, ``:`` or ``,`` (space, tab, semicolon, pipe, colon or comma).
-            ``quotechar`` (str, optional): The character used for quoting fields. Default is ``"``.
+            ``quotechar`` (str, optional): The character used for quoting fields. Default is ``'"'``.
             ``headers`` (list[str], optional): List of column headers. If None, the first row of the delimited source is assumed to be the header row.
             ``**kwargs``: Additional keyword arguments to be passed to the SQLDataModel constructor.
 
@@ -4249,8 +4250,9 @@ class SQLDataModel:
 
         Note:
             - This method is made for parsing ``SQLDataModel`` formatted text, such as the kind generated with ``print(sdm)`` or the output created by the inverse method :meth:`SQLDataModel.to_text()`
-            - For parsing other delimited tabular data, this method calls the related :meth:`SQLDataModel.from_csv()` method, which parses tabular data constructed with common delimiters.
-
+            - For parsing delimited tabular data, this method calls :meth:`SQLDataModel.from_delimited()` method, which parses tabular data constructed with common delimiters.
+            - For parsing delimited tabular data when the delimiter is known, use :meth:`SQLDataModel.from_csv()` and provide the delimiter to use for parsing output.
+            - See :meth:`SQLDataModel.to_text()` for converting ``SQLDataModel`` to textual representation or for styling output.
         """
         if not isinstance(text_source, str):
             raise TypeError(
@@ -4436,12 +4438,12 @@ class SQLDataModel:
         Writes ``SQLDataModel`` to the specified file if ``filename`` argument if provided, otherwise returns the model directly as a CSV formatted string literal.
 
         Parameters:
-            ``filename`` (str): The name of the CSV file to which the data will be written. Default is None, returning as raw literal.
-            ``delimiter`` (str, optional): The delimiter to use for separating values. Default is ','.
-            ``quotechar`` (str, optional): The character used to quote fields. Default is '"'.
-            ``lineterminator`` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
-            ``na_rep`` (str, optional): String representation to use for null or missing values. Default is 'None'.
-            ``index`` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
+            ``filename`` (str): The name of the CSV file to which the data will be written. Default is ``None``, returning as raw literal.
+            ``delimiter`` (str, optional): The delimiter to use for separating values. Default is ``','``.
+            ``quotechar`` (str, optional): The character used to quote fields. Default is ``'"'``.
+            ``lineterminator`` (str, optional): The character used to terminate the row and move to a new line. Default is ``'\\r\\n'``.
+            ``na_rep`` (str, optional): String representation to use for null or missing values. Default is ``'None'``.
+            ``index`` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is ``False``.
             ``**kwargs``: Additional arguments to be passed to the ``csv.writer`` constructor.
 
         Returns:
