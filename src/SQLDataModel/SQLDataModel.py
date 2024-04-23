@@ -1,16 +1,16 @@
 from __future__ import annotations
-import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random
+import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random, urllib.request
 from collections.abc import Generator, Callable, Iterator
 from collections import namedtuple
 from typing import Literal, Any
 from ast import literal_eval
-import urllib.request
+from io import StringIO
 
 from .exceptions import DimensionError, SQLProgrammingError
-from .ANSIColor import ANSIColor
 from .StandardDeviation import StandardDeviation
 from .JSONEncoder import DataTypesEncoder
 from .HTMLParser import HTMLParser
+from .ANSIColor import ANSIColor
 
 try:
     from dateutil.parser import parse as dateparser
@@ -2320,7 +2320,7 @@ class SQLDataModel:
         return cls([[fill_value for _ in range(n_cols)] for _ in range(n_rows)])
         
     @classmethod
-    def from_csv(cls, csv_source:str, infer_types:bool=True, encoding:str = "Latin1", delimiters:str = ', \t;|:', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
+    def from_csv(cls, csv_source:str, infer_types:bool=True, encoding:str = 'Latin1', delimiter:str = ',', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
         """
         Returns a new ``SQLDataModel`` generated from the provided CSV source, which can be either a file path or a raw delimited string.
 
@@ -2328,7 +2328,7 @@ class SQLDataModel:
             ``csv_source`` (str): The path to the CSV file or a raw delimited string.
             ``infer_types`` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
             ``encoding`` (str, optional): The encoding used to decode the CSV source if it is a file. Default is 'Latin1'.
-            ``delimiters`` (str, optional): Possible delimiters. Default is ``\\s``, ``\\t``, ``;``, ``|``, ``:`` or ``,`` (space, tab, semicolon, pipe, colon or comma).
+            ``delimiter`` (str, optional): The delimiter to use when parsing CSV source. Default is ``,``.
             ``quotechar`` (str, optional): The character used for quoting fields. Default is ``"``.
             ``headers`` (List[str], optional): List of column headers. If None, the first row of the CSV source is assumed to contain headers.
             ``**kwargs``: Additional keyword arguments to be passed to the SQLDataModel constructor.
@@ -2337,7 +2337,7 @@ class SQLDataModel:
             ``SQLDataModel``: The SQLDataModel object created from the provided CSV source.
 
         Raises:
-            ``ValueError``: If no delimiter is found in ``csv_source`` or if parsing with delimiter does not yield valid tabular data.
+            ``ValueError``: If no delimited data is found in ``csv_source`` or if parsing with delimiter does not yield valid tabular data.
             ``Exception``: If an error occurs while attempting to read from or process the provided CSV source.
 
         Examples:
@@ -2354,18 +2354,19 @@ class SQLDataModel:
             # Create the model using the CSV file, providing custom headers
             sdm = SQLDataModel.from_csv(csv_source, headers=['ID', 'Name', 'Value'])
         ```
-        From Delimited Source
-        ---------------------
+
+        From CSV Literal
+        ----------------
 
         ```python
             from SQLDataModel import SQLDataModel
 
-            # Space delimited data
+            # CSV data
             data = '''
-            A B C
-            1a 1b 1c
-            2a 2b 2c
-            3a 3b 3c
+            A, B, C
+            1a, 1b, 1c
+            2a, 2b, 2c
+            3a, 3b, 3c
             '''
 
             # Create the model
@@ -2388,10 +2389,14 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
 
+        Change Log:
+            - Version 0.4.0 (2024-04-23):
+                - Modifed to only parse CSV files and removed all delimiter sniffing with introduction of new method :meth:`SQLDataModel.from_delimited()` to handle other delimiters.
+                - Renamed ``delimiters`` parameter to ``delimiter`` with ``,`` set as new default to reflect revised focus on CSV files only.
+
         Note:
-            - If ``csv_source`` is delimited by characters other than those specified, provide the delimiter to ``delimiters``.
+            - If ``csv_source`` is delimited by characters other than those specified, use :meth:`SQLDataModel.from_delimited()` and provide delimiter to ``delimiters``.
             - If ``headers`` are provided, the first row parsed from source will be the first row in the table and not discarded.
-            - This method is called by :meth:`SQLDataModel.from_text()` when source data appears to be delimited instead of SQLDataModel's ``__repr__()``
             - The ``infer_types`` argument can be used to infer the appropriate data type for each column:
                 - If ``infer_types = True``, a random subset of the data will be used to infer the correct type and cast values accordingly
                 - If ``infer_types = False``, values from the first row only will be used to assign types, almost always 'str' when reading from CSV.
@@ -2399,9 +2404,6 @@ class SQLDataModel:
         if os.path.exists(csv_source):
             try:
                 with open(csv_source, encoding=encoding) as csvfile:
-                    dialect = csv.Sniffer().sniff(csvfile.read(2048), delimiters=delimiters)
-                    csvfile.seek(0)
-                    delimiter = dialect.delimiter
                     tmp_all_rows = list(csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar))
             except Exception as e:
                 raise Exception(
@@ -2410,12 +2412,6 @@ class SQLDataModel:
         else:
             csv_source = csv_source.strip()
             try:
-                dialect = csv.Sniffer().sniff(csv_source, delimiters=delimiters)
-                delimiter = dialect.delimiter
-                if delimiter is None:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: delimiter not found, ensure `csv_source` contains tabular data delimited by one of ` `, `\t`, `;`, `|`, `:` or `,`" )
-                    )
                 tmp_all_rows = list(csv.reader(csv_source.splitlines(), delimiter=delimiter, quotechar=quotechar))
             except ValueError as e:
                 raise ValueError(
@@ -2530,7 +2526,7 @@ class SQLDataModel:
             ,'.pkl': cls.from_pickle
             ,'.sdm': cls.from_pickle
             ,'.tex': cls.from_latex
-            ,'.tsv': cls.from_csv
+            ,'.tsv': cls.from_delimited
             ,'.txt': cls.from_text
             ,'.xlsx': cls.from_excel
         }
@@ -2600,6 +2596,116 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"TypeError: unsupported type '{arg_type}', current supported external types are 'numpy.ndarray' or 'pandas.DataFrame' objects")
                 )
     
+    @classmethod
+    def from_delimited(cls, source:str, infer_types:bool=True, encoding:str='Latin1', delimiters:str=', \t;|:', quotechar:str='"', headers:list[str]=None, **kwargs) -> SQLDataModel:
+        """
+        Returns a new ``SQLDataModel`` generated from the provided delimited source, which can be either a file path or a raw delimited string.
+
+        Parameters:
+            ``source`` (str): The path to the delimited file or a raw delimited string.
+            ``infer_types`` (bool, optional): Infer column types based on random subset of data. Default is True, when False, all columns are str type.
+            ``encoding`` (str, optional): The encoding used to decode the source if it is a file. Default is ``'Latin1'``.
+            ``delimiters`` (str, optional): Possible delimiters. Default is ``\\s``, ``\\t``, ``;``, ``|``, ``:`` or ``,`` (space, tab, semicolon, pipe, colon or comma).
+            ``quotechar`` (str, optional): The character used for quoting fields. Default is ``"``.
+            ``headers`` (list[str], optional): List of column headers. If None, the first row of the delimited source is assumed to be the header row.
+            ``**kwargs``: Additional keyword arguments to be passed to the SQLDataModel constructor.
+
+        Returns:
+            ``SQLDataModel``: The SQLDataModel object created from the provided CSV source.
+
+        Raises:
+            ``ValueError``: If no delimiter is found in ``source`` or if parsing with delimiter does not yield valid tabular data.
+            ``Exception``: If an error occurs while attempting to read from or process the provided CSV source.
+
+        Example:
+
+        From Delimited Literal
+        ----------------------
+
+        ```python            
+            from SQLDataModel import SQLDataModel
+
+            # Space delimited literal
+            source_data = '''
+            Name Age Height
+            Beth 27 172.4
+            Kate 28 162.0
+            John 30 175.3
+            Will 35 185.8'''
+
+            # Create the model
+            sdm = SQLDataModel.from_delimited(source_data)
+
+            # View output
+            print(sdm)
+        ```
+
+        This will output:
+
+        ```shell
+            ┌──────┬─────┬─────────┐
+            │ Name │ Age │  Height │
+            ├──────┼─────┼─────────┤
+            │ Beth │  27 │  172.40 │
+            │ Kate │  28 │  162.00 │
+            │ John │  30 │  175.30 │
+            │ Will │  35 │  185.80 │
+            └──────┴─────┴─────────┘
+            [4 rows x 3 columns]
+        ```
+
+        From Delimited File
+        -------------------
+
+        ```python            
+            from SQLDataModel import SQLDataModel
+
+            # Tab separated file
+            tsv_file = 'persons.tsv'
+
+            # Create the model
+            sdm = SQLDataModel.from_delimited(tsv_file)
+        ```
+
+        Note:
+            - Use :meth:`SQLDataModel.from_csv()` if delimiter in source is already known and available as this method requires more compute to determine a plausible delimiter.
+            - Use :meth:`SQLDataModel.from_text()` if data is not delimited but is a string representation such as an ASCII table or the output from another ``SQLDataModel`` instance.
+            - If file is delimited by delimiters other than the default targets ``\\s``, ``\\t``, ``;``, ``|``, ``:`` or ``,`` (space, tab, semicolon, pipe, colon or comma) make sure they are provided as single character values to ``delimiters``.
+        """
+        if os.path.exists(source):
+            try:
+                with open(source, 'r', encoding=encoding) as f:
+                    source = f.read()
+            except Exception as e:
+                raise Exception (
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `source`")
+                ) from None   
+        else:
+            source = source.strip()
+        try:
+            dialect = csv.Sniffer().sniff(source, delimiters=delimiters)
+            delimiter = dialect.delimiter
+            if delimiter is None:
+                raise ValueError(
+                    SQLDataModel.ErrorFormat(f"ValueError: delimiter not found, ensure `source` contains data delimited by one of ` `, `\\t`, `;`, `|`, `:` or `,` or provide additional delimiters to search for" )
+                )
+            tmp_all_rows = list(csv.reader(source.splitlines(), delimiter=delimiter, quotechar=quotechar, skipinitialspace=True))
+        except ValueError as e:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
+            ) from None
+        except Exception as e:
+            raise Exception(
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse the provided delimited string literal")
+            ) from None
+        if not tmp_all_rows:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: no delimited tabular data found in provided `source`, ensure content contains delimited tabular data")
+            )
+        if headers is None:
+            headers = tmp_all_rows.pop(0)
+        return cls(data=tmp_all_rows, headers=headers, infer_types=infer_types, **kwargs)          
+
     @classmethod
     def from_dict(cls, data:dict|list, **kwargs) -> SQLDataModel:
         """
@@ -4169,7 +4275,7 @@ class SQLDataModel:
         tables = re.findall(r'┌.*?┘', text_source, re.DOTALL)
         if not tables:
             try:
-                return SQLDataModel.from_csv(text_source,headers=headers, **kwargs)
+                return SQLDataModel.from_delimited(text_source, headers=headers, **kwargs)
             except Exception:
                 raise ValueError(
                     SQLDataModel.ErrorFormat("ValueError: no tabular data found in `text_source`, confirm correct filepath or that provided content contains valid tabular data")
@@ -4325,7 +4431,7 @@ class SQLDataModel:
             data = data[0]
         return [tuple(x[0] for x in res.description),*data] if include_headers else data
 
-    def to_csv(self, filename:str=None, delimiter:str=',', quotechar:str='"', lineterminator:str='\r\n', index:bool=False, **kwargs) -> str|None:
+    def to_csv(self, filename:str=None, delimiter:str=',', quotechar:str='"', lineterminator:str='\r\n', na_rep:str='None', index:bool=False, **kwargs) -> str|None:
         """
         Writes ``SQLDataModel`` to the specified file if ``filename`` argument if provided, otherwise returns the model directly as a CSV formatted string literal.
 
@@ -4334,6 +4440,7 @@ class SQLDataModel:
             ``delimiter`` (str, optional): The delimiter to use for separating values. Default is ','.
             ``quotechar`` (str, optional): The character used to quote fields. Default is '"'.
             ``lineterminator`` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
+            ``na_rep`` (str, optional): String representation to use for null or missing values. Default is 'None'.
             ``index`` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
             ``**kwargs``: Additional arguments to be passed to the ``csv.writer`` constructor.
 
@@ -4374,6 +4481,7 @@ class SQLDataModel:
             Alice   28      162.0
             Travis  35      185.8
         ```
+
         Write to File
         -------------
 
@@ -4397,7 +4505,8 @@ class SQLDataModel:
             # Write to the file, keeping the index
             sdm.to_csv(filename=csv_file, index=True)
         ```
-        Contents of ``persons.csv``
+
+        Contents of ``persons.csv``:
 
         ```shell
             idx,Name,Age,Height
@@ -4407,24 +4516,34 @@ class SQLDataModel:
         ```
         
         Change Log:
+            - Version 0.4.0 (2024-04-23):
+                - Modified quoting behavior to avoid redundant quoting and to closely mimic csv module from standard library.
+                - Added ``na_rep`` to fill null or missing values when generating output, useful for space delimited data and minimal quoting.
+                
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
-            - Modifying ``delimiter`` affects how the data is delimited when writing to ``filename`` and when returning as raw literal.
             - When ``index=True``, the ``sdm_index`` property determines the column name of the index in the result.
+            - Modifying ``delimiter`` affects how the data is delimited when writing to ``filename`` and when returning as raw literal, any valid delimiter can be used.
+            - Quoting behavior can be modified by providing an additional keywork arg such as ``quoting=1`` to wrap all values in quotes, or ``quoting=2`` to quote only non-numeric values, see ``csv.QUOTE_X`` enums for all options.
+            - Use :meth:`SQLDataModel.to_text()` to pretty print table in specified style for visualizing output if strict delimiting is unnecessary.
+            - See :meth:`SQLDataModel.from_csv()` for creating a new ``SQLDataModel`` from existing CSV data
         """
-        res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index))
+        res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index, na_rep=na_rep))
         headers = [x[0] for x in res.description]
         if filename is not None:
             with open(filename, 'w', newline='') as file:
-                csvwriter = csv.writer(file,delimiter=delimiter,lineterminator=lineterminator,quotechar=quotechar,quoting=csv.QUOTE_MINIMAL, **kwargs)
+                csvwriter = csv.writer(file,delimiter=delimiter,lineterminator=lineterminator,quotechar=quotechar,**kwargs)
                 csvwriter.writerow(headers)
                 csvwriter.writerows(res.fetchall())
             return
         else:
-            csv_repr = lineterminator.join([delimiter.join([f'''{quotechar}{col}{quotechar}''' for col in headers]),*[delimiter.join([f'''{quotechar}{cell}{quotechar}''' for cell in row]) for row in res.fetchall()]])
-            return csv_repr
+            csv_repr = StringIO()
+            csv_writer = csv.writer(csv_repr,delimiter=delimiter,lineterminator=lineterminator,quotechar=quotechar,**kwargs)
+            csv_writer.writerow(headers)
+            csv_writer.writerows(res.fetchall())
+            return csv_repr.getvalue().strip()
 
     def to_dict(self, orient:Literal["rows","columns","list"]="rows", index:bool=None) -> dict|list[dict]:
         """
@@ -10517,7 +10636,7 @@ class SQLDataModel:
         if update_row_meta:
             self._update_indicies()
 
-    def _generate_sql_stmt(self, columns:list[str]=None, rows:int|slice|tuple=None, index:bool=True) -> str:
+    def _generate_sql_stmt(self, columns:list[str]=None, rows:int|slice|tuple=None, index:bool=True, na_rep:str=None) -> str:
         """
         Generate an SQL statement for fetching specific columns and rows from the model, duplicate column references are aliased in order of appearance.
 
@@ -10525,11 +10644,15 @@ class SQLDataModel:
             ``columns`` (list of str, optional): The list of columns to include in the SQL statement. If not provided, all columns from the model will be included.
             ``rows`` (int, slice, tuple, optional): The rows to include in the SQL statement. It can be an integer for a single row, a slice for a range of rows, or a tuple for specific row indices. If not provided, all rows will be included.
             ``index`` (bool, optional): If True, include the primary index column in the SQL statement.
+            ``na_rep`` (str, optional): If provided, all null or empty string values are replaced with value.
 
         Returns:
             ``str``: The generated SQL statement.   
         
         Change Log:
+            - Version 0.4.0 (2024-04-23):
+                - Added ``nap_rep`` parameter to fill null or missing fields with provided value.
+
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -10540,7 +10663,10 @@ class SQLDataModel:
             columns = self.headers
         if index:
             columns = [self.sql_idx,*columns]
-        headers_selection_str = ",".join([f'"{col}" as "{col_alias}"' for col,col_alias in zip(columns,SQLDataModel.alias_duplicates(columns))])
+        if na_rep is None:
+            headers_selection_str = ",".join([f'''"{col}" as "{col_alias}"''' for col,col_alias in zip(columns,SQLDataModel.alias_duplicates(columns))])
+        else:
+            headers_selection_str = ",".join([f'''ifnull("{col}",'{na_rep}') as "{col_alias}"''' for col,col_alias in zip(columns,SQLDataModel.alias_duplicates(columns))])
         if isinstance(rows, int):
             row_selection_str = f"""where "{self.sql_idx}" = {rows}"""
         elif isinstance(rows, slice):

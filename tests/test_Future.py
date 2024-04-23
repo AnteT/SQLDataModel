@@ -593,14 +593,26 @@ def test_to_from_csv(sample_data):
     assert input_literal == output_literal
 
 @pytest.mark.core
-def test_to_from_delimited(sample_data):
+def test_to_from_csv_delimiters(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(input_data,input_headers)
     input_data = sdm.data(include_headers=True)
     valid_delimiters = (",","\t",";","|",":"," ")
     for delimiter in valid_delimiters:
         dsv = sdm.to_csv(delimiter=delimiter)
-        sdm = SQLDataModel.from_csv(dsv, delimiters=delimiter)
+        sdm = SQLDataModel.from_csv(dsv, delimiter=delimiter)
+        output_data = sdm.data(include_headers=True)
+        assert input_data == output_data
+
+@pytest.mark.core
+def test_to_from_delimited_source(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel(input_data,input_headers)
+    input_data = sdm.data(include_headers=True)
+    valid_delimiters = (",","\t",";","|",":"," ")
+    for delimiter in valid_delimiters:
+        dsv = sdm.to_csv(delimiter=delimiter)
+        sdm = SQLDataModel.from_delimited(dsv)
         output_data = sdm.data(include_headers=True)
         assert input_data == output_data
 
