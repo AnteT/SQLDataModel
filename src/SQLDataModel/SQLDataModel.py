@@ -2399,7 +2399,7 @@ class SQLDataModel:
         if os.path.exists(csv_source):
             try:
                 with open(csv_source, encoding=encoding) as csvfile:
-                    dialect = csv.Sniffer().sniff(csvfile.read(1024), delimiters=delimiters)
+                    dialect = csv.Sniffer().sniff(csvfile.read(2048), delimiters=delimiters)
                     csvfile.seek(0)
                     delimiter = dialect.delimiter
                     tmp_all_rows = list(csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar))
