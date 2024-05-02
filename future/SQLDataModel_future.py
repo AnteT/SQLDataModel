@@ -8018,9 +8018,9 @@ class SQLDataModel:
         row_sep_concat = f"""|| '{row_sep}' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
         header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
-        vertical_sep_chars = '⠒⠂' # '⠐⠒⠂'
-        vertical_sep_fmt_str = row_sep_concat.join([f"""printf("%!{header_length_dict[col]}.{header_length_dict[col]}s", printf("%*s%s%*s", ({header_length_dict[col]}-2)/2, "", '{vertical_sep_chars}', ({header_length_dict[col]}-2)/2, ""))""" for col in display_headers])
         if vertical_truncation_required:
+            vertical_sep_chars = '⠒⠂'
+            vertical_sep_fmt_str = f'''{row_lh}{row_sep.join([f"""{vertical_sep_chars:^{max(0,header_length_dict[col]+1)}}"""[:header_length_dict[col]] for col in display_headers])}{row_rh}{table_dynamic_newline}'''
             fetch_fmt_stmt = f"""
             with "_repr" as (
                 select "{self.sql_idx}" as "_row" from "{self.sql_model}" where "{self.sql_idx}" in 
@@ -8030,7 +8030,7 @@ class SQLDataModel:
                 order by "{self.sql_idx}" asc limit {max_display_rows}+1)
                 ,"_trigger" as (select "{self.sql_idx}" as "_sep" from "{self.sql_model}" order by "{self.sql_idx}" asc limit 1 offset {split_row})
             select CASE WHEN "{self.sql_idx}" <> (select "_sep" from "_trigger") THEN "_full_row" 
-            ELSE '{row_lh}' || {vertical_sep_fmt_str} ||'{row_rh}{table_dynamic_newline}' 
+            ELSE '{vertical_sep_fmt_str}' 
             END from (select "{self.sql_idx}",'{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
         else:
             fetch_fmt_stmt = f"""select '{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
