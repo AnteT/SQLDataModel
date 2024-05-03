@@ -89,6 +89,7 @@ SQLDataModel provides a quick and easy way to import, view, transform and export
 3. [From SQL to HTML Table](#from-sql-to-html-table)
 4. [Pretty PyTorch Training Results to JSON](#pretty-pytorch-training-results-to-json)
 5. [From PostgreSQL to SQLite](#from-postgresql-to-sqlite)
+6. [Embed Tables Anywhere!](#embed-tables-anywhere)
 
 ---
 
@@ -435,6 +436,34 @@ sdm = SQLDataModel.from_sql("SELECT * FROM pg_table", pg_conn)
 sdm.to_sql("local_table", sqlite_conn, if_exists='append')
 ```
 Thats it! What once required installing packages like `pandas`, `numpy`, and `SQLAlchemy`, plus all of their dependencies, just to able to use a nice DataFrame API when interacting with SQL data, is now just a single package, `SQLDataModel`. While I **love** all three of those packages, 99% of what I consistently use them for can be done with far less "package baggage".
+
+---
+
+#### Embed Tables Anywhere!
+
+Perhaps one of the most novel use-cases I've come across for `SQLDataModel` is the ability to embed a table just about anywhere you can type. For example, let's say you want to include a table in a slide show but are struggling with the disparate and confusing application specific rules and constraints, which has been my personal experience for every table formatting interface put out by Microsoft, especially Outlook and PowerPoint. Instead of settling for the application specific sandbox you've been forced into, try `SQLDataModel` instead!
+
+```python
+from SQLDataModel import SQLDataModel
+
+# Using the Markdown file created in the very first example
+sdm = SQLDataModel.from_markdown('Planets.MD')
+
+# Mercury and Venus are too hot, let's change their 'Flyable?' status
+sdm[:2,'Flyable?'] = 'False'
+
+# Lets use a different table styling, like the one used by polars
+sdm.set_table_style('polars')
+
+# Send the table to a text file to copy it from
+sdm.to_text('Planets.txt')
+```
+
+This will write the table and any styling we applied to `Planets.txt` where we can copy it from. We could just as easily copy it right from the terminal as well. Now that we have the table in our clipboard, we can paste and embed it anywhere we can input text! For example, here's the result of pasting it into a PowerPoint slide, along with a comparison using PowerPoint's native table feature:
+
+<img src="https://github.com/AnteT/SQLDataModel/raw/master/figs/sdm_ppt.PNG?raw=true" alt="sdm_ppt" style="width:100vw; border-radius: .6vw" />
+
+While its true you'll have more control using the application-specific table feature, you'll have to first figure out how to do it in their sandbox. It takes me _an embarrassingly long time_ to create a table in PowerPoint, not to mention styling it and how to import data without typing it in cell by cell. On the other hand, it only took a second to copy & paste the table from `Planets.txt` that we generated from `SQLDataModel`. This applies to anywhere you can input text and use a monospace font! To view a detailed summary of available styles, jump to the [table styles](https://sqldatamodel.readthedocs.io/en/latest/SQLDataModel.html#SQLDataModel.SQLDataModel.SQLDataModel.set_table_style) portion of the docs.
 
 ---
 
