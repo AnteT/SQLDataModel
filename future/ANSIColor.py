@@ -1,7 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
 
-@dataclass
 class ANSIColor:
     """
     Creates an ANSI style terminal color using provided hex color or rgb values.
@@ -60,24 +58,34 @@ class ANSIColor:
             )
         self.text_bold = "\033[1m" if text_bold else ""
         if type(text_color) == str: # assume hex
-            fg_r, fg_g, fg_b = tuple(int(text_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+            try:
+                fg_r, fg_g, fg_b = tuple(int(text_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+            except:
+                raise ValueError(
+                    ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', string argument for `text_color` must be a valid hexadecimal value between `#000000` and `#ffffff`")
+                )
             self.text_color_str = text_color
             self.text_color_hex = text_color
             self.text_color_rgb = (fg_r, fg_g, fg_b)
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
                     raise ValueError(
-                        ANSIColor.ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color {self.text_color_rgb}, all values must satisfy '0 <= value <= 255'")
+                        ANSIColor.ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
                     )
         if type(text_color) == tuple: # assume rgb
-            fg_r, fg_g, fg_b = text_color
+            try:
+                fg_r, fg_g, fg_b = text_color
+            except:
+                raise ValueError(
+                    ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', tuple argument for `text_color` must be a valid rgb tuple `(r, g, b)` with values between `0` and `255`")
+                )            
             self.text_color_str = str(text_color)
             self.text_color_hex = f"#{fg_r:02x}{fg_g:02x}{fg_b:02x}"
             self.text_color_rgb = (fg_r, fg_g, fg_b)
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
                     raise ValueError(
-                        ANSIColor.ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color {self.text_color_rgb}, all values must satisfy '0 <= value <= 255'")
+                        ANSIColor.ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
                     )            
         self._ansi_start = f"""{self.text_bold}\033[38;2;{fg_r};{fg_g};{fg_b}m"""
         self._ansi_stop = "\033[0m\033[39m\033[49m"
@@ -159,30 +167,5 @@ class ANSIColor:
             # Or style string or string object directly in the print statement
             print(blue_color.wrap("I'm going to turn blue!"))
         
-        
         """
         return f"""{self._ansi_start}{text}{self._ansi_stop}"""
-    
-    def wrap_error(self, text:str) -> str:
-        """
-        Wraps the provided text in the style of the pen, prepending a newline character.
-
-        Parameters:
-            ``text`` (str): Text to be wrapped.
-
-        Returns:
-            ``str``: Wrapped text with ANSI escape codes and a prepended newline character.
-        """
-        return f"""\r{self._ansi_start}{text}{self._ansi_stop}"""
-    
-    def alert_error(self, text:str) -> str:
-        """
-        Creates an ANSI color alert for error messages.
-
-        Parameters:
-            ``text`` (str): Error message.
-
-        Returns:
-            ``str``: ANSI color alert string for error messages.
-        """        
-        return f"""\r\033[1m\033[38;2;247;141;160m{text}\033[0m\033[39m\033[49m"""
