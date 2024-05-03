@@ -649,6 +649,19 @@ def test_concat(sample_data):
     assert output_data == expected_data
 
 @pytest.mark.core
+def test_copy(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm_original = SQLDataModel(input_data, headers=input_headers, display_float_precision=3, display_max_rows=7, display_index=False, column_alignment='right')
+    # Test full copy
+    sdm_copy_full = sdm_original.copy(data_only=False)  
+    assert sdm_original.data(index=True,include_headers=True) == sdm_copy_full.data(index=True,include_headers=True)
+    assert sdm_original._get_display_args() == sdm_copy_full._get_display_args()
+    # Test data only copy
+    sdm_copy_data = sdm_original.copy(data_only=True)  
+    assert sdm_original.data(index=True,include_headers=True) == sdm_copy_data.data(index=True,include_headers=True)
+    assert sdm_original._get_display_args() != sdm_copy_data._get_display_args()
+    
+@pytest.mark.core
 def test_merge():
     left_headers = ["Name", "Age", "ID"]
     left_data = [        
