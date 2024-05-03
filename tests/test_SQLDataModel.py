@@ -617,6 +617,38 @@ def test_to_from_delimited_source(sample_data):
         assert input_data == output_data
 
 @pytest.mark.core
+def test_concat(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    mid = len(input_data) // 2
+    base_data, other_data = input_data[:mid], input_data[mid:]
+    base_sdm = SQLDataModel(base_data, headers=input_headers)    
+    other_sdm = SQLDataModel(other_data, headers=input_headers)    
+    # Concat other sdm returning new using inplace=False
+    sdm = base_sdm.concat(other=other_sdm, inplace=False)
+    output_data, output_headers = sdm.data(), sdm.get_headers()
+    assert output_headers == input_headers
+    assert output_data == input_data
+    # Concat other sdm in place using inplace=True
+    sdm = SQLDataModel(base_sdm.data(), headers=base_sdm.get_headers()) # clone to avoid contaminating base for later tests
+    sdm.concat(other=other_sdm, inplace=True)
+    output_data, output_headers = sdm.data(), sdm.get_headers()
+    assert output_headers == input_headers
+    assert output_data == input_data    
+    # Concat list returning new using inplace=False
+    other_list = tuple(None for _ in range(base_sdm.column_count))
+    expected_data, expected_headers = [*base_data, other_list], input_headers
+    sdm = base_sdm.concat(other=other_list, inplace=False)
+    output_data, output_headers = sdm.data(), sdm.get_headers()
+    assert output_headers == expected_headers
+    assert output_data == expected_data
+    # Concat list in place using inplace=True
+    sdm = SQLDataModel(base_sdm.data(), headers=base_sdm.get_headers()) # clone to avoid contaminating base for later tests
+    sdm.concat(other=other_list, inplace=True)
+    output_data, output_headers = sdm.data(), sdm.get_headers()    
+    assert output_headers == expected_headers
+    assert output_data == expected_data
+
+@pytest.mark.core
 def test_merge():
     left_headers = ["Name", "Age", "ID"]
     left_data = [        
@@ -984,4 +1016,4 @@ def test_table_styles():
         sdm.set_table_style(style=style)
         expected_repr = style_output_dict[style].strip('\n')
         output_repr = sdm.__repr__()
-        assert output_repr == expected_repr    
+        assert output_repr == expected_repr
