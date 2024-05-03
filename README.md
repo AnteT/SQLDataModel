@@ -450,7 +450,7 @@ from SQLDataModel import SQLDataModel
 sdm = SQLDataModel.from_markdown('Planets.MD')
 
 # Mercury and Venus are too hot, let's change their 'Flyable?' status
-sdm[:2,'Flyable?'] = 'False'
+sdm[:2, 'Flyable?'] = 'False'
 
 # Lets use a different table styling, like the one used by polars
 sdm.set_table_style('polars')
