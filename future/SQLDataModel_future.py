@@ -8168,6 +8168,79 @@ class SQLDataModel:
         else:
             return type(self)((*self.data(),*other), self.headers, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
 
+    def copy(self, data_only:bool=False) -> SQLDataModel:
+        """
+        Returns a deep copy of the current model as a new ``SQLDataModel``.
+
+        Parameters:
+            ``data_only`` (bool): If True, only the data is copied, otherwise display and styling parameters are included. Default is False.
+
+        Returns:
+            ``SQLDataModel``: A cloned copy from the original as a new ``SQLDataModel``.  
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Height']
+            data = [
+                ('John', 30, 175.3), 
+                ('Alice', 28, 162.0), 
+                ('Travis', 35, 185.8)
+            ]    
+
+            # Create the original model with list styling
+            sdm = SQLDataModel(data, headers, table_style='list')
+
+            # Create two copies, one full and one with data only
+            copy_full = sdm.copy()
+            copy_data = sdm.copy(data_only=True)
+
+            # View both copies
+            print(copy_full)
+            print(copy_data)   
+
+        This will output both copies, with ``copy_full`` including any styling parameters such as ``table_style='list'``:
+
+        ```shell
+               Name    Age   Height
+            -  ------  ---  -------
+            0  John     30   175.30
+            1  Alice    28   162.00
+            2  Travis   35   185.80
+        ```
+
+        With the output for ``copy_data`` containing only the original model's data:
+
+        ```shell
+            ┌───┬────────┬─────┬─────────┐
+            │   │ Name   │ Age │  Height │
+            ├───┼────────┼─────┼─────────┤
+            │ 0 │ John   │  30 │  175.30 │
+            │ 1 │ Alice  │  28 │  162.00 │
+            │ 2 │ Travis │  35 │  185.80 │
+            └───┴────────┴─────┴─────────┘
+        ```
+
+        Note:
+            - Model headers and dtypes are considered part of the model data and are included when ``data_only=True``.
+            - Default behavior, ``data_only=False``, includes the following additional display parameters:
+
+              - :py:attr:`SQLDataModel.display_max_rows`: The maximum number of rows to display.
+              - :py:attr:`SQLDataModel.min_column_width`: The minimum width of columns when displaying the model.
+              - :py:attr:`SQLDataModel.max_column_width`: The maximum width of columns when displaying the model.
+              - :py:attr:`SQLDataModel.column_alignment`: The alignment of columns ('left', 'center', 'right' or 'dynamic').
+              - :py:attr:`SQLDataModel.display_color`: The color to use when displaying the table, None by default.
+              - :py:attr:`SQLDataModel.display_index`: True if displaying index column, False otherwise.
+              - :py:attr:`SQLDataModel.display_float_precision`: The precision for displaying floating-point numbers.
+              - :py:attr:`SQLDataModel.table_style`: The table styling format to use for strng representations of the model.
+        """ 
+        if data_only:
+            return type(self)(self.data(index=True), headers=[self.sql_idx, *self.headers], dtypes=self.dtypes)
+        else:
+            return type(self)(self.data(index=True), headers=[self.sql_idx, *self.headers], dtypes=self.dtypes, **self._get_display_args())   
+
     def count(self) -> SQLDataModel:
         """
         Returns a new ``SQLDataModel`` containing the counts of non-null values for each column in a row-wise orientation.
@@ -10984,8 +11057,8 @@ class SQLDataModel:
             - :py:attr:`SQLDataModel.display_max_rows`: The maximum number of rows to display.
             - :py:attr:`SQLDataModel.min_column_width`: The minimum width of columns when displaying the model.
             - :py:attr:`SQLDataModel.max_column_width`: The maximum width of columns when displaying the model.
-            - :py:attr:`SQLDataModel.column_alignment`: The alignment of columns ('left', 'center', or 'right').
-            - :py:attr:`SQLDataModel.display_color`: True if color formatting is enabled, False otherwise.
+            - :py:attr:`SQLDataModel.column_alignment`: The alignment of columns ('left', 'center', 'right' or 'dynamic').
+            - :py:attr:`SQLDataModel.display_color`: The color to use when displaying the table, None by default.
             - :py:attr:`SQLDataModel.display_index`: True if displaying index column, False otherwise.
             - :py:attr:`SQLDataModel.display_float_precision`: The precision for displaying floating-point numbers.
             - :py:attr:`SQLDataModel.table_style`: The table styling format to use for strng representations of the model.
