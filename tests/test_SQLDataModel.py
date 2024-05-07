@@ -250,6 +250,27 @@ def test_replace():
         assert input_target == output_target    
 
 @pytest.mark.core
+def test_strip():
+    input_data = [[f" A_{i}", f" B_{i}", f" C_{i}"] for i in range(1,4)]
+    expected_output = [tuple(x.strip() for x in row) for row in input_data]
+    # Test stripping whitespace and returning new model
+    sdm = SQLDataModel(input_data)
+    output_data = sdm.strip(characters=None,inplace=False).data()
+    # Test stripping whitespace inplace
+    assert output_data == expected_output
+    sdm.strip(characters=None,inplace=True)
+    output_data = sdm.data()
+    assert output_data == expected_output
+    # Test stripping different characters and returning as new (now modified from first test)
+    expected_output = [tuple(x.strip().strip('_2') for x in row) for row in input_data]
+    output_data = sdm.strip('_2', inplace=False).data()
+    assert output_data == expected_output
+    # Test stripping different characters inplace
+    sdm.strip('_2', inplace=True)
+    output_data = sdm.data()
+    assert output_data == expected_output    
+
+@pytest.mark.core
 def test_repr():
     ### test data type appearance ###
     input_headers = ['string', 'integer', 'float', 'bool', 'datetime']
