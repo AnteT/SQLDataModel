@@ -8641,7 +8641,7 @@ class SQLDataModel:
             # View stacked model
             print(sdm_ab)
 
-        This will output the result of stacking B onto A, using the each model's headers and dtypes:    
+        This will output the result of stacking B onto A, using each model's headers and dtypes:    
 
         ```shell
             ┌─────┬─────┬─────┬─────┐
@@ -8681,7 +8681,7 @@ class SQLDataModel:
         Note:
             - Model dimensions will be truncated or padded to coerce compatible dimensions when stacking, use :meth:`SQLDataModel.merge()` for strict SQL joins instead of hstack.
             - Headers and data types are inherited from all the models being stacked, this requires aliasing duplicate column names if present, see :meth:`SQLDataModel.alias_duplicates()` for aliasing rules.
-            - Use ``setitem`` syntax such as ``sdm['New Column'] = values`` to create new columns directly into the currently model instead of stacking or see :meth:`SQLDataModel.add_column_with_values()` for convenience method accomplishing the same.
+            - Use ``setitem`` syntax such as ``sdm['New Column'] = values`` to create new columns directly into the current model instead of stacking or see :meth:`SQLDataModel.add_column_with_values()` for convenience method accomplishing the same.
             - See :meth:`SQLDataModel.vstack()` for vertical stacking.
         """
         other = list(other[0]) if len(other) == 1 and isinstance(other[0], (list,tuple)) else list(other)

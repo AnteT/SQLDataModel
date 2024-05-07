@@ -40,7 +40,7 @@ Now we have a planetary bucket list in `Planets.MD`:
 | Uranus  |    0.89 |    27 | True     |
 ```
 
-Made for those times when you just want to use raw SQL on your dataframe, or need to move data around but the full Pandas, Numpy, SQLAlchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like using plan SQL on your `DataFrame` and pretty printing your table, at _1/1000_ the size, 0.03MB vs 30MB
+Made for those times when you just want to use raw SQL on your dataframe, or need to move data around but the full Pandas, Numpy, SQLAlchemy installation is just overkill. SQLDataModel includes all the most commonly used features, including additional ones like using plain SQL on your `DataFrame` and pretty printing your table, at _1/1000_ the size, 0.03MB vs 30MB
 
 ---
 
