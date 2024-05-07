@@ -9438,6 +9438,126 @@ class SQLDataModel:
         sort_stmt = " ".join(("select",headers_str,f'from "{self.sql_model}" order by {sort_by_str}'))
         return self.execute_fetch(sort_stmt)
 
+    def strip(self, characters:str=None, str_dtype_only:bool=True, inplace:bool=False) -> SQLDataModel|None:
+        """
+        Removes the specified characters from the beginning and end of each value in the current ``SQLDataModel`` removing leading and trailing whitespace characters by default.
+
+        Parameters:
+            ``characters`` (str, optional): The characters to remove from both ends of the value. Default is None, removing whitespace (``' '``, ``'\\t'``, ``'\\n'``, ``'\\r'``).
+            ``str_dtype_only`` (bool, optional): If True, only columns with dtype = 'str' are stripped, otherwise all columns are stripped. Default is True.
+            ``inplace`` (bool, optional): If True, modifies the current SQLDataModel instance in-place. Default is False.
+        
+        Raises:
+            ``TypeError``: If ``characters`` argument is provided and is not of type ``'str'`` representing unordered characters to remove.
+
+        Returns:
+            ``SQLDataModel``: If ``inplace=False``, returns a new SQLDataModel with the stripped values. Otherwise modifies the current instance in-place returning None.
+
+        Example::
+            
+            from SQLDataModel import SQLDataModel
+
+            # Create a single item model
+            sdm = SQLDataModel([[' Hello, World! ']])
+
+            # Strip whitespace and print
+            print(sdm.strip())
+
+        This will output the model after stripping the leading and trailing whitespace characters:
+
+        ```shell
+            ┌───┬───────────────┐
+            │   │ 0             │
+            ├───┼───────────────┤
+            │ 0 │ Hello, World! │
+            └───┴───────────────┘
+            [1 rows x 1 columns]
+        ```
+
+        Non-whitespace characters can also be stripped:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            headers = ['Col A', 'Col B', 'Col C']
+            data = [
+                ['A1', 'B1', 'C1'],
+                ['A2', 'B2', 'C2'],
+                ['A3', 'B3', 'C3']
+            ]
+
+            # Create the sample model
+            sdm = SQLDataModel(data, headers)
+
+            # Strip leading and trailing 'A' character
+            sdm_stripped = sdm.strip('A')
+
+            # View result
+            print(sdm_stripped)
+        ```
+
+        This will output a new model where any leading and trailing 'A' characters have been removed:
+
+        ```shell
+            ┌───────┬───────┬───────┐
+            │ Col A │ Col B │ Col C │
+            ├───────┼───────┼───────┤
+            │ 1     │ B1    │ C1    │
+            │ 2     │ B2    │ C2    │
+            │ 3     │ B3    │ C3    │
+            └───────┴───────┴───────┘
+            [3 rows x 3 columns]
+        ```
+
+        Multiple characters can be stripped, and the model modified inplace:
+
+        ```python
+            # Strip multiple characters and this time modify model inplace
+            sdm.strip('123', inplace=True)
+
+            # View result
+            print(sdm)
+        ```
+        
+        This will output the modified model after stripping leading and trailing '123' characters:
+
+        ```shell
+            ┌───────┬───────┬───────┐
+            │ Col A │ Col B │ Col C │
+            ├───────┼───────┼───────┤
+            │ A     │ B     │ C     │
+            │ A     │ B     │ C     │
+            │ A     │ B     │ C     │
+            └───────┴───────┴───────┘
+            [3 rows x 3 columns]
+        ```
+
+        Note:
+            - For string replacement instead of string removal, see :meth:`SQLDataModel.replace()`.
+            - When using ``str_dtype_only = False``, numeric values may be modified due to SQLite's type affinity rules.
+            - This method is equivalent to the SQLite ``trim(string, character)`` function, wrapping and passing the equivalent arguments.
+        """
+        if characters is None:
+            trim_arg = """"""
+        else:
+            if not isinstance(characters, str):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(characters).__name__}', argument for `characters` must be of type 'str' representing an unordered set of characters to remove")
+                )
+            trim_arg = f""",'{characters}'"""
+        if inplace:
+            trim_cols = ",".join([f""" "{col}"=trim("{col}" {trim_arg}) """ for col in self.headers if self.dtypes[col] == 'str']) if str_dtype_only else ",".join([f""" "{col}"=trim("{col}" {trim_arg}) """ for col in self.headers])
+            trim_stmt = " ".join((f"""update "{self.sql_model}" set""", trim_cols))
+            self.sql_db_conn.execute(trim_stmt)
+            return
+        else:
+            if str_dtype_only:
+                trim_cols = ",".join([f""" trim("{col}" {trim_arg}) as "{col}" """ if self.dtypes[col] == 'str' else f""" "{col}" as "{col}" """ for col in self.headers])
+            else:
+                trim_cols = ",".join([f""" trim("{col}" {trim_arg}) as "{col}" """ for col in self.headers])
+            trim_stmt = " ".join(("select", trim_cols, f'from "{self.sql_model}"'))
+            return self.execute_fetch(trim_stmt)
+
     def tail(self, n_rows:int=5) -> SQLDataModel:
         """
         Returns the last ``n_rows`` of the current ``SQLDataModel``.
@@ -10064,7 +10184,7 @@ class SQLDataModel:
      
     def execute_fetch(self, sql_query:str, sql_params:tuple=None, **kwargs) -> SQLDataModel:
         """
-        Returns a new ``SQLDataModel`` object after executing the provided SQL query using the current ``SQLDataModel``. 
+        Returns a new ``SQLDataModel`` object, including display and style properties, after executing the provided SQL query using the current ``SQLDataModel``. 
         This method is called by other methods which expect results to be returned from their execution.
 
         Parameters:
@@ -10094,6 +10214,9 @@ class SQLDataModel:
         Important:
             - The default table name is ``'sdm'``, or you can use :meth:`SQLDataModel.get_model_name()` to view the current model alias.
             - This function is the primary method used by ``SQLDataModel`` methods that are expected to return a new instance.
+
+        Note:
+            - Display properties such as float precision, index column or table styling are also passed to the new instance when not provided in ``kwargs``.
         """
         try:
             res = self.sql_db_conn.execute(sql_query) if sql_params is None else self.sql_db_conn.execute(sql_query, sql_params) 
