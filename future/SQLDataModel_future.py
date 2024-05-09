@@ -4340,17 +4340,18 @@ class SQLDataModel:
 ############################################## conversion methods ##############################################
 ################################################################################################################
 
-    def data(self, index:bool=False, include_headers:bool=False) -> list[tuple]:
+    def data(self, index:bool=False, include_headers:bool=False, strict_2d:bool=False) -> list[tuple]:
         """
-        Returns the ``SQLDataModel`` data as a list of tuples for multiple rows or as a single tuple for individual rows. 
-        Data is returned without index and headers by default. Use ``include_headers=True`` or ``index=True`` to modify.
+        Returns the ``SQLDataModel`` data as a list of tuples for multiple rows, a single tuple for individual rows, as a single item for individual cells. 
+        Data is returned without index and headers by default, use ``include_headers=True`` or ``index=True`` to modify.
 
         Parameters:
             ``index`` (bool, optional): If True, includes the index in the result; if False, excludes the index. Default is False.
             ``include_headers`` (bool, optional): If True, includes column headers in the result; if False, excludes headers. Default is False.
+            ``strict_2d`` (bool, optional): If True, returns data as a 2-dimensional list of tuples regardless of data dimension. Default is False.
 
         Returns:
-            ``list``: The list of tuples representing the SQLDataModel data.
+            ``list[tuple]``: The data currently stored in the model as a list of tuples.
 
         Example::
 
@@ -4393,7 +4394,7 @@ class SQLDataModel:
             print(row_data)
         ```
 
-        This will output:
+        This will output the row as a tuple of values:
 
         ```text
             ('John', 30, 175.3)
@@ -4409,7 +4410,7 @@ class SQLDataModel:
             print(col_data)
         ```
 
-        This will output:
+        This will output the column values as a list of tuples:
 
         ```text        
             [('John',), ('Alice',), ('Travis',)]
@@ -4418,18 +4419,22 @@ class SQLDataModel:
         Change Log:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            
+            - Version 0.4.4 (2024-05-09):
+                - Added ``strict_2d`` parameter to allow predictable return type regardless of data dimension.
 
         Note:
             - Many other ``SQLDataModel`` methods rely on this method, changing it will lead to undefined behavior.
             - See related :meth:`SQLDataModel.from_data()` for creating a new ``SQLDataModel`` from existing data sources.
-
+            - Use ``strict_2d = True`` to always return data as a list of tuples regardless of data dimension.
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index))
         data = res.fetchall()
-        if (len(data) == 1) and (not include_headers): # if only single row
-            data = data[0]
-        if len(data) == 1: # if only single cell
-            data = data[0]
+        if not strict_2d:
+            if (len(data) == 1) and (not include_headers): # if only single row
+                data = data[0]
+                if len(data) == 1: # if only single cell
+                    data = data[0]
         return [tuple(x[0] for x in res.description),*data] if include_headers else data
 
     def to_csv(self, filename:str=None, delimiter:str=',', quotechar:str='"', lineterminator:str='\r\n', na_rep:str='None', index:bool=False, **kwargs) -> str|None:
@@ -8700,7 +8705,7 @@ class SQLDataModel:
             )
         other_headers, other_dtypes = zip(*[(col[0], col[1]) for sdm in other for col in sdm.dtypes.items()])
         other_headers, other_dtypes = list(SQLDataModel.alias_duplicates([*self.headers,*other_headers])), [*self.dtypes.values(), *other_dtypes]
-        other_data = [(sdm[:self.row_count].data() if sdm.row_count > 1 else [sdm[:self.row_count].data()]) + [tuple(None for _ in range(sdm.column_count)) for _ in range(self.row_count - sdm.row_count)] for sdm in other]
+        other_data = [(sdm[:self.row_count].data(strict_2d=True)) + [tuple(None for _ in range(sdm.column_count)) for _ in range(self.row_count - sdm.row_count)] for sdm in other]
         other_data = [tuple(item for sublist in row for item in sublist) for row in list(zip(*other_data))]
         if inplace:
             other_headers = other_headers[self.column_count:] # since in place remove current model's headers
@@ -8721,7 +8726,7 @@ class SQLDataModel:
             self._update_model_metadata()
             return
         else:
-            other_data = [(t1 + t2) for t1, t2 in zip(self.data(index=False, include_headers=False), other_data)]
+            other_data = [(t1 + t2) for t1, t2 in zip(self.data(index=False, include_headers=False, strict_2d=True), other_data)]
             dtype_dict = dict(zip(other_headers, other_dtypes))
             return type(self)(data=other_data, headers=other_headers, dtypes=dtype_dict, **self._get_display_args())
 
@@ -9754,7 +9759,7 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type encountered in '{[type(other[n]).__name__ for n in other]}', arguments for `other` must all be of type 'SQLDataModel' to vertically stack")
             )
-        other_data = [[cell for cell in sublist] + [None] * (self.column_count - len(sublist)) for sublist in [item for sublist in [sdm[:,:self.column_count].data(index=False,include_headers=False) for sdm in other] for item in sublist]]
+        other_data = [[cell for cell in sublist] + [None] * (self.column_count - len(sublist)) for sublist in [item for sublist in [sdm[:,:self.column_count].data(index=False, include_headers=False, strict_2d=True) for sdm in other] for item in sublist]]
         if inplace:
             sql_insert_stmt = f"""insert into "{self.sql_model}" ({','.join([f'"{col}"' for col in self.headers])}) values ({",".join([SQLDataModel.sqlite_cast_type_format(dtype=self.header_master[col][1], as_binding=True) for col in self.headers])})"""
             try:
@@ -9768,7 +9773,7 @@ class SQLDataModel:
             self._update_model_metadata(update_row_meta=True)
             return
         else:
-            other_data = (*self.data(index=False, include_headers=False),*other_data)
+            other_data = (*self.data(index=False, include_headers=False, strict_2d=True),*other_data)
             return type(self)(data=other_data, headers=self.headers, dtypes=self.dtypes, **self._get_display_args())
 
     def where(self, predicate:str) -> SQLDataModel:
