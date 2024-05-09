@@ -7533,7 +7533,7 @@ class SQLDataModel:
             raise IndexError(
                 SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None 
-        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,index=False) # toggle to retain prior indicies after getitem slicing
+        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,index=True) # toggle to retain prior indicies after getitem slicing
         return self.execute_fetch(sql_stmt_generated)
 
     def __setitem__(self, target_indicies, update_values) -> None:
@@ -8044,15 +8044,20 @@ class SQLDataModel:
         vertical_truncation_required = display_max_rows < self.row_count
         max_display_rows = display_max_rows if vertical_truncation_required else self.row_count # max rows to display in repr
         split_row = max_display_rows // 2
-        check_width_top, check_width_bottom = self.indicies[split_row], self.indicies[-split_row]
-        check_width_top, check_width_bottom = (check_width_bottom, check_width_top) if check_width_top > check_width_bottom else (check_width_top, check_width_bottom)
+        if vertical_truncation_required:
+            check_width_top, check_width_bottom = self.indicies[split_row], self.indicies[-split_row]
+            check_width_top, check_width_bottom = (check_width_bottom, check_width_top) if check_width_top > check_width_bottom else (check_width_top, check_width_bottom)
+            check_width_scope = f'where ("{self.sql_idx}" < {check_width_top} or "{self.sql_idx}" >= {check_width_bottom})'
+        else:
+            check_width_scope = ''
         display_index = self.display_index
         column_alignment = None if self.column_alignment == 'dynamic' else '<' if self.column_alignment == 'left' else '^' if self.column_alignment == 'center' else '>' if self.column_alignment == 'right' else None
         display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         # header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" < {check_width_top} or "{self.sql_idx}" >= {check_width_bottom}) order by "{self.sql_idx}" asc limit {max_display_rows})'))
+        # headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" < {check_width_top} or "{self.sql_idx}" >= {check_width_bottom}) order by "{self.sql_idx}" asc limit {max_display_rows})'))
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" {check_width_scope} order by "{self.sql_idx}" asc limit {max_display_rows})'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{self.min_column_width}),{self.max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -8117,6 +8122,7 @@ class SQLDataModel:
         table_repr = "".join([table_repr, table_low_bar])
         table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
         table_repr = "".join([table_repr, table_caption])
+        return table_repr if self.display_color is None else self.display_color.wrap(table_repr) 
         return table_repr if self.display_color is None else self.display_color.wrap(table_repr)
     
 ##################################################################################################################

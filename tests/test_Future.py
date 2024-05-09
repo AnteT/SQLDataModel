@@ -683,6 +683,30 @@ def test_copy(sample_data):
     assert sdm_original._get_display_args() != sdm_copy_data._get_display_args()
     
 @pytest.mark.core
+def test_to_list(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    input_data = [list(row) for row in input_data]
+    sdm = SQLDataModel(input_data, input_headers)
+    ### all data: index=False, include_headers=False ###
+    output_data = sdm.to_list(include_headers=False, index=False)
+    assert output_data == input_data
+    ### all data: index=False, include_headers=True ###
+    output_data = sdm.to_list(include_headers=True, index=False)
+    output_headers, output_data = output_data[0], output_data[1:]
+    assert output_headers == input_headers
+    assert output_data == input_data
+    ### test each row ###
+    for rid, row in enumerate(input_data):
+        expected_output = [rid, *row]
+        output_data = sdm[rid].to_list(index=True) # IMPORTANT: __getitem__ must be set to retain row index for this to work
+        assert output_data == expected_output
+    ### test each column ###
+    for cid in range(len(input_headers)):
+        expected_output = [row[cid] for row in input_data]
+        output_data = sdm[:,cid].to_list(include_headers=False, index=False)
+        assert output_data == expected_output    
+
+@pytest.mark.core
 def test_merge():
     left_headers = ["Name", "Age", "ID"]
     left_data = [        
