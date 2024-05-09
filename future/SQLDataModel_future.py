@@ -4420,7 +4420,7 @@ class SQLDataModel:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
             
-            - Version 0.4.4 (2024-05-09):
+            - Version 0.5.0 (2024-05-09):
                 - Added ``strict_2d`` parameter to allow predictable return type regardless of data dimension.
 
         Note:
@@ -5258,7 +5258,7 @@ class SQLDataModel:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
             
-            - Version 0.4.4 (2024-05-09):
+            - Version 0.5.0 (2024-05-09):
                 - Modified behavior to output 1-dimensional list when possible and a list of lists when not possible.
                 - Changed default to ``index = False`` to increase surface for 1-dimensional flattening.
         
@@ -7515,9 +7515,13 @@ class SQLDataModel:
             # Retrieve a single column by name
             subset_model = sdm["first_name"]
         
+        Change Log:
+            - Version 0.5.0 (2024-05-09):
+                - Modified index retention behavior to pass through row indicies and avoid resetting view order.
+
         Note:
             - The ``slc`` parameter can be an integer, a tuple of disconnected row indices, a slice representing a range of rows, a string or list of strings representing column names, or a tuple combining row and column indices.
-            - The returned SQLDataModel instance will contain the specified subset of rows and columns.
+            - The returned SQLDataModel instance will contain the specified subset of rows and columns, retaining the row indicies of the original view.
         """         
         try:
             validated_rows, validated_columns = self.validate_indicies(target_indicies)
@@ -7533,7 +7537,7 @@ class SQLDataModel:
             raise IndexError(
                 SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None 
-        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,index=True) # toggle to retain prior indicies after getitem slicing
+        sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,index=True) # NOTE: toggle to retain prior indicies after getitem slicing, changed in version 0.5.0 to True
         return self.execute_fetch(sql_stmt_generated)
 
     def __setitem__(self, target_indicies, update_values) -> None:

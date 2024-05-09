@@ -681,7 +681,25 @@ def test_copy(sample_data):
     sdm_copy_data = sdm_original.copy(data_only=True)  
     assert sdm_original.data(index=True,include_headers=True) == sdm_copy_data.data(index=True,include_headers=True)
     assert sdm_original._get_display_args() != sdm_copy_data._get_display_args()
-    
+
+@pytest.mark.core    
+def test_head(sample_data):
+    n_value = 24
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel(input_data, headers=input_headers)
+    expected_output = input_data[:n_value]
+    output_data = sdm.head(n_rows=n_value).data()
+    assert output_data == expected_output
+
+@pytest.mark.core
+def test_tail(sample_data):
+    n_value = 24
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel(input_data, headers=input_headers)
+    expected_output = input_data[-n_value:]
+    output_data = sdm.tail(n_rows=n_value).data()
+    assert output_data == expected_output    
+
 @pytest.mark.core
 def test_to_list(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]

@@ -681,7 +681,49 @@ def test_copy(sample_data):
     sdm_copy_data = sdm_original.copy(data_only=True)  
     assert sdm_original.data(index=True,include_headers=True) == sdm_copy_data.data(index=True,include_headers=True)
     assert sdm_original._get_display_args() != sdm_copy_data._get_display_args()
-    
+
+@pytest.mark.core    
+def test_head(sample_data):
+    n_value = 24
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel(input_data, headers=input_headers)
+    expected_output = input_data[:n_value]
+    output_data = sdm.head(n_rows=n_value).data()
+    assert output_data == expected_output
+
+@pytest.mark.core
+def test_tail(sample_data):
+    n_value = 24
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel(input_data, headers=input_headers)
+    expected_output = input_data[-n_value:]
+    output_data = sdm.tail(n_rows=n_value).data()
+    assert output_data == expected_output    
+
+@pytest.mark.core
+def test_to_list(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    input_data = [list(row) for row in input_data]
+    sdm = SQLDataModel(input_data, input_headers)
+    ### all data: index=False, include_headers=False ###
+    output_data = sdm.to_list(include_headers=False, index=False)
+    assert output_data == input_data
+    ### all data: index=False, include_headers=True ###
+    output_data = sdm.to_list(include_headers=True, index=False)
+    output_headers, output_data = output_data[0], output_data[1:]
+    assert output_headers == input_headers
+    assert output_data == input_data
+    ### test each row ###
+    for rid, row in enumerate(input_data):
+        expected_output = [rid, *row]
+        output_data = sdm[rid].to_list(index=True) # IMPORTANT: __getitem__ must be set to retain row index for this to work
+        assert output_data == expected_output
+    ### test each column ###
+    for cid in range(len(input_headers)):
+        expected_output = [row[cid] for row in input_data]
+        output_data = sdm[:,cid].to_list(include_headers=False, index=False)
+        assert output_data == expected_output    
+
 @pytest.mark.core
 def test_merge():
     left_headers = ["Name", "Age", "ID"]
