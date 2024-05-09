@@ -5178,54 +5178,105 @@ class SQLDataModel:
         else:
             return latex_repr 
 
-    def to_list(self, index:bool=True, include_headers:bool=False) -> list[tuple]:
+    def to_list(self, index:bool=False, include_headers:bool=False) -> list:
         """
-        Returns a list of tuples containing all the ``SQLDataModel`` data without the headers by default.
-        Use ``include_headers=True`` to return the headers as the first item in the returned sequence.
+        Returns the current ``SQLDataModel`` data as a 1-dimensional list of values if data dimensions are compatible with flattening, or as a list of lists if data is 2-dimensional.
+        Data is returned without index or headers by default, use ``index = True`` or ``include_headers = True`` to modify.
 
         Parameters:
-            ``index`` (bool, optional): If True, includes the index in the result, if False, excludes the index. Default is True.
+            ``index`` (bool, optional): If True, includes the index in the result, if False, excludes the index. Default is False.
             ``include_headers`` (bool, optional): If True, includes column headers in the result, if False, excludes headers. Default is False.
 
         Returns:
-            ``list``: The list of tuples representing the SQLDataModel data.
+            ``list``: The flattened list of values corresponding to the model data.
 
         Example::
             
             from SQLDataModel import SQLDataModel
 
-            # Output the data with indicies but without headers:
-            result_list = sdm.to_list(index=True, include_headers=False)
-
-            # Format of output:
-            output_list = [
-                (0, 'john', 'smith', 27)
-                ,(1, 'sarah', 'west', 29)
-                ,(2, 'patrick', 'mcdouglas', 42)
+            # Sample data
+            headers = ['Name', 'Age', 'Height']
+            data = [
+                ('Beth', 27, 172.4),
+                ('John', 30, 175.3), 
+                ('Alice', 28, 162.0), 
+                ('Travis', 35, 185.8)
             ]
 
-            # Output the data without indicies and with headers:
-            result_list = sdm.to_list(index=False, include_headers=True)
+            # Create the model
+            sdm = SQLDataModel(data, headers)    
+            
+            # Get all model data as a list of lists
+            model_data = sdm.to_list()
 
-            # View results
-            for row in result_list:
+            # Iterate over each row
+            for row in model_data:
                 print(row)
-        
+
         This will output:
 
         ```text
-            ('first', 'last', 'age')
-            ('john', 'smith', 27)
-            ('sarah', 'west', 29)
-            ('patrick', 'mcdouglas', 42)            
+            ['Beth', 27, 172.4]
+            ['John', 30, 175.3]
+            ['Alice', 28, 162.0]
+            ['Travis', 35, 185.8]
         ```
-        
+
+        Data will be flattened into a single dimension if possible, such as when accessing individual columns:
+
+        ```python
+            # Get 'Name' column as a list
+            col_data = sdm['Name'].to_list()
+
+            # View output
+            print(col_data)
+        ```
+
+        This will output a list containing the values from each row for the column:
+
+        ```text
+            ['Beth', 'John', 'Alice', 'Travis']
+        ```
+
+        Data will also be flattened when accessing individual rows:
+
+        ```python
+            # Get first row as a list with index
+            row_data = sdm[0].to_list(index=True)
+            
+            # View result
+            print(row_data)
+        ```
+
+        This will output the row's values including the index:
+
+        ```text
+            [0, 'Beth', 27, 172.4]
+        ```
+
         Change Log:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            
+            - Version 0.4.4 (2024-05-09):
+                - Modified behavior to output 1-dimensional list when possible and a list of lists when not possible.
+                - Changed default to ``index = False`` to increase surface for 1-dimensional flattening.
+        
+        Note:
+            - See :meth:`SQLDataModel.data()` to return the equivalent of ``cursor.fetchall()`` with data as a list of tuples.
+            - See :meth:`SQLDataModel.iter_rows()` to generate an iterable over the model data, which is preferred wherever possible.
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index))
-        return [tuple([x[0] for x in res.description]),*res.fetchall()] if include_headers else res.fetchall()
+        data = res.fetchall()
+        if len(data) <= 1 and not include_headers:
+            return list(data[0])
+        else:
+            if len(data[0]) == 1:
+                data = list(row[0] for row in data)
+                return [res.description[0][0],*data] if include_headers else data
+            else:
+                data = [list(row) for row in data]
+                return [[x[0] for x in res.description],*data] if include_headers else data
     
     def to_markdown(self, filename:str=None, index:bool=False, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None) -> str|None:
         """
