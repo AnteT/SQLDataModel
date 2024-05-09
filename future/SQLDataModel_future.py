@@ -1395,9 +1395,11 @@ class SQLDataModel:
         Retrieves the current value of the ``display_max_rows`` property, which determines the maximum rows displayed for ``SQLDataModel``.
 
         Returns:
-            ``int`` or ``None``: The current value of the 'display_max_rows' property.
+            ``int`` or ``None``: The current value set on :py:attr:`SQLDataModel.display_max_rows`.
 
         Example::
+
+            from SQLDataModel import SQLDataModel
 
             # Create model
             sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
@@ -1405,18 +1407,18 @@ class SQLDataModel:
             # Get current value
             display_max_rows = sdm.get_display_max_rows()
 
-            # By default any display will be limited to 1000 rows max
-            print(display_max_rows) # 1000
+            # By default rows will be limited by current terminal height
+            print(display_max_rows) # None
         
         Note:
             - This does not affect the actual number of rows in the model, only the maximum **displayed**.
+            - Use :meth:`SQLDataModel.set_display_max_rows()` to explicitely set a max row limit instead of using terminal height.
         """
         return self.display_max_rows
     
     def set_display_max_rows(self, rows:int|None) -> None:
         """
-        Set ``display_max_rows`` to limit rows displayed when ``repr`` or ``print`` is called, or set to ``None`` for ``display_max_rows`` to be derived from current terminal height. Using this option will create a table that fits within the dimensions of the current terminal such that the table headers occupy the top-most row with the table caption occupying the lower-most.
-        Modifying this attribute does not change the actual number of rows stored in ``SQLDataModel``, only the number of rows displayed.
+        Sets value at :py:attr:`SQLDataModel.display_max_rows` to limit maximum rows displayed when ``repr`` or ``print`` is called. Use ``rows = None`` to derive max number to display from the current terminal height.
 
         Parameters:
             ``rows`` (int): The maximum number of rows to display.
@@ -1442,8 +1444,7 @@ class SQLDataModel:
             sdm.set_display_max_rows(None)
         
         Note:
-            - This does not affect the actual number of rows in the model, only the maximum **displayed**.
-
+            - Modifying :py:attr:`SQLDataModel.display_max_rows` does not affect the actual number of rows in the model, only the maximum rows **displayed**.
         """
         if not isinstance(rows, (int,type(None))):
             raise TypeError(
@@ -7853,16 +7854,10 @@ class SQLDataModel:
 
     def __repr__(self) -> str:
         """
-        Returns a formatted string representation of the SQLDataModel instance.
+        Returns a pretty printed string representation of ``SQLDataModel`` formatted to the current terminal size.
 
         Returns:
-            ``str``: The string representation of the SQLDataModel instance with tabular formatting.
-
-        Formatting:
-            - Default alignment is right-aligned for numeric types and left-aligned for remaining types
-            - To override default and set custom alignment, use :meth:`SQLDataModel.set_column_alignment()` method
-            - Max displayed rows set to ``1000`` by default, use :meth:`SQLDataModel.set_display_max_rows()` to modify
-            - Set table color using :meth:`SQLDataModel.set_display_color()` method
+            ``str``: The string representation of the SQLDataModel instance output using display and format values set on instance.
 
         Example::
 
@@ -7883,7 +7878,7 @@ class SQLDataModel:
             # Display the string representation
             print(sdm)
 
-        This will output:
+        This will output the default alignment, dynamically aligning columns based on their dtype, right-aligned for numeric, left otherwise:
 
         ```shell
             ┌───┬────────┬─────────┬────────┐
@@ -7896,6 +7891,9 @@ class SQLDataModel:
             └───┴────────┴─────────┴────────┘  
             [4 rows x 3 columns]      
         ```
+
+        Using ``'left'`` column alignment:
+
         ```python        
             # Using left alignment instead
             sdm.set_column_alignment("left")
@@ -7917,6 +7915,9 @@ class SQLDataModel:
             └───┴────────┴─────────┴────────┘
             [4 rows x 3 columns]
         ```
+        
+        Using ``'center'`` column alignment:
+
         ```python        
             # Using center alignment instead
             sdm.set_column_alignment("center")
@@ -7938,6 +7939,9 @@ class SQLDataModel:
             └───┴────────┴─────────┴────────┘
             [4 rows x 3 columns]
         ```
+
+        Using ``'right'`` column alignment:
+
         ```python        
             # Using right alignment instead
             sdm.set_column_alignment("right")
@@ -7961,10 +7965,11 @@ class SQLDataModel:
         ```
 
         Note:
-            - The representation includes a truncated table view of the SQLDataModel.
-            - The output adjusts column widths dynamically and provides ellipses if the table is truncated.
-            - The number of displayed rows is limited to either the row count or the specified maximum rows.
-            - The output includes column headers, row data, and information about the total number of rows and columns.
+            - Use :meth:`SQLDataModel.set_display_max_rows()` to explicitly set vertical height and modify vertical truncation behavior, which uses current terminal height by default.
+            - Use :meth:`SQLDataModel.set_min_column_width()` and :meth:`SQLDataModel.set_max_column_width()` to adjust column widths and modify horizontal truncation behavior.
+            - Use :meth:`SQLDataModel.set_column_alignment()` to modify column alignment, available options are dynamic alignment based on dtype, left, center or right alignment.
+            - Use :meth:`SQLDataModel.set_display_color()` to modify the table color, by default no color is applied with characters drawn using platform specific settings.
+            - Use :meth:`SQLDataModel.set_table_style()` to modify the table style format and box characters used to draw the table.
         """         
         table_format = self._generate_table_style()
         top_lh, top_hbar, top_sep, top_rh = table_format[0]
@@ -7985,13 +7990,15 @@ class SQLDataModel:
         split_row = max_display_rows // 2
         check_width_top = 6 # resolves to 13 rows to ceck from, 7 off top 6 off bottom
         check_width_bottom = (self.row_count-1) - check_width_top
+        check_width_top, check_width_bottom = self.indicies[split_row], self.indicies[-split_row]
+        check_width_top, check_width_bottom = (check_width_bottom, check_width_top) if check_width_top > check_width_bottom else (check_width_top, check_width_bottom)
         display_index = self.display_index
         column_alignment = None if self.column_alignment == 'dynamic' else '<' if self.column_alignment == 'left' else '^' if self.column_alignment == 'center' else '>' if self.column_alignment == 'right' else None
         display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         # header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit 13)'))
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" <= {check_width_top} or "{self.sql_idx}" > {check_width_bottom}) order by "{self.sql_idx}" asc limit {max_display_rows})'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{self.min_column_width}),{self.max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
