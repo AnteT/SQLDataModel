@@ -8685,6 +8685,7 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_rows).__name__}', argument for `n_rows` must be of type 'int' representing the number of rows to return from the head of the model")
             )
+        n_rows = min(self.row_count, max(1, n_rows))        
         row_indicies = self.indicies[:n_rows]
         return self.execute_fetch(self._generate_sql_stmt(rows=row_indicies))
                     

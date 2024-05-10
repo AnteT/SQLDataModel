@@ -774,6 +774,21 @@ def test_merge():
     assert joined_output == expected_output
 
 @pytest.mark.core
+def test_sort(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    none_col_skip_idx = 6 # skip nonetype column for sort test
+    sdm = SQLDataModel(input_data, headers=input_headers)
+    ### test ascending and descending sort order
+    sort_ordering = (True, False)
+    for sort_order in sort_ordering:
+        for j in range(len(input_data[0])):
+            if j == none_col_skip_idx:
+                continue
+            expected_output = sorted([row[j] for row in input_data], reverse=(not sort_order))
+            output_data = sdm.sort(by=j, asc=sort_order)[:,j].to_list()
+            assert output_data == expected_output
+
+@pytest.mark.core
 def test_astype():
     sdm = SQLDataModel([['1111-11-11']], headers=['Value'])
     astype_dict = {'bool':int, 'bytes':bytes,'date':datetime.date, 'datetime':datetime.datetime, 'float':float, 'int':int, 'None':str, 'str':str}
