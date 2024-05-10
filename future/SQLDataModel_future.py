@@ -4417,11 +4417,11 @@ class SQLDataModel:
         ```
 
         Change Log:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
-            
             - Version 0.5.0 (2024-05-09):
                 - Added ``strict_2d`` parameter to allow predictable return type regardless of data dimension.
+
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - Many other ``SQLDataModel`` methods rely on this method, changing it will lead to undefined behavior.
@@ -5255,12 +5255,12 @@ class SQLDataModel:
         ```
 
         Change Log:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
-            
             - Version 0.5.0 (2024-05-09):
                 - Modified behavior to output 1-dimensional list when possible and a list of lists when not possible.
                 - Changed default to ``index = False`` to increase surface for 1-dimensional flattening.
+                
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
         
         Note:
             - See :meth:`SQLDataModel.data()` to return the equivalent of ``cursor.fetchall()`` with data as a list of tuples.
@@ -8050,7 +8050,6 @@ class SQLDataModel:
         split_row = max_display_rows // 2
         if vertical_truncation_required:
             check_width_top, check_width_bottom = self.indicies[split_row], self.indicies[-split_row]
-            check_width_top, check_width_bottom = (check_width_bottom, check_width_top) if check_width_top > check_width_bottom else (check_width_top, check_width_bottom)
             check_width_scope = f'where ("{self.sql_idx}" < {check_width_top} or "{self.sql_idx}" >= {check_width_bottom})'
         else:
             check_width_scope = ''
@@ -8642,6 +8641,9 @@ class SQLDataModel:
         Parameters:
             ``n_rows`` (int, optional): Number of rows to return. Defaults to 5.
 
+        Raises:
+            ``TypeError``: If ``n_rows`` argument is not of type 'int' representing the number of rows to return from the head of the model.
+
         Returns:
             ``SQLDataModel``: A new ``SQLDataModel`` instance containing the specified number of rows.
 
@@ -8678,9 +8680,13 @@ class SQLDataModel:
 
         Note:
             - See related :meth:`SQLDataModel.tail()` for the opposite, grabbing the bottom ``n_rows`` from the current model.
-        
         """
-        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="asc"))
+        if not isinstance(n_rows, int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_rows).__name__}', argument for `n_rows` must be of type 'int' representing the number of rows to return from the head of the model")
+            )
+        row_indicies = self.indicies[:n_rows]
+        return self.execute_fetch(self._generate_sql_stmt(rows=row_indicies))
                     
     def hstack(self, *other:SQLDataModel, inplace:bool=False) -> SQLDataModel:
         """
@@ -9409,17 +9415,18 @@ class SQLDataModel:
         except:
             print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code"))
 
-    def sort(self, by:str|list[str]=None, asc:bool=True) -> SQLDataModel:
+    def sort(self, by:str|int|list=None, asc:bool=True) -> SQLDataModel:
         """
-        Sort columns in the dataset by the specified ordering. If no value is specified, the current ``sql_idx`` column is used with the default ordering ``asc = True``.
+        Sort columns in the dataset by the specified ordering. If no value is specified, the current :py:attr:`SQLDataModel.sql_idx` column is used with the default ordering ``asc = True``.
 
         Parameters:
-            ``by`` (str | list[str]): The column or list of columns by which to sort the dataset. Defaults to sorting by the dataset's index.
-            ``asc`` (bool): If True, sort in ascending order; if False, sort in descending order. Defaults to ascending order.
+            ``by`` (str | int | list, optional): The column or list of columns by which to sort the dataset. Defaults to sorting by the dataset's index.
+            ``asc`` (bool, optional): If True, sort in ascending order; if False, sort in descending order. Defaults to ascending order.
 
         Raises:
-            ``TypeError``: If value for ``by`` argument is not one of type 'str' or 'list'
+            ``TypeError``: If value for ``by`` argument is not one of type 'str', 'int' or 'list'.
             ``ValueError``: If a specified column in ``by`` is not found in the current dataset or is an invalid column.
+            ``IndexError``: If columns are indexed by integer but are outside of the current model range.
 
         Returns:
             ``SQLDataModel``: A new instance of SQLDataModel with columns sorted according to the specified ordering.
@@ -9460,6 +9467,7 @@ class SQLDataModel:
             └───┴───────┴─────────┴──────┴─────────┴────────────┘
             [5 rows x 5 columns]
         ```
+        
         Sort by multiple columns:
 
         ```python            
@@ -9485,21 +9493,37 @@ class SQLDataModel:
             [5 rows x 5 columns]
         ```
 
+        Change Log:
+            - Version 0.5.1 (2024-05-10):
+                - Modified to allow integer indexing for column sort order in ``by`` argument.
+
         Note:
             - Standard sorting process for ``sqlite3`` is used, whereby the ordering prefers the first column mentioned to the last.
             - Ascending and descending ordering follows this order of operations for multiple columns as well.
         """
         if by is not None:
-            if not isinstance(by, (str,list)):
+            if not isinstance(by, (str,int,list)):
                 raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(by).__name__}', `by` argument for `sort()` must be one of 'str', 'list'")
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(by).__name__}', `by` argument for `sort()` must be one of 'str', 'int' or 'list'")
                 )
-            if isinstance(by,str):
+            if isinstance(by, (int,str)):
                 by = [by]
-            for col in by:
-                if col not in self.headers:
+            for cid,col in enumerate(by):
+                if isinstance(col, int):
+                    try:
+                        by[cid] = self.headers[col]
+                    except IndexError:
+                        raise IndexError(
+                            SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{col}', integer indexing for `by` argument outside of current model range '0:{self.column_count}'")
+                        ) from None
+                elif isinstance(col, str):
+                    if col not in self.headers:
+                        raise ValueError(
+                            SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns required for `sort()`, use `get_headers()` to view current valid headers")
+                        )
+                else:
                     raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns required for `sort()`, use `get_headers()` to view current valid headers")
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', argument for `by` must be a valid column name or integer index")
                     )
         else:
             by = [self.sql_idx]
@@ -9636,6 +9660,9 @@ class SQLDataModel:
         Parameters:
             ``n_rows`` (int, optional): Number of rows to return. Defaults to 5.
 
+        Raises:
+            ``TypeError``: If ``n_rows`` argument is not of type 'int' representing the number of rows to return from the tail of the model.            
+            
         Returns:
             ``SQLDataModel``: A new ``SQLDataModel`` instance containing the specified number of rows.
 
@@ -9673,7 +9700,13 @@ class SQLDataModel:
             - See related :meth:`SQLDataModel.head()` for the opposite, grabbing the top ``n_rows`` from the current model.
 
         """
-        return self.execute_fetch(self._generate_unordered_sql_stmt(n_rows, ordering="desc"))
+        if not isinstance(n_rows, int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_rows).__name__}', argument for `n_rows` must be of type 'int' representing the number of rows to return from the tail of the model")
+            )
+        n_rows = min(self.row_count, max(1, n_rows))
+        row_indicies = self.indicies[-n_rows:]
+        return self.execute_fetch(self._generate_sql_stmt(rows=row_indicies))   
   
     def transpose(self, infer_types:bool=True, include_headers:bool=False) -> SQLDataModel:
         """
@@ -10903,7 +10936,7 @@ class SQLDataModel:
         if update_row_meta:
             self._update_indicies()
 
-    def _generate_sql_stmt(self, columns:list[str]=None, rows:int|slice|tuple=None, index:bool=True, na_rep:str=None) -> str:
+    def _generate_sql_stmt(self, columns:list[str]=None, rows:int|slice|tuple|str=None, index:bool=True, na_rep:str=None) -> str:
         """
         Generate an SQL statement for fetching specific columns and rows from the model, duplicate column references are aliased in order of appearance.
 
@@ -10917,6 +10950,9 @@ class SQLDataModel:
             ``str``: The generated SQL statement.   
         
         Change Log:
+            - Version 0.5.1 (2024-05-10):
+                - Modified to allow ``rows`` argument to be provided directly as a string predicate to bypass numeric range-based selections.
+
             - Version 0.4.0 (2024-04-23):
                 - Added ``nap_rep`` parameter to fill null or missing fields with provided value.
 
@@ -10940,42 +10976,13 @@ class SQLDataModel:
             row_selection_str = f"""where "{self.sql_idx}" >= {rows.start} and "{self.sql_idx}" < {rows.stop}"""
         elif isinstance(rows, tuple):
             row_selection_str = f"""where "{self.sql_idx}" in {f'{rows}' if len(rows) != 1 else f'({rows[0]})'}"""
+        elif isinstance(rows, str):
+            row_selection_str = rows
         else:
             row_selection_str = """"""
         order_by_str = f"""order by "{self.sql_idx}" asc"""
         fetch_stmt = f"""select {headers_selection_str} from "{self.sql_model}" {row_selection_str} {order_by_str}"""
         # print(f"final fetch_stmt generated:\n{fetch_stmt.replace("\\'","'")}")
-        return fetch_stmt
-    
-    def _generate_unordered_sql_stmt(self, n_rows:int=None, columns:list[str]=None, index:bool=True, ordering:Literal["asc","desc","random"]="asc") -> str:
-        """
-        Generates an SQL statement for fetching unordered rows from the SQLDataModel, used by :meth:`SQLDataModel.head()`, :meth:`SQLDataModel.tail()` and :meth:`SQLDataModel.sample()` methods to fetch specified number of rows.
-
-        Parameters:
-            ``n_rows`` (int): The number of rows to fetch. If ``None``, fetches all rows.
-            ``columns`` (list[str]): The list of columns to include in the SELECT statement. If ``None``, includes all columns.
-            ``index`` (bool): If True, includes the index column in the SELECT statement.
-            ``ordering`` (Literal["asc", "desc", "random"]): The ordering of the rows. Can be ``'asc'`` (ascending), ``'desc'`` (descending), or 'random'.
-
-        Returns:
-            ``str``: The SQL statement for fetching unordered rows with specified ordering and limit.
-        
-        Change Log:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
-
-        Note:
-            - No argument type validation or out of scope indexing checking occurs, inputs are assumed validated and no exceptions are raised by this method.
-        """
-        if n_rows is None:
-            n_rows = self.row_count
-        if columns is None:
-            columns = self.headers
-        if isinstance(columns,str):
-            columns = [columns]
-        columns_str = ",".join([f'"{col}"' for col in columns])
-        ordering_str = f"""order by "{self.sql_idx}" {ordering}""" if ordering in ("asc","desc") else "order by random()"
-        fetch_stmt = " ".join(("select",f'"{self.sql_idx}",' if index else '',columns_str,f'from "{self.sql_model}"', ordering_str, f"limit {n_rows}"))
         return fetch_stmt
 
     def _generate_table_style(self, style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round']=None) -> tuple[tuple[str]]:
