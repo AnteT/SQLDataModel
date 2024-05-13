@@ -560,7 +560,7 @@ Please make sure to update tests as appropriate.
 
 ### License
 
-[MIT](https://choosealicense.com/licenses/mit/)
+[MIT](https://github.com/AnteT/SQLDataModel/blob/master/LICENSE)
 
 
 Thank you!  

@@ -1,7 +1,7 @@
 /* Add any custom css to apply to the generated docs here, put this file in ./docs/source/_static dir */
 .wy-nav-content {
-    border: 3px solid #2980b9;
-    /* max-width: 1200px !important; */
+    /* border: 3px solid #2980b9; */
+    max-width: 1200px !important;
 }
 html {
     scrollbar-color: #2980b9 #2b2d2e;
