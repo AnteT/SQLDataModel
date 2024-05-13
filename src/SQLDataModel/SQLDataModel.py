@@ -10994,12 +10994,13 @@ class SQLDataModel:
         This will output:
 
         ```shell
-                {'first': ('TEXT', 'str', True, '<'),
-                 'last': ('TEXT', 'str', True, '<'),
-                 'age': ('INTEGER', 'int', True, '>'),
-                 'service_time': ('REAL', 'float', True, '>'),
-                 'idx': ('INTEGER', 'int', False, '>')}
+            {'first': ('TEXT', 'str', True, '<'),
+             'last': ('TEXT', 'str', True, '<'),
+             'age': ('INTEGER', 'int', True, '>'),
+             'service_time': ('REAL', 'float', True, '>'),
+             'idx': ('INTEGER', 'int', False, '>')}
         ```
+
         Example Attributes Modified:
 
         ```python
@@ -11030,7 +11031,10 @@ class SQLDataModel:
 
             # View difference
             print(f"cols before: {num_cols_before}, cols after: {num_cols_after}")
-        ```    
+        ```   
+
+        Note:
+            - This method is called after operations that may modify the current model's structure and require synchronization.
         """        
         fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
