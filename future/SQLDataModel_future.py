@@ -618,10 +618,10 @@ class SQLDataModel:
             
         This will output:
 
-            ```text
+        ```text
             Chunk: <table><tr><td>Table 1</td></tr></table>
             Chunk: <table><tr><td>Table 2</td></tr></table>
-            ```
+        ```
         
         Note:
             - HTML content before the first ``<table>`` element and after the last ``</table>`` element is ignored and not yielded.
@@ -11260,6 +11260,7 @@ class SQLDataModel:
             )
 
         Note:
+            - Used by :meth:`SQLDataModel.__setitem__()` to broadcast updates across row and column index ranges.
             - To create a new column, pass a single header item in a list to the ``columns_to_update`` parameter.
             - To copy an existing column, pass the corresponding data is a list of tuples to the ``values_to_update`` parameter.        
         """
