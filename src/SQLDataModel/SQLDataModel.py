@@ -1412,7 +1412,7 @@ class SQLDataModel:
         
         Note:
             - This does not affect the actual number of rows in the model, only the maximum **displayed**.
-            - Use :meth:`SQLDataModel.set_display_max_rows()` to explicitely set a max row limit instead of using terminal height.
+            - Use :meth:`SQLDataModel.set_display_max_rows()` to explicitly set a max row limit instead of using terminal height.
         """
         return self.display_max_rows
     
@@ -2330,6 +2330,13 @@ class SQLDataModel:
             └───┴─────┴─────┴─────┴─────┴─────┴─────┘
             [6 rows x 6 columns]
         ```
+
+        Change Log:
+            - Version 0.5.2 (2024-05-13):
+                - Added ``shape`` parameter in lieu of separate ``n_rows`` and ``n_cols`` arguments.
+                - Added ``fill`` parameter to populate resulting SQLDataModel with values to override type-specific initialization defaults.
+                - Added ``headers`` parameter to explicitly set column names when creating the SQLDataModel.
+                - Added ``**kwargs`` parameter to align more closely with usage patterns of other model initializing constructor methods.
 
         Note:
             - If both ``fill`` and ``dtype`` are provided, the data type will be derived from ``type(fill)`` overriding or ignoring the specified ``dtype``.
@@ -10866,6 +10873,10 @@ class SQLDataModel:
             └───┴─────────────┴────────┴──────────────┘
             [3 rows x 3 columns]
         ```
+
+        Change Log:
+            - Version 0.5.2 (2024-05-13):
+                - Modified ``row_index`` parameter to use :py:attr:`SQLDataModel.indicies` to index into rows in lieu of row index value equality.
 
         Important:
             - Indexing is done using zero-based integers and not done by index value. Most of the time this distinction is irrelevant as the row index at position '0' will have an index value of '0', however this can change after transformation operations like filter or sort. To reset and realign the index value use :meth:`SQLDataModel.reset_index()` or use :py:attr:`SQLDataModel.indicies` to view the current row indicies.
