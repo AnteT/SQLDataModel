@@ -2252,18 +2252,21 @@ class SQLDataModel:
 #############################################################################################################
 
     @classmethod
-    def from_shape(cls, n_rows:int, n_cols:int, dtype:Literal['bytes','datetime','float','int','str']=None) -> SQLDataModel:
+    def from_shape(cls, shape:tuple[int, int], fill:Any=None, headers:list[str]=None, dtype:Literal['bytes','date','datetime','float','int','str']=None, **kwargs) -> SQLDataModel:
         """
-        Returns an empty SQLDataModel of shape (`n_rows`, ``n_cols``) as a convenience method to quickly build a model through an iterative approach. 
-        By default, no particular ``dtype`` is assigned given the flexibility of sqlite3 when it comes to column datatypes, however one can be enforced in the schema be providing a valid datatype identifier to the ``dtype`` keyword argument.
+        Returns a SQLDataModel from shape ``(N rows, M columns)`` as a convenience method to quickly build a model through an iterative approach. 
+        By default, no particular data type is assigned given the flexibility of ``sqlite3``, however one can be inferred by providing an initial ``fill`` value or explicitly by providing the ``dtype`` argument.
 
         Parameters:
-            ``n_rows`` (int): The number of rows for the new SQLDataModel.
-            ``n_cols`` (int): The number of columns for the new SQLDataModel.
-            ``dtype`` (str) (optional): A valid python or SQL datatype to initialize the n-dimensional model with
+            ``shape`` (tuple[int, int]): The shape to initialize the SQLDataModel with as ``(M, N)`` where ``M`` is the number of rows and ``N`` is the number of columns.
+            ``fill`` (Any, optional): The scalar fill value to populate the new SQLDataModel with. Default is None, using SQL null values or deriving from ``dype`` if provided.
+            ``headers`` (list[str], optional): The headers to use for the model. Default is None, incrementing headers ``0, 1, ..., N`` where ``N`` is the number of columns.
+            ``dtype`` (str, optional): A valid python or SQL datatype to initialize the n-dimensional model with. Default is None, using the SQL text type.
+            ``**kwargs``: Additional keyword arguments to pass to the ``SQLDataModel`` constructor.            
 
         Raises:
-            ``TypeError``: If ``n_rows`` is not of type 'int' or if ``n_cols`` is not of type 'int'.
+            ``TypeError``: If ``M`` or ``N`` are not of type 'int' representing a valid shape to initialize a SQLDataModel with.
+            ``ValueError``: If ``M`` or ``N`` are not positive integer values representing valid nonzero row and column dimensions.
             ``ValueError``: If ``dtype`` is not a valid python or SQL convertible datatype to initialize the model with.
 
         Returns:
@@ -2273,25 +2276,76 @@ class SQLDataModel:
         
             from SQLDataModel import SQLDataModel
 
+            # Create a 3x3 model filled by 'X'
+            sdm = SQLDataModel.from_shape((3,3), fill='X')            
+
+            # View it
+            print(sdm)
+            
+        This will output a 3x3 grid of 'X' characters:
+
+        ```text
+            ┌───┬─────┬─────┬─────┐
+            │   │ 0   │ 1   │ 2   │
+            ├───┼─────┼─────┼─────┤
+            │ 0 │ X   │ X   │ X   │
+            │ 1 │ X   │ X   │ X   │
+            │ 2 │ X   │ X   │ X   │
+            └───┴─────┴─────┴─────┘
+            [3 rows x 3 columns]
+        ```
+
+        We can iteratively build the model from the shape dimensions:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
             # Define shape
-            n_rows, n_cols = 10, 3
-
-            # Create an empty SQLDataModel with 10 rows and 3 columns
-            sdm = SQLDataModel.from_shape(n_rows, n_cols)
-
-            # Assign rows
-            for row in range(n_rows):
-                sdm[row] = ('john', 'smith', 29)
+            shape = (6,6)
             
-            # Assign specific cells
-            for row in range(n_rows):
-                for col in range(n_cols):
-                    sdm[row, col] = f"cell at index {row}, {col}"
+            # Initialize the multiplcation table with integer dtypes
+            mult_table = SQLDataModel.from_shape(shape=shape, dtype='int')
+
+            # Construct the table values
+            for x in range(shape[0]):
+                for y in range(shape[1]):
+                    mult_table[x, y] = x * y
             
-            # Assign headers if needed
-            sdm.set_headers(['first', 'last', 'age'])
+            # View the multiplcation table
+            print(mult_table)
+        ```
         
+        This will output our 6x6 multiplication table:
+
+        ```text
+            ┌───┬─────┬─────┬─────┬─────┬─────┬─────┐
+            │   │   0 │   1 │   2 │   3 │   4 │   5 │
+            ├───┼─────┼─────┼─────┼─────┼─────┼─────┤
+            │ 0 │   0 │   0 │   0 │   0 │   0 │   0 │
+            │ 1 │   0 │   1 │   2 │   3 │   4 │   5 │
+            │ 2 │   0 │   2 │   4 │   6 │   8 │  10 │
+            │ 3 │   0 │   3 │   6 │   9 │  12 │  15 │
+            │ 4 │   0 │   4 │   8 │  12 │  16 │  20 │
+            │ 5 │   0 │   5 │  10 │  15 │  20 │  25 │
+            └───┴─────┴─────┴─────┴─────┴─────┴─────┘
+            [6 rows x 6 columns]
+        ```
+
+        Note:
+            - If both ``fill`` and ``dtype`` are provided, the data type will be derived from ``type(fill)`` overriding or ignoring the specified ``dtype``.
+            - If only ``dtype`` is provided, sensible default initialization fill values will be used to populate the model such as 0 or 0.0 for numeric and empty string or null for others.
+            - For those data types not natively implemented by ``sqlite3`` such as ``date`` and ``datetime``, today's date and now's datetime will be used respectively for initialization values.
         """
+        try:
+            n_rows, n_cols = shape
+        except ValueError:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid length '{len(shape)}', argument for `shape` must be a tuple or list with 2 elements of type 'int' representing `(n_rows, n_cols)`")
+            ) from None            
+        except TypeError:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(shape).__name__}', argument for `shape` must be a tuple or list with 2 elements of type 'int' representing `(n_rows, n_cols)`")
+            ) from None
         if not isinstance(n_rows, int):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_rows).__name__}', argument of type 'int' expected for `n_rows` parameter")
@@ -2300,14 +2354,16 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(n_cols).__name__}', argument of type 'int' expected for `n_cols` parameter")
             )
-        if dtype is not None:
-            if dtype not in ('bytes','datetime','float','int','str'):
+        if fill is None and dtype is not None:
+            if dtype not in ('bytes','date','datetime','float','int','str'):
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: invalid argument '{dtype}', `dtype` must be one of 'bytes','datetime','float','int','str'")
                 )
             else:
                 if dtype == 'bytes':
                     fill_value = b''
+                elif dtype == 'date':
+                    fill_value = datetime.date.today()
                 elif dtype == 'datetime':
                     fill_value = datetime.datetime.now()
                 elif dtype == 'float':
@@ -2317,8 +2373,8 @@ class SQLDataModel:
                 else:
                     fill_value = ''
         else:
-            fill_value = None
-        return cls([[fill_value for _ in range(n_cols)] for _ in range(n_rows)])
+            fill_value = fill
+        return cls(data=[[fill_value for _ in range(n_cols)] for _ in range(n_rows)], headers=headers, **kwargs)
         
     @classmethod
     def from_csv(cls, csv_source:str, infer_types:bool=True, encoding:str = 'Latin1', delimiter:str = ',', quotechar:str = '"', headers:list[str] = None, **kwargs) -> SQLDataModel:
@@ -10759,19 +10815,19 @@ class SQLDataModel:
             ) from None
         self._update_model_metadata(update_row_meta=True)        
 
-    def update_index_at(self, row_index:int, column_index:int|str, value=None) -> None:
+    def update_index_at(self, row_index:int, column_index:int|str, value:Any=None) -> None:
         """
         Updates a specific cell in the ``SQLDataModel`` at the given row and column indices with the provided value.
 
         Parameters:
             ``row_index`` (int): The index of the row to be updated.
             ``column_index`` (int or str): The index or name of the column to be updated.
-            ``value``: The new value to be assigned to the specified cell.
+            ``value (Any, optional)``: The new value to be assigned to the specified cell.
 
         Raises:
             ``TypeError``: If ``row_index`` is not of type 'int' or if ``column_index`` is not of type 'int' or 'str'.
-            ``ValueError``: If the provided row index is outside the current model range.
-            ``IndexError``: If the provided column index (when specified as an integer) is outside of the current model range.
+            ``IndexError``: If row or column provided as an 'int' but is outside of the current model row or column range.
+            ``ValueError``: If column provided as a 'str' but is not found in the current model headers.
             ``SQLProgrammingError``: If there is an issue with the SQL execution during the update.
         
         Returns:
@@ -10781,25 +10837,42 @@ class SQLDataModel:
 
             from SQLDataModel import SQLDataModel
 
-            headers = ['idx', 'first', 'last', 'age']
-            data = [
-                (0, 'john', 'smith', 27)
-                ,(1, 'sarah', 'west', 29)
-                ,(2, 'mike', 'harlin', 36)
-                ,(3, 'pat', 'douglas', 42)
-            ]
+            # Create an initial 3x3 model filled with dashes
+            sdm = SQLDataModel.from_shape((3,3), fill='---', headers=['A', 'B', 'C'])
 
-            # Create the model with sample data
-            sdm = SQLDataModel(data,headers)
+            # Update cell based on integer indicies
+            sdm.update_index_at(0, 0, 'Top Left')
+            sdm.update_index_at(0, 2, 'Top Right')
 
-            # Example 1: Update a cell in the first row and second column
-            sdm.update_index_at(0, 1, 'NewValue')
+            # Update cell based on row index and column name
+            sdm.update_index_at(2, 'A', 'Bottom Left')
+            sdm.update_index_at(2, 'C', 'Bottom Right')
 
-            # Example 2: Update a cell in the 'Name' column of the third row
-            sdm.update_index_at(2, 'Name', 'John Doe')
+            # Update based on negative row and column indexing
+            sdm.update_index_at(-2, -2, 'Middle')
 
+            # View result
+            print(sdm)
+
+        This will output cumulative result of our updates:
+
+        ```text
+            ┌───┬─────────────┬────────┬──────────────┐
+            │   │ A           │ B      │ C            │
+            ├───┼─────────────┼────────┼──────────────┤
+            │ 0 │ Top Left    │ ---    │ Top Right    │
+            │ 1 │ ---         │ Middle │ ---          │
+            │ 2 │ Bottom Left │ ---    │ Bottom Right │
+            └───┴─────────────┴────────┴──────────────┘
+            [3 rows x 3 columns]
+        ```
+
+        Important:
+            - Indexing is done using zero-based integers and not done by index value. Most of the time this distinction is irrelevant as the row index at position '0' will have an index value of '0', however this can change after transformation operations like filter or sort. To reset and realign the index value use :meth:`SQLDataModel.reset_index()` or use :py:attr:`SQLDataModel.indicies` to view the current row indicies.
+        
         Note:
-            - If an error occurs during SQL execution, it rolls back the changes and raises a ``SQLProgrammingError``.
+            - This method only updates individual cells in the current model based on integer indexing for both rows and columns using their (row, column) position.
+            - To broadcast updates across row and column dimensions use the syntax of ``sdm[row, column] = value`` or see :meth:`SQLDataModel.__setitem__()` for more details.
         """        
         if not isinstance(row_index, int):
             raise TypeError(
@@ -10809,12 +10882,12 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
             )
-        if row_index < 0:
-            row_index = self.row_count + row_index
-        if row_index < 0 or row_index > self.row_count:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid row index '{row_index}', provided row index is outisde of current model range '0:{self.row_count}'")
-            )
+        try:
+            row_index = self.indicies[row_index]
+        except IndexError:
+            raise IndexError(
+                SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', provided row index is outisde of current model range '0:{self.row_count}'")
+            ) from None
         if isinstance(column_index, int):
             try:
                 column_index = self.headers[column_index]

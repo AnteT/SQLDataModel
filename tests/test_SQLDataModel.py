@@ -450,6 +450,23 @@ def test_infer_types_post_init(sample_data):
         assert typed_input[i] == inferred_output[i]
 
 @pytest.mark.core
+def test_from_shape(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    row_lower, row_upper = 1, len(input_data)
+    col_lower, col_upper = 1, len(input_headers)
+    rand_row = random.randint(row_lower, row_upper)
+    rand_col = random.randint(col_lower, col_upper)
+    input_shape = (rand_row, rand_col)
+    sdm = SQLDataModel.from_shape(shape=input_shape, fill=None, dtype=None)
+    output_shape = sdm.shape
+    assert output_shape == input_shape
+    test_fills = (b'bytes', None, 'strings', 12, 3.14, datetime.date(1999,12,31), datetime.datetime(1999, 12, 31, 23, 59, 59), True)
+    for input_fill in test_fills:
+        expected_output = [tuple([input_fill for _ in range(rand_col)]) for _ in range(rand_row)]
+        output_data = SQLDataModel.from_shape(shape=input_shape, fill=input_fill, display_float_precision=2).data(strict_2d=True)
+        assert output_data == expected_output
+
+@pytest.mark.core
 def test_to_from_dict():
     input_dict = {0: ('hTpigTHKcfoK', 285, -497.17176, 0, datetime.date(1914, 6, 27), b'zPx3Bp', None, datetime.datetime(1985, 11, 10, 14, 20, 59)), 1: ('mNHnKXaXQv', -673, 106.451792, 1, datetime.date(2003, 5, 8), b'vKo', None, datetime.datetime(1996, 2, 1, 14, 39, 36)), 2: ('nVgx', 622, 884.861723, 1, datetime.date(1907, 4, 19), b'aRdeb', None, datetime.datetime(1912, 2, 18, 6, 32, 16)), 3: ('0LXSG8x', 393, 360.566821, 0, datetime.date(2021, 2, 3), b'eoPni5I', None, datetime.datetime(1916, 6, 3, 7, 23, 18)), 4: ('sM2wmeOV90', -136, -770.896514, 1, datetime.date(1993, 8, 27), b'pCzfOwz1d', None, datetime.datetime(1920, 8, 27, 17, 45, 19)), 5: ('xBZ', 221, 769.5769, 1, datetime.date(1908, 9, 25), b'9gzv1plB_rp5', None, datetime.datetime(1978, 11, 17, 0, 42, 52)), 6: ('xnq6', -870, 501.755599, 0, datetime.date(1916, 3, 22), b'X0gOHafUo', None, datetime.datetime(1970, 5, 22, 3, 56, 8)), 7: ('eNGpCr5QnuVd', -212, 537.197465, 1, datetime.date(1960, 9, 6), b'Dnzdx9qW', None, datetime.datetime(1933, 2, 4, 23, 35, 9)), 8: ('Xz', -219, -319.649054, 1, datetime.date(1933, 9, 28), b'rQTWODlnd', None, datetime.datetime(1934, 5, 20, 6, 45, 21)), 9: ('n62', 220, -412.999743, 0, datetime.date(1977, 7, 7), b'dtdD4GdE0e', None, datetime.datetime(1926, 11, 21, 8, 32, 31)), 10: ('nE2NjiT', -42, -683.684491, 0, datetime.date(2018, 9, 25), b'Poh', None, datetime.datetime(1932, 1, 3, 20, 27, 53)), 11: ('qJ3zn9Ffcg', 83, -993.509368, 1, datetime.date(1993, 12, 7), b'pKM_JF5mSpy', None, datetime.datetime(1935, 1, 1, 10, 49, 8))}
     output_dict = SQLDataModel.from_dict(input_dict).to_dict()
