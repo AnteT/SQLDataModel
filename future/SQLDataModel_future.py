@@ -6387,15 +6387,15 @@ class SQLDataModel:
         else:
             return table_repr 
 
-    def to_local_db(self, db:str=None) -> None:
+    def to_local_db(self, filename:str) -> None:
         """
-        Stores the ``SQLDataModel`` internal in-memory database to a local disk database.
+        Writes the ``SQLDataModel`` in-memory database to disk as a SQLite database file using the specified filename.
 
         Parameters:
-            ``db`` (str, optional): The filename or path of the target local disk database. If ``None``, the current filename will be used as a default target.
+            ``filename`` (str): The filename or filepath to use when writing the model to disk.
 
         Raises:
-            ``TypeError``: If ``db`` is provided and is not of type 'str' representing a valid sqlite database save path.
+            ``TypeError``: If ``filename`` is provided and is not of type 'str' representing a valid sqlite database save path.
             ``sqlite3.Error``: If there is an issue with the SQLite database operations during backup.
 
         Returns:
@@ -6406,28 +6406,52 @@ class SQLDataModel:
             import sqlite3
             from SQLDataModel import SQLDataModel
 
-            # Example 1: Store the in-memory database to a local disk database with a specific filename
-            sdm.to_local_db("local_database.db")
+            # Sample data
+            data = [('Alice', 20, 'F'), ('Billy', 25, 'M'), ('Chris', 30, 'M')]
 
-            # Example 2: Store the in-memory database to a local disk database using the default filename
-            sdm.to_local_db()
+            # Create the model
+            sdm = SQLDataModel(data, headers=['Name','Age','Sex'])
 
-            # Reload model from local db using default path 'sdm_local_db.db'
-            sdm_loaded = SQLDataModel.from_sql("sdm", sqlite3.connect("sdm_local_db.db"))
+            # Filename to use for database
+            db_file = "model.db"
+
+            # Write the in-memory database model to disk
+            sdm.to_local_db(db_file)
+
+            # Loading the model back from disk can now be done at anytime
+            sdm = SQLDataModel.from_sql("sdm", sqlite3.connect(db_file))
+
+            # View restored model
+            print(sdm)
+
+        This will output the model we originally created:
+
+        ```text
+            ┌───┬───────┬─────┬─────┐
+            │   │ Name  │ Age │ Sex │
+            ├───┼───────┼─────┼─────┤
+            │ 0 │ Alice │  20 │ F   │
+            │ 1 │ Billy │  25 │ M   │
+            │ 2 │ Chris │  30 │ M   │
+            └───┴───────┴─────┴─────┘
+            [3 rows x 3 columns]
+        ```
+
+        Change Log:
+            - Version 0.5.2 (2024-05-13):
+                - Renamed ``db`` parameter to ``filename`` for package consistency and to avoid confusion between similarily named database objects.
+                - Changed ``filename`` from keyword to positional argument making it a required parameter to avoid accidental overwriting.
 
         Note:
-            - The method connects to the specified local disk database using ``sqlite3``.
-            - It performs a backup of the in-memory database to the local disk database.
-            - If ``db=None``, the current filename is used as the default target.
-            - After successful backup, it prints a success message indicating the creation of the local database.
+            - Use any compatible SQL API to load the resulting database file or use :meth:`SQLDataModel.from_sql()` to reload it back into a ``SQLDataModel``.
+            - Table name is determined by value at :py:attr:`SQLDataModel.sql_model` which is set to ``'sdm'`` by default, use :meth:`SQLDataModel.set_model_name()` to modify.
         """
-        if not isinstance(db, str) and db is not None:
+        if not isinstance(filename, str):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"invalid type '{type(db).__name__}', argument for `db` must be of type 'str' representing a valid sqlite database save path")
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid sqlite database save path")
             )
-        if db is None:
-            db = "sdm_local_db.db"
-        with sqlite3.connect(db) as target:
+        self.sql_db_conn.commit()
+        with sqlite3.connect(filename) as target:
             self.sql_db_conn.backup(target)
 
 ####################################################################################################################
@@ -10856,7 +10880,7 @@ class SQLDataModel:
             sdm.update_index_at(2, 'C', 'Bottom Right')
 
             # Update based on negative row and column indexing
-            sdm.update_index_at(-2, -2, 'Middle')
+            sdm.update_index_at(-2, -2, 'Center')
 
             # View result
             print(sdm)
@@ -10868,7 +10892,7 @@ class SQLDataModel:
             │   │ A           │ B      │ C            │
             ├───┼─────────────┼────────┼──────────────┤
             │ 0 │ Top Left    │ ---    │ Top Right    │
-            │ 1 │ ---         │ Middle │ ---          │
+            │ 1 │ ---         │ Center │ ---          │
             │ 2 │ Bottom Left │ ---    │ Bottom Right │
             └───┴─────────────┴────────┴──────────────┘
             [3 rows x 3 columns]
