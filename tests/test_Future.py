@@ -117,6 +117,28 @@ def test_setitem():
     assert num_checked == (sdm.row_count * sdm.column_count)
 
 @pytest.mark.core
+def test_init_empty(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]  
+    input_dtypes = {'string': 'str', 'int': 'int', 'float': 'float', 'bool': 'int', 'date': 'date', 'bytes': 'bytes', 'nonetype': 'str', 'datetime': 'datetime'}
+    # init from dtypes only
+    sdm = SQLDataModel(dtypes=input_dtypes)
+    for rid, row in enumerate(input_data):
+        sdm[rid] = row
+    output_data = sdm.data(strict_2d=True)
+    assert output_data == input_data
+    output_dtypes = sdm.dtypes
+    assert output_dtypes == input_dtypes
+    # init from headers only
+    sdm = SQLDataModel(headers=input_headers)
+    input_data = [tuple([f"({i},{j})" for j in range(len(input_headers))]) for i in range(len(input_data))]
+    for rid, row in enumerate(input_data):
+        sdm[rid] = row
+    output_data = sdm.data(strict_2d=True)
+    assert output_data == input_data
+    output_headers = sdm.headers
+    assert output_headers == input_headers
+
+@pytest.mark.core
 def test_addition():
     data = [(f"{i}", i, i*1.0) for i in range(1,11)]
     expected_output = [(f"{row[0]}x", row[1]+1, row[2]+0.1, row[1]+1 + row[2]+0.1) for row in data]
