@@ -7741,7 +7741,7 @@ class SQLDataModel:
         # short circuit remaining operations and proceed to insert row if target_indicies is int and equals current row count
         if isinstance(target_indicies, int) and target_indicies == self.row_count:
             try:
-                self.insert_row(update_values)
+                self.append_row(update_values)
                 return
             except TypeError as e:
                 raise TypeError(
@@ -8214,11 +8214,85 @@ class SQLDataModel:
         table_caption = f"""[{self.row_count} rows x {self.column_count} columns]"""
         table_repr = "".join([table_repr, table_caption])
         return table_repr if self.display_color is None else self.display_color.wrap(table_repr) 
-        return table_repr if self.display_color is None else self.display_color.wrap(table_repr)
     
 ##################################################################################################################
 ############################################## sqldatamodel methods ##############################################
 ##################################################################################################################
+
+    def append_row(self, values:list|tuple=None) -> None:
+        """
+        Appends a new row in the ``SQLDataModel`` at index :py:attr:`self.rowcount + 1 <SQLDataModel.row_count>` with provided ``values``. If ``values=None``, an empty row with SQL ``null`` values will be used.
+
+        Parameters:
+            ``values`` (list or tuple, optional): The values to be inserted into the row. If not provided or set to None, an empty row with SQL ``null`` values will be inserted.
+
+        Raises:
+            ``TypeError``: If ``values`` is provided and is not of type list or tuple.
+            ``DimensionError``: If the number of values provided does not match the current column count.
+            ``SQLProgrammingError``: If there is an issue with the SQL execution during the insertion.
+        
+        Returns:
+            ``None``
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Create a rowless model
+            sdm = SQLDataModel(headers=['Name', 'Age'])
+
+            # Insert row with values
+            sdm.append_row(['Alice',31])
+
+            # Insert another row
+            sdm.append_row(['John', 48])
+
+            # View result
+            print(sdm)
+        
+        This will output:
+
+        ```text
+            ┌───┬───────┬──────┐
+            │   │ Name  │ Age  │
+            ├───┼───────┼──────┤
+            │ 0 │ Alice │ 31   │
+            │ 1 │ John  │ 48   │
+            └───┴───────┴──────┘
+            [2 rows x 2 columns]
+        ```
+
+        Note:
+            - If no values are provided, ``None`` or SQL 'null' will be used for the values.
+            - Rows will be appended to the bottom of the model at one index greater than the current max index.
+        """
+        if values is not None:
+            if not isinstance(values, (list,tuple)):
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(values).__name__}', insert values must be of type 'list' or 'tuple'")
+                    ) from None
+            if isinstance(values,list):
+                values = tuple(values)
+            if (len_val := len(values)) != self.column_count:
+                raise DimensionError(
+                    SQLDataModel.ErrorFormat(f"DimensionError: invalid dimensions '{len_val} != {self.column_count}', the number of values provided: '{len_val}' must match the current column count '{self.column_count}'")
+                    ) from None
+        else:
+            values = tuple([None for _ in range(self.column_count)])
+        insert_cols = ",".join([f'"{col}"' for col in self.headers])
+        insert_vals = ",".join(["?" if not isinstance(val,datetime.date) else "datetime(?)" if isinstance(val, datetime.datetime) else "date(?)" for val in values])
+        insert_stmt = f"""insert into {self.sql_model}({insert_cols}) values ({insert_vals})"""
+        sql_cur = self.sql_db_conn.cursor()
+        try:
+            sql_cur.execute(insert_stmt, values)
+            self.sql_db_conn.commit()
+            self._update_indicies_quick_add(sql_cur.lastrowid)
+        except Exception as e:
+            self.sql_db_conn.rollback()
+            raise SQLProgrammingError(
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: "{e}"')
+            ) from None
+        self._update_model_metadata(update_row_meta=False)  
 
     def concat(self, other:SQLDataModel|list|tuple, inplace:bool=True) -> None|SQLDataModel:
         """
@@ -8885,6 +8959,100 @@ class SQLDataModel:
             other_data = [(t1 + t2) for t1, t2 in zip(self.data(index=False, include_headers=False, strict_2d=True), other_data)]
             dtype_dict = dict(zip(other_headers, other_dtypes))
             return type(self)(data=other_data, headers=other_headers, dtypes=dtype_dict, **self._get_display_args())
+
+    def insert_row(self, index:int, values:list|tuple, on_conflict:Literal['replace','ignore']='replace') -> None:
+        """
+        Inserts a new row into the ``SQLDataModel`` at the specified ``index`` with the provided ``values``.
+
+        Parameters:
+            ``index`` (int): The position at which to insert the row.
+            ``values`` (list or tuple): The values to be inserted into the row.
+            ``on_conflict`` (Literal['replace', 'ignore'], optional): Specifies the action to take if the index already exists. Default is 'replace'.
+
+        Raises:
+            ``TypeError``: If ``index`` is not an integer or ``values`` is not a list or tuple.
+            ``ValueError``: If ``on_conflict`` is not ``'replace'`` or ``'ignore'``.
+            ``DimensionError``: If the dimensions of the provided ``values`` are incompatible with the current model dimensions.
+            ``SQLProgrammingError``: If there is an issue with the SQL execution during the insertion.
+
+        Returns:
+            ``None``
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            data = [('Alice', 20, 'F'), ('Billy', 25, 'M'), ('Chris', 30, 'M')]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers=['Name','Age','Sex'])    
+
+            # Insert a new row at index 3
+            sdm.insert_row(3, ['David', 35, 'M'])
+
+            # Insert or replace row at index 1
+            sdm.insert_row(1, ['Beth', 27, 'F'], on_conflict='replace')
+            
+            # View result
+            print(sdm)
+
+        This will output the modified model:
+
+        ```text
+            ┌───┬───────┬─────┬─────┐
+            │   │ Name  │ Age │ Sex │
+            ├───┼───────┼─────┼─────┤
+            │ 0 │ Alice │  20 │ F   │
+            │ 1 │ Beth  │  27 │ F   │
+            │ 2 │ Chris │  30 │ M   │
+            │ 3 │ David │  35 │ M   │
+            └───┴───────┴─────┴─────┘
+            [4 rows x 3 columns]
+        ```
+
+        Change Log:
+            - Version 0.6.0 (2024-05-14):
+                - Backward incompatible changes made to arguments and behavior, added ``index`` and ``on_conflict`` parameters for greater specificity and to align with broader conventions surrounding insert methods.
+
+        Note:
+            - Use ``on_conflict = 'ignore'`` to take no action if row already exists, and ``on_conflict = 'replace'`` to replace it.
+            - See :meth:`SQLDataModel.append_row()` for appending rows at the next available index instead of insertion at index.
+        """        
+        if not isinstance(index, int):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(index).__name__}', argument for `index` must be of type 'int' representing the row position to insert into")
+            )
+        if not isinstance(values, (list,tuple)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(values).__name__}', insert values must be of type 'list' or 'tuple'")
+                )
+        if on_conflict not in ('replace','ignore'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{on_conflict}', argument for `on_conflict` must be either 'replace' or 'ignore' representing the action to take if specified index already exists")
+            )
+        if isinstance(values,list):
+            values = tuple(values)
+        if (len_val := len(values)) != self.column_count:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid dimensions '{len_val} != {self.column_count}', the number of values provided: '{len_val}' must match the current column count '{self.column_count}'")
+                )
+        values = (index,*values)
+        insert_cols = self.headers if index is None else [self.sql_idx, *self.headers]
+        insert_cols = ",".join([f'"{col}"' for col in insert_cols])
+        insert_vals = ",".join(["?" if not isinstance(val,datetime.date) else "datetime(?)" if isinstance(val, datetime.datetime) else "date(?)" for val in values])
+        insert_stmt = f"""insert or {on_conflict} into {self.sql_model}({insert_cols}) values ({insert_vals})"""
+        sql_cur = self.sql_db_conn.cursor()
+        try:
+            sql_cur.execute(insert_stmt, values)
+            self.sql_db_conn.commit()
+            self._update_indicies_quick_add(sql_cur.lastrowid)
+        except Exception as e:
+            self.sql_db_conn.rollback()
+            raise SQLProgrammingError(
+                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: "{e}"')
+            ) from None
+        self._update_model_metadata(update_row_meta=False)
 
     def iter_rows(self, min_row:int=None, max_row:int=None, index:bool=True, include_headers:bool=False) -> Generator:
         """
@@ -10772,81 +10940,6 @@ class SQLDataModel:
         func_signature = ", ".join([f"""{k.replace(" ","_")}:{v[1]}""" for k,v in self.header_master.items() if k != self.sql_idx])
         return f"""def func({func_signature}):\n    # apply logic and return value\n    return"""
     
-    def insert_row(self, values:list|tuple=None) -> None:
-        """
-        Inserts a row in the ``SQLDataModel`` at index :py:attr:`self.rowcount + 1 <SQLDataModel.row_count>` with provided ``values``. If ``values=None``, an empty row with SQL ``null`` values will be used.
-
-        Parameters:
-            ``values`` (list or tuple, optional): The values to be inserted into the row. If not provided or set to None, an empty row with SQL ``null`` values will be inserted.
-
-        Raises:
-            ``TypeError``: If ``values`` is provided and is not of type list or tuple.
-            ``DimensionError``: If the number of values provided does not match the current column count.
-            ``SQLProgrammingError``: If there is an issue with the SQL execution during the insertion.
-        
-        Returns:
-            ``None``
-
-        Example::
-
-            from SQLDataModel import SQLDataModel
-
-            # Create a rowless model
-            sdm = SQLDataModel(headers=['Name', 'Age'])
-
-            # Insert row with values
-            sdm.insert_row(['Alice',31])
-
-            # Insert another row
-            sdm.insert_row(['John', 48])
-
-            # View result
-            print(sdm)
-        
-        This will output:
-
-        ```shell
-            ┌───┬───────┬──────┐
-            │   │ Name  │ Age  │
-            ├───┼───────┼──────┤
-            │ 0 │ Alice │ 31   │
-            │ 1 │ John  │ 48   │
-            └───┴───────┴──────┘
-            [2 rows x 2 columns]
-        ```
-
-        Note:
-            - The method handles the insertion of rows into the SQLDataModel, updates metadata, and commits the changes to the database.
-            - If an error occurs during SQL execution, it rolls back the changes and raises a ``SQLProgrammingError`` with an informative message.
-            - Rows are inserted at one index greater than the current max index/row count.
-            - If no insert values are provided, ``None`` or SQL 'null' will be inserted to match the current model dimensions.
-        """
-        if values is not None:
-            if not isinstance(values, (list,tuple)):
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(values).__name__}', insert values must be of type 'list' or 'tuple'")
-                    ) from None
-            if isinstance(values,list):
-                values = tuple(values)
-            if (len_val := len(values)) != self.column_count:
-                raise DimensionError(
-                    SQLDataModel.ErrorFormat(f"DimensionError: invalid dimensions '{len_val} != {self.column_count}', the number of values provided: '{len_val}' must match the current column count '{self.column_count}'")
-                    ) from None
-        else:
-            values = tuple(None for _ in range(self.column_count))
-        insert_cols = ",".join([f'"{col}"' for col in self.headers])
-        insert_vals = ",".join(["?" if not isinstance(val,datetime.date) else "datetime(?)" if isinstance(val, datetime.datetime) else "date(?)" for val in values])
-        insert_stmt = f"""insert into {self.sql_model}({insert_cols}) values ({insert_vals})"""
-        try:
-            self.sql_db_conn.execute(insert_stmt, values)
-            self.sql_db_conn.commit()
-        except Exception as e:
-            self.sql_db_conn.rollback()
-            raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: "{e}"')
-            ) from None
-        self._update_model_metadata(update_row_meta=True)        
-
     def update_index_at(self, row_index:int, column_index:int|str, value:Any=None) -> None:
         """
         Updates a specific cell in the ``SQLDataModel`` at the given row and column indices with the provided value.
@@ -11199,6 +11292,22 @@ class SQLDataModel:
         self.row_count = len(self.indicies)
         self.shape = (self.row_count,self.shape[1])
     
+    def _update_indicies_quick_add(self, row_index:int) -> None:
+        """
+        Quick implementation to update the :py:attr:`SQLDataModel.indicies` and :py:attr:`SQLDataModel.row_count` properties of the ``SQLDataModel`` instance representing the current valid row indicies and count based on the last inserted rowid.
+
+        Returns:
+            ``None``
+
+        Note:
+            - This method is called internally any time the :py:attr:`SQLDataModel.row_count` property is subject to deterministic change to avoid the more expensive call to :meth:`SQLDataModel._update_indicies()`
+        """
+        if row_index is None:
+            return
+        self.indicies = tuple(sorted(set((*self.indicies,row_index))))
+        self.row_count = len(self.indicies)
+        self.shape = (self.row_count,self.shape[1])    
+
     def get_indicies(self) -> tuple:
         """
         Returns the current valid row indicies for the ``SQLDataModel`` instance.

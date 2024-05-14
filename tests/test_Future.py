@@ -655,6 +655,27 @@ def test_to_from_delimited_source(sample_data):
         assert input_data == output_data
 
 @pytest.mark.core
+def test_append_row():
+    num_rows = 12
+    data_store = [tuple([f"{i}", i, float(i)]) for i in range(num_rows)] # str, int, float
+    for rid in range(len(data_store)):
+        input_data = data_store[:rid]
+        sdm = SQLDataModel(headers=['A', 'B', 'C'], dtypes={'A':'str','B':'int','C':'float'})
+        for input_row in input_data:
+            sdm.append_row(input_row)
+        output_data = sdm.data(strict_2d=True)
+        assert output_data == input_data
+    # test null append
+    num_null_rows = 4
+    null_row = (None, None, None)
+    sdm = SQLDataModel(data_store, display_float_precision=1)
+    for _ in range(num_null_rows):
+        data_store.append(null_row)
+        sdm.append_row(null_row)
+        output_data = sdm.data(strict_2d=True)
+        assert output_data == data_store 
+
+@pytest.mark.core
 def test_concat(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     mid = len(input_data) // 2
@@ -707,6 +728,44 @@ def test_head(sample_data):
     expected_output = input_data[:n_value]
     output_data = sdm.head(n_rows=n_value).data()
     assert output_data == expected_output
+
+@pytest.mark.core    
+def test_insert_row():
+    num_rows = 16
+    data = [[f"{i}", i, float(i)] for i in range(num_rows)] # str, int, float
+    sdm = SQLDataModel(data, display_float_precision=1)
+    # test insert on_conflict = 'replace'
+    rand_row = random.randint(0, (num_rows-2)) # leave room to add +2 to rand_row for ignore test and top and bottom insert new row tests
+    input_data = tuple([f"{10+rand_row}", 10+rand_row, float(10+rand_row)])
+    sdm.insert_row(rand_row, input_data, on_conflict='replace')
+    output_data = sdm[rand_row].data()
+    assert output_data == input_data
+    # test insert on_conflict = 'ignore'
+    rand_row = rand_row + 1
+    input_fail = tuple([None, None, None])
+    sdm.insert_row(rand_row, input_fail, on_conflict='ignore')
+    output_data = sdm[rand_row].data()
+    assert output_data != input_fail
+    # test insert at top of model
+    top_row = -1
+    input_data = tuple([f"{top_row}", top_row, float(top_row)])
+    sdm.insert_row(top_row, input_data, on_conflict='replace')
+    output_data = sdm[0].data()
+    assert output_data == input_data
+    # test insert at bottom of model
+    bottom_row = num_rows
+    input_data = tuple([f"{bottom_row}", bottom_row, float(bottom_row)])
+    sdm.insert_row(bottom_row, input_data, on_conflict='replace')
+    output_data = sdm[-1].data()
+    assert output_data == input_data
+    # test metadata like shape and indicies
+    expected_shape = (num_rows+2, 3)
+    output_shape = sdm.shape
+    print(expected_shape, output_shape)
+    assert output_shape == expected_shape
+    expected_indicies = tuple(range(-1, num_rows+1))
+    output_indicies = sdm.indicies
+    assert output_indicies == expected_indicies
 
 @pytest.mark.core
 def test_tail(sample_data):
