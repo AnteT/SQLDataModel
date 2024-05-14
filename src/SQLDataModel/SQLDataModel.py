@@ -11313,7 +11313,7 @@ class SQLDataModel:
         if row_index is None:
             return
         self.indicies = tuple(sorted(set((*self.indicies,row_index))))
-        if self.indicies == (1,):
+        if not self.row_count and self.indicies == (1,):
             self.indicies = (0,) # required to account for insert trigger that adjusts first rowid from 1 to 0 when model originally contained zero rows and gets first insert
         self.row_count = len(self.indicies)
         self.shape = (self.row_count,self.shape[1])    
