@@ -11303,12 +11303,18 @@ class SQLDataModel:
         Returns:
             ``None``
 
+        Change Log:
+            - Version 0.6.0 (2024-05-14):
+                - New method, improves performance for updating row indicies when update is deterministic.
+            
         Note:
             - This method is called internally any time the :py:attr:`SQLDataModel.row_count` property is subject to deterministic change to avoid the more expensive call to :meth:`SQLDataModel._update_indicies()`
         """
         if row_index is None:
             return
         self.indicies = tuple(sorted(set((*self.indicies,row_index))))
+        if self.indicies == (1,):
+            self.indicies = (0,) # required to account for insert trigger that adjusts first rowid from 1 to 0 when model originally contained zero rows and gets first insert
         self.row_count = len(self.indicies)
         self.shape = (self.row_count,self.shape[1])    
 
@@ -11559,7 +11565,7 @@ class SQLDataModel:
             except IndexError:
                 if row_index != max(self.indicies): # auto add escape, ok to be out of range
                     raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within currend model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within current model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
                     ) from None
             return (row_index, self.headers)
         ### single row slice index ###
@@ -11619,7 +11625,7 @@ class SQLDataModel:
                 validated_row_indicies = self.indicies[row_indicies] # TODO: RIMOD
             except IndexError:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_indicies}', index must be within currend model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_indicies}', index must be within current model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
                 ) from None
         elif isinstance(row_indicies, tuple): # tuple of disconnected row indicies
             if not all(isinstance(row, int) for row in row_indicies):
