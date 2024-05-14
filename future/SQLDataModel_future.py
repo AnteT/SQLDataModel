@@ -8221,7 +8221,7 @@ class SQLDataModel:
 
     def append_row(self, values:list|tuple=None) -> None:
         """
-        Appends a new row in the ``SQLDataModel`` at index :py:attr:`self.rowcount + 1 <SQLDataModel.row_count>` with provided ``values``. If ``values=None``, an empty row with SQL ``null`` values will be used.
+        Appends ``values`` as a new row in the ``SQLDataModel`` at the next available index based on the current max row index from :py:attr:`SQLDataModel.indicies`. If ``values = None``, an empty row with SQL ``null`` values will be used.
 
         Parameters:
             ``values`` (list or tuple, optional): The values to be inserted into the row. If not provided or set to None, an empty row with SQL ``null`` values will be inserted.
@@ -8241,10 +8241,10 @@ class SQLDataModel:
             # Create a rowless model
             sdm = SQLDataModel(headers=['Name', 'Age'])
 
-            # Insert row with values
-            sdm.append_row(['Alice',31])
+            # Append a row with values
+            sdm.append_row(['Alice', 31])
 
-            # Insert another row
+            # Append another row
             sdm.append_row(['John', 48])
 
             # View result
@@ -8261,6 +8261,10 @@ class SQLDataModel:
             └───┴───────┴──────┘
             [2 rows x 2 columns]
         ```
+
+        Change Log:
+            - Version 0.6.0 (2024-05-14):
+                - New method, mirrors previous behavior of :meth:`SQLDataModel.insert_row()` for versions <= 0.5.2.
 
         Note:
             - If no values are provided, ``None`` or SQL 'null' will be used for the values.
@@ -8286,7 +8290,7 @@ class SQLDataModel:
         try:
             sql_cur.execute(insert_stmt, values)
             self.sql_db_conn.commit()
-            self._update_indicies_quick_add(sql_cur.lastrowid)
+            self._update_indicies_deterministic(sql_cur.lastrowid)
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
@@ -9046,7 +9050,7 @@ class SQLDataModel:
         try:
             sql_cur.execute(insert_stmt, values)
             self.sql_db_conn.commit()
-            self._update_indicies_quick_add(sql_cur.lastrowid)
+            self._update_indicies_deterministic(sql_cur.lastrowid)
         except Exception as e:
             self.sql_db_conn.rollback()
             raise SQLProgrammingError(
@@ -11292,7 +11296,7 @@ class SQLDataModel:
         self.row_count = len(self.indicies)
         self.shape = (self.row_count,self.shape[1])
     
-    def _update_indicies_quick_add(self, row_index:int) -> None:
+    def _update_indicies_deterministic(self, row_index:int) -> None:
         """
         Quick implementation to update the :py:attr:`SQLDataModel.indicies` and :py:attr:`SQLDataModel.row_count` properties of the ``SQLDataModel`` instance representing the current valid row indicies and count based on the last inserted rowid.
 

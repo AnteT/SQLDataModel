@@ -674,6 +674,13 @@ def test_append_row():
         sdm.append_row(null_row)
         output_data = sdm.data(strict_2d=True)
         assert output_data == data_store 
+    # test model metadata
+    expected_shape = (len(data_store), len(data_store[0]))
+    output_shape = sdm.shape
+    assert output_shape == expected_shape
+    expected_indicies = tuple(range(0,(num_rows+num_null_rows)))
+    output_indicies = sdm.indicies
+    assert output_indicies == expected_indicies
 
 @pytest.mark.core
 def test_concat(sample_data):
