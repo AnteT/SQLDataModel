@@ -35,7 +35,7 @@ class DimensionError(Exception):
             print(e)
     
     Note:
-        - An argument could be made for using `ValueError` instead, but there's enough difference to justify a new error.
+        - An argument could be made for using ``ValueError`` instead, but there's enough difference to justify a new error.
     """
 
 class SQLProgrammingError(Exception):
@@ -75,6 +75,5 @@ class SQLProgrammingError(Exception):
             print(e)    
 
     Note:
-        - This exception is used to wrap any ``sqlite3.ProgrammingError`` encountered during SQL related operations.
-        
+        - This exception is used to wrap any ``sqlite3.ProgrammingError`` encountered during SQL related operations.  
     """

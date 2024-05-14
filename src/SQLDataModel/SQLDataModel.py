@@ -1392,10 +1392,10 @@ class SQLDataModel:
 
     def get_display_max_rows(self) -> int|None:
         """
-        Retrieves the current value of the ``display_max_rows`` property, which determines the maximum rows displayed for ``SQLDataModel``.
+        Retrieves the current value at :py:attr:`SQLDataModel.display_max_rows`, which determines the maximum rows displayed for the ``SQLDataModel``.
 
         Returns:
-            ``int`` or ``None``: The current value set on :py:attr:`SQLDataModel.display_max_rows`.
+            ``int`` or ``None``: The current value set at :py:attr:`SQLDataModel.display_max_rows`.
 
         Example::
 
@@ -1437,10 +1437,10 @@ class SQLDataModel:
             # Create model
             sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-            # Any call to ``print`` or ``repr`` will be restricted to 500 max rows
+            # Any call to `print` or `repr` will be restricted to 500 max rows
             sdm.set_display_max_rows(500)
 
-            # Alternatively, auto-detect dimensions by setting to ``None``
+            # Alternatively, auto-detect dimensions by setting to `None`
             sdm.set_display_max_rows(None)
         
         Note:
@@ -1579,9 +1579,8 @@ class SQLDataModel:
             # Outputs 'dynamic'
             print(alignment)
 
-        Related:
-            - See :meth:`SQLDataModel.set_column_alignment` to configure table alignment
-        
+        Note:
+            - Use :meth:`SQLDataModel.set_column_alignment()` to modify column alignment.
         """
         return self.column_alignment
     
@@ -1611,13 +1610,13 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
-            # Set to right-align
+            # Set to right-align columns
             sdm.set_column_alignment('right')
 
             # Output
             print(sdm)
         
-        This will output:
+        This will output the model with values right-aligned:
 
         ```shell
             ┌───┬────────┬─────────┬────────┬─────────┐
@@ -1629,6 +1628,9 @@ class SQLDataModel:
             │ 3 │    pat │ douglas │     42 │   11.50 │
             └───┴────────┴─────────┴────────┴─────────┘        
         ```
+
+        Setting columns to be left-aligned:
+
         ```python            
             # Set to left-align
             sdm.set_column_alignment('left')
@@ -1637,9 +1639,9 @@ class SQLDataModel:
             print(sdm)
         ```
 
-        This will output:
+        This will output the model with left-aligned values instead:
 
-        ```shell            
+        ```text            
             ┌───┬────────┬─────────┬────────┬─────────┐
             │   │ first  │ last    │ age    │ service │
             ├───┼────────┼─────────┼────────┼─────────┤
@@ -1651,13 +1653,10 @@ class SQLDataModel:
         ```
 
         Note:
-            - The options for 'left' and 'right' mirror the '<' and '>' f-string formatters, respectively.
+            - Use :meth:`SQLDataModel.get_column_alignment()` to return the current column alignment setting.
             - When using 'center', if the column contents cannot be perfectly centralized, the left side will be favored.
             - Use 'dynamic' to return to default column alignment, which is right-aligned for numeric types and left-aligned for others.
-
-        Related:
-            - :meth:`SQLDataModel.get_column_alignment` to return the current setting for column alignment.
-
+            - See :meth:`SQLDataModel.set_table_style()` for modifying table format and available styles.
         """
         if not isinstance(alignment, str):
             raise TypeError(
@@ -1672,8 +1671,7 @@ class SQLDataModel:
 
     def get_display_index(self) -> bool:
         """
-        Returns the current boolean value for ``is_display_index``, which determines
-        whether or not the ``SQLDataModel`` index will be shown in print or repr calls.
+        Returns the current value set at :py:attr:`SQLDataModel.display_index`, which determines whether or not the index is displayed in the ``SQLDataModel`` representation.
 
         Returns:
             ``bool``: The current value of the ``display_index`` property.
@@ -1691,17 +1689,18 @@ class SQLDataModel:
             # Output: True
             print(display_index)
         
+        Note:
+            - Use :meth:`SQLDataModel.set_display_index()` to modify this property and toggle index display visibility.
         """
         return self.display_index
 
     def set_display_index(self, display_index:bool) -> None:
         """
-        Sets the ``display_index`` property to enable or disable the inclusion of the
-        ``SQLDataModel`` index value in print or repr calls, default set to include.
+        Sets the value for :py:attr:`SQLDataModel.display_index` to enable or disable the inclusion of the
+        ``SQLDataModel`` index value in print or repr calls.
 
         Parameters:
-            ``display_index`` (bool): A boolean value (True | False) to determine whether
-            to include the index in print or repr calls.
+            ``display_index`` (bool): Whether or not to include the index in ``SQLDataModel`` representations.
 
         Raises:
             ``TypeError``: If the provided argument is not a boolean value.
@@ -1719,10 +1718,12 @@ class SQLDataModel:
             # Disable displaying index
             sdm.set_display_index(False)
 
+        Note:
+            - Use :meth:`SQLDataModel.set_table_style()` to more broadly modify the appearance and formatting style of ``SQLDataModel`` string representations.
         """
         if not isinstance(display_index, bool):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f'TypeError: invalid argument "{display_index}", please provide a valid boolean (True | False) value to the `display_index` argument...')
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(display_index).__name__}', argument for `display_index` must be of type 'bool' representating whether or not the index should be displayed")
                 )
         self.display_index = display_index
     
@@ -1786,7 +1787,7 @@ class SQLDataModel:
 
         Note:
             - If an empty model is initialized, the :py:attr:`SQLDataModel.row_count` will be 0 until the first row is inserted.
-            - Using the :meth:`SQLDataModel.__getitem__` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
+            - Using the :meth:`SQLDataModel.__getitem__()` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
         """
         return self.shape
     
