@@ -318,14 +318,14 @@ for epoch in range(num_epochs):
     val_loss, val_acc = validate(model, criterion, val_loader, device)
 
     # Let's store the results first
-    sdm.insert_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
+    sdm.append_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
 
     # Print training results to terminal
     print(f'Epoch [{epoch+1}/{num_epochs}], '
           f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%, '
           f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%')
 ```
-We use the `insert_row()` method to store the results from training, inserting a new row for each epoch. Now that we're storing the data instead of just printing it to the terminal, we can track our results and easily export them into whichever format we need. For this example, let's store them as a `.json` file. All we need is to add one more line at the end of our training loop:
+We use the `append_row()` method to store the results from training, inserting a new row for each epoch. Now that we're storing the data instead of just printing it to the terminal, we can track our results and easily export them into whichever format we need. For this example, let's store them as a `.json` file. All we need is to add one more line at the end of our training loop:
 
 ```python
 # ... Training loop ...
@@ -372,7 +372,7 @@ for epoch in range(num_epochs):
     val_loss, val_acc = validate(model, criterion, val_loader, device)
 
     # Let's store the results first
-    sdm.insert_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
+    sdm.append_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
 
     # Pretty print last row of training results to terminal
     print(sdm[-1])
