@@ -117,6 +117,50 @@ def test_setitem():
     assert num_checked == (sdm.row_count * sdm.column_count)
 
 @pytest.mark.core
+def test_setitem_triggers():
+    """Tests append row triggers for setitem and index value vs position sync for row and column indexing."""
+    grid_size = 10 # creates grid_size as (grid_size x grid_size)
+    sdm = SQLDataModel([["F" for _ in range(grid_size)] for _ in range(grid_size)]) # create the grid canvas
+    # create a series of random indicies within grid bounds
+    for i in range(grid_size):
+        # random.seed(i) # set seed to avoid duplication
+        rand_x, rand_y = random.randint(0, grid_size - 1), random.randint(0, grid_size - 1)
+        input_cell = f"({rand_x}, {rand_y})"
+        sdm[rand_x, rand_y] = input_cell
+        output_cell = sdm[rand_x, rand_y].data()
+        assert output_cell == input_cell
+    # test append row trigger within bounds
+    input_row = tuple([f's({grid_size}, {j})' for j in range(grid_size)])
+    sdm[grid_size] = input_row
+    output_row = sdm[-1].data(index=True)
+    expected_row = tuple([grid_size, *input_row])
+    assert output_row == expected_row
+    expected_shape = (grid_size+1,grid_size)
+    output_shape = sdm.shape
+    assert output_shape == expected_shape
+    # create a series of random indicies without index position & value sync
+    canvas = 30
+    subset_grid = 10
+    sdm = SQLDataModel([["F" for _ in range(canvas)] for _ in range(canvas)]) # create the grid canvas
+    sdm = sdm[(canvas-subset_grid):canvas,(canvas-subset_grid):canvas]
+    for i in range(subset_grid):
+        # random.seed(i) # set seed to avoid duplication
+        rand_x, rand_y = random.randint(0, subset_grid - 1), random.randint(0, subset_grid - 1)
+        input_cell = f"({rand_x}, {rand_y})"
+        sdm[rand_x, rand_y] = input_cell
+        output_cell = sdm[rand_x, rand_y].data()
+        assert output_cell == input_cell
+    # test append row trigger outside of original canvas bounds
+    input_row = tuple([f's({canvas}, {j})' for j in range((canvas-subset_grid),canvas)])
+    sdm[canvas-(canvas-subset_grid)] = input_row
+    output_row = sdm[-1].data(index=True)
+    expected_row = tuple([canvas, *input_row])
+    assert output_row == expected_row
+    expected_shape = (canvas-(canvas-subset_grid)+1,canvas-(canvas-subset_grid))
+    output_shape = sdm.shape
+    assert output_shape == expected_shape
+
+@pytest.mark.core
 def test_init_empty(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]  
     input_dtypes = {'string': 'str', 'int': 'int', 'float': 'float', 'bool': 'int', 'date': 'date', 'bytes': 'bytes', 'nonetype': 'str', 'datetime': 'datetime'}
