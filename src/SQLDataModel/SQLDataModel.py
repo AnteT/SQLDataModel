@@ -10570,17 +10570,28 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
 
-            # Create the fetch query to use
+            # Create the SQL query to execute
             query = 'SELECT * FROM sdm WHERE Column1 > 10'
 
             # Fetch and save the result to a new instance
             result_model = sdm.execute_fetch(query)
 
+            # Create a parameterized SQL query to execute
+            query = 'SELECT * FROM sdm WHERE Column1 > ? OR Column2 < ?'
+            params = (10, 20)
+
+            # Provide the SQL and the statement parameters
+            result_parameterized = sdm.execute_fetch(query, params)
+
         Important:
-            - The default table name is ``'sdm'``, or you can use :meth:`SQLDataModel.get_model_name()` to view the current model alias.
-            - This function is the primary method used by ``SQLDataModel`` methods that are expected to return a new instance.
+            - The default table name is ``'sdm'``, you can use :meth:`SQLDataModel.set_model_name()` to modify the name used by ``SQLDataModel``.
+        
+        Change Log:
+            - Version 0.6.2 (2024-05-15):
+                - Inclusion of :py:attr:`SQLDataModel.table_style` argument in returned ``SQLDataModel`` to inherit all display properties in result.
 
         Note:
+            - Use :meth:`SQLDataModel.set_model_name()` to modify the table name used by the model, default name set as ``'sdm'``.
             - Display properties such as float precision, index column or table styling are also passed to the new instance when not provided in ``kwargs``.
         """
         try:
@@ -10595,12 +10606,10 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
             )
-        if not kwargs:
-            return type(self)(fetch_result, headers=fetch_headers, dtypes=self.dtypes, display_max_rows=self.display_max_rows, min_column_width=self.min_column_width, max_column_width=self.max_column_width, column_alignment=self.column_alignment, display_color=self.display_color, display_index=self.display_index, display_float_precision=self.display_float_precision)
-        else:
-            params = {"dtypes":self.dtypes,"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision}
-            params.update({k:v for k,v in kwargs.items()})
-            return type(self)(fetch_result, headers=fetch_headers, **params)
+        sdm_args = self._get_display_args(include_dtypes=True)
+        if kwargs:
+            sdm_args.update({k:v for k,v in kwargs.items()})
+        return type(self)(fetch_result, headers=fetch_headers, **sdm_args)
 
     def execute_statement(self, sql_stmt:str) -> None:
         """
@@ -11481,9 +11490,12 @@ class SQLDataModel:
         """
         return self.sql_db_conn.execute("select sql from sqlite_master").fetchone()[0]
 
-    def _get_display_args(self) -> dict:
+    def _get_display_args(self, include_dtypes:bool=False) -> dict:
         """
         Retrieves the current display configuration settings of the ``SQLDataModel`` with the correct ``kwargs`` for the class :meth:`SQLDataModel.__init__()` method.
+
+        Parameters:
+            ``include_dtypes`` (bool, optional): Whether :py:attr:`SQLDataModel.dtypes` should be included in the result. Default is False, including only display arguments.
 
         Returns:
             ``dict``: A dictionary containing the display configuration settings in the format ``{'setting': 'value'}``.
@@ -11497,8 +11509,18 @@ class SQLDataModel:
             - :py:attr:`SQLDataModel.display_index`: True if displaying index column, False otherwise.
             - :py:attr:`SQLDataModel.display_float_precision`: The precision for displaying floating-point numbers.
             - :py:attr:`SQLDataModel.table_style`: The table styling format to use for strng representations of the model.
-        """        
-        return {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision, "table_style":self.table_style}
+        
+        Dtype Property:
+            - :py:attr:`SQLDataModel.dtypes`: A dictionary mapping the current model's columns to their corresponding Python data type.
+        
+        Change Log:
+            - Version 0.6.2 (2024-05-15):
+                - Added ``include_dtypes`` parameter for use by methods such as :meth:`SQLDataModel.min()` and :meth:`SQLDataModel.max()` for operations that require returning the results of SQL fetch statements.
+        """
+        args = {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision, "table_style":self.table_style}
+        if include_dtypes:
+            args['dtypes'] = self.dtypes
+        return args
 
     def validate_indicies(self, indicies) -> tuple[int|slice, list[str]]:
         """
