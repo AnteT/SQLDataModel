@@ -1971,6 +1971,9 @@ class SQLDataModel:
             └───┴──────────────────┴────────────┴─────────────┴───────────────┴────────┴─────────────────────┘      
             [10 rows x 6 columns]  
         ```
+        
+        Now that we have our ``SQLDataModel``, we can generate some statistics:
+
         ```python
             # Generate statistics
             sdm_described = sdm.describe()
@@ -2000,6 +2003,9 @@ class SQLDataModel:
             └────────┴──────────────┴─────────────┴─────────────┴───────────────┴────────┴─────────────────────┘
             [12 rows x 7 columns]    
         ```
+
+        Specific columns or data types can be excluded from result:
+
         ```python
             # Set filters to exclude all str dtypes and the 'hire_date' column:
             sdm_describe = sdm.describe(exclude_dtypes=['str'], exclude_columns=['hire_date'])
@@ -2029,9 +2035,17 @@ class SQLDataModel:
             └────────┴───────────────┴────────┴─────────────────────┘
             [12 rows x 4 columns]
         ```
-        Warnings:
-            - Generally, do not rely on ``SQLDataModel`` to do statistics, use ``NumPy`` or a real library instead
-            - Statistics for ``date`` and ``datetime`` can be unpredictable if formatting is inconsistent
+
+        Change Log:
+            - Version 0.6.3 (2024-05-16):
+                - Modified model to output values as string data types and set columns to right-aligned if arguments are not present in ``kwargs`` to retain metric resolution while having numeric alignment.
+        
+        Important:
+            - Generally, do not rely on ``SQLDataModel`` to do statistics, use ``NumPy`` or a real scientific computing library instead.
+            
+        Note:
+            - Use :meth:`SQLDataModel.infer_dtypes()` to cast columns to their apparent data type, or set it manually with :meth:`SQLDataModel.set_column_dtypes()` to convert columns to different data types.
+            - Statistics for ``date`` and ``datetime`` can be unpredictable if formatting used is inconsistent with conversion to Julian days or if column data type is incorrect.
         """
         if exclude_columns is None:
             exclude_columns = []
@@ -2068,7 +2082,10 @@ class SQLDataModel:
         max_subselect = "select * from (select 'max'," + ",".join([f"""round(max("{col}"),{self.display_float_precision}) """ if self.header_master[col][1] in ('float','int') else f"""max("{col}")""" if (not ignore_na or self.header_master[col][1] in ("date","datetime")) else f"""(select max("{col}") from "{self.sql_model}" where trim(upper("{col}")) not in (' ', '', 'NA', 'NONE','NULL')) """ for col in desc_cols]) + f"""from "{self.sql_model}" limit 1) """
         dtype_subselect = "select 'dtype'," + ",".join([f"""'{self.header_master[col][1]}'""" for col in desc_cols])
         full_script = f"""{pcte_stmt} select {headers_select} from ({headers_subselect} UNION ALL {count_subselect} UNION ALL {unique_subselect} UNION ALL {top_subselect} UNION ALL {freq_subselect} UNION ALL {mean_subselect} UNION ALL {std_subselect} UNION ALL {min_subselect} UNION ALL {p25_subselect} UNION ALL {p50_subselect} UNION ALL {p75_subselect} UNION ALL {max_subselect} UNION ALL {dtype_subselect}) limit -1 offset 1"""
-        # print(full_script.replace("\\'","'").replace("UNION ALL","\nUNION ALL"))
+        if 'column_alignment' not in kwargs:
+            kwargs['column_alignment'] = 'right'
+        if 'dtypes' not in kwargs:
+            kwargs['dtypes'] = {col:'str' for col in desc_cols}
         return self.execute_fetch(full_script, display_index=False, **kwargs)
 
     def sample(self, n_samples:float|int=0.05, **kwargs) -> SQLDataModel:
@@ -2852,7 +2869,12 @@ class SQLDataModel:
             [4 rows x 2 columns]
         ```
 
+        Change Log:
+            - Version 0.6.3 (2024-05-16):
+                - Modified to try parsing input data as JSON if initial inspection does not signify row or column orientation.
+
         Note:
+            - If data orientation suggests JSON like structure, then :meth:`SQLDataModel.from_json()` will attempt to construct the model.
             - Dictionaries in list like orientation can also be used with structures similar to JSON objects.
             - The method determines the structure of the SQLDataModel based on the format of the provided dictionary.
             - If the keys are integers, they are used as row indexes; otherwise, keys are used as headers.
@@ -2867,7 +2889,7 @@ class SQLDataModel:
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid type in list '{type(data[0].__name__)}', if `data` is of type 'list' its items must be of type 'dict' to use the `from_dict()` method")
                 )
-            return cls.from_json(data)
+            return cls.from_json(data, **kwargs)
         rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
         if rowwise:
             if 'headers' not in kwargs:
@@ -2885,12 +2907,10 @@ class SQLDataModel:
                 data = [x for x in data.values()]
                 data = [tuple([data[j][row] for j in range(column_count)]) for row in range(row_count)]
             else:
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid dict values, received type '{type(first_key_val).__name__}' but expected dict values as one of type 'list', 'tuple' or 'dict'")
-                )
+                return cls.from_json(data, **kwargs)
             if 'headers' not in kwargs:
                 kwargs['headers'] = headers
-            return cls(data=data, **kwargs)  
+            return cls(data=data, **kwargs) 
 
     @classmethod
     def from_excel(cls, filename:str, worksheet:int|str=0, min_row:int|None=None, max_row:int|None=None, min_col:int|None=None, max_col:int|None=None, headers:list[str]=None, **kwargs) -> SQLDataModel:
