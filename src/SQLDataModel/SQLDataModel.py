@@ -4521,7 +4521,7 @@ class SQLDataModel:
                     data = data[0]
         return [tuple(x[0] for x in res.description),*data] if include_headers else data
 
-    def to_csv(self, filename:str=None, delimiter:str=',', quotechar:str='"', lineterminator:str='\r\n', na_rep:str='None', index:bool=False, **kwargs) -> str|None:
+    def to_csv(self, filename:str=None, delimiter:str=',', quotechar:str='"', lineterminator:str='\r\n', na_rep:str='None', encoding:str='utf-8', index:bool=False, **kwargs) -> str|None:
         """
         Writes ``SQLDataModel`` to the specified file if ``filename`` argument if provided, otherwise returns the model directly as a CSV formatted string literal.
 
@@ -4530,7 +4530,8 @@ class SQLDataModel:
             ``delimiter`` (str, optional): The delimiter to use for separating values. Default is ','.
             ``quotechar`` (str, optional): The character used to quote fields. Default is '"'.
             ``lineterminator`` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
-            ``na_rep`` (str, optional): String representation to use for null or missing values. Default is 'None'.
+            ``na_rep`` (str, optional): String representation to use for null or missing values. Default is None.
+            ``encoding`` (str, optional): The encoding to use when writing the model to a CSV file. Default is 'utf-8'.
             ``index`` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
             ``**kwargs``: Additional arguments to be passed to the ``csv.writer`` constructor.
 
@@ -4606,6 +4607,9 @@ class SQLDataModel:
         ```
         
         Change Log:
+            - Version 0.6.4 (2024-05-17):
+                - Added ``encoding`` parameter to pass to file handler when writing contents as CSV file and set default to ``utf-8`` to align with expected SQLite codec.
+
             - Version 0.4.0 (2024-04-23):
                 - Modified quoting behavior to avoid redundant quoting and to closely mimic csv module from standard library.
                 - Added ``na_rep`` to fill null or missing values when generating output, useful for space delimited data and minimal quoting.
@@ -4623,7 +4627,7 @@ class SQLDataModel:
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index, na_rep=na_rep))
         headers = [x[0] for x in res.description]
         if filename is not None:
-            with open(filename, 'w', newline='') as file:
+            with open(filename, 'w', newline='', encoding=encoding) as file:
                 csvwriter = csv.writer(file,delimiter=delimiter,lineterminator=lineterminator,quotechar=quotechar,**kwargs)
                 csvwriter.writerow(headers)
                 csvwriter.writerows(res.fetchall())
