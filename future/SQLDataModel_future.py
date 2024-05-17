@@ -4530,7 +4530,7 @@ class SQLDataModel:
             ``delimiter`` (str, optional): The delimiter to use for separating values. Default is ','.
             ``quotechar`` (str, optional): The character used to quote fields. Default is '"'.
             ``lineterminator`` (str, optional): The character used to terminate the row and move to a new line. Default is '\\r\\n'.
-            ``na_rep`` (str, optional): String representation to use for null or missing values. Default is None.
+            ``na_rep`` (str, optional): String representation to use for null or missing values. Default is 'None'.
             ``encoding`` (str, optional): The encoding to use when writing the model to a CSV file. Default is 'utf-8'.
             ``index`` (bool, optional): If True, includes the index in the CSV file; if False, excludes the index. Default is False.
             ``**kwargs``: Additional arguments to be passed to the ``csv.writer`` constructor.
