@@ -772,7 +772,6 @@ class SQLDataModel:
         else:
             return '''nullif(nullif(?,'None'),'')''' if as_binding else f'''nullif(nullif("{param}",'None'),'') {param_alias}'''
 
-
     @staticmethod
     def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None) -> str:
         """
@@ -780,7 +779,7 @@ class SQLDataModel:
 
         Parameters:
             ``column`` (str): The name of the column.
-            ``dtype`` (str): The data type of the column ('float', 'int', 'index', or other).
+            ``dtype`` (str): The data type of the column ('float', 'int', 'bytes', 'index', or 'custom').
             ``max_pad_width`` (int): The maximum width to pad the output.
             ``float_precision`` (int, optional): The precision for floating-point numbers (default is 4).
             ``alignment`` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
@@ -788,11 +787,17 @@ class SQLDataModel:
         Returns:
             ``str``: The formatted SELECT clause for SQLite.
 
+        Change Log:
+            - Version 0.7.0 (2024-06-08):
+                - Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
+
         Note:
             - This function generates SQLite SELECT clauses for single column only.
             - The output preformats SELECT result to fit ``repr`` method for tabular output.
             - The return ``str`` is not valid SQL by itself, representing only the single column select portion.
         """
+        if dtype == 'custom':
+            return f"""printf('%{max_pad_width}s', '{column}') """ # treats column as literal argument for string format substitution
         if alignment is None: # dynamic alignment
             if dtype == 'float':
                 select_item_fmt = f"""(CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s', '') WHEN LENGTH(printf('% .{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%.{max_pad_width}s', printf('% {max_pad_width}.{float_precision}f',"{column}")) ELSE SUBSTR(printf('% .{float_precision}f',"{column}"),1,{max_pad_width}-2) || '⠤⠄' END)"""
@@ -8136,13 +8141,17 @@ class SQLDataModel:
             [4 rows x 3 columns]        
         ```
 
+        Change Log:
+            - Version 0.7.0 (2024-06-08):
+                - Modified horizontal truncation behavior to alternate column selection between table start and table end instead of sequential left to right ordering.
+
         Note:
             - Use :meth:`SQLDataModel.set_display_max_rows()` to explicitly set vertical height and modify vertical truncation behavior, which uses current terminal height by default.
             - Use :meth:`SQLDataModel.set_min_column_width()` and :meth:`SQLDataModel.set_max_column_width()` to adjust column widths and modify horizontal truncation behavior.
             - Use :meth:`SQLDataModel.set_column_alignment()` to modify column alignment, available options are dynamic alignment based on dtype, left, center or right alignment.
             - Use :meth:`SQLDataModel.set_display_color()` to modify the table color, by default no color is applied with characters drawn using platform specific settings.
             - Use :meth:`SQLDataModel.set_table_style()` to modify the table style format and box characters used to draw the table.
-        """         
+        """
         table_format = self._generate_table_style()
         top_lh, top_hbar, top_sep, top_rh = table_format[0]
         mid_lh, mid_hbar, mid_sep, mid_rh = table_format[1]
@@ -8153,7 +8162,8 @@ class SQLDataModel:
         row_rh_width = len(row_rh)
         row_sep_width = len(row_sep)
         table_truncated_ellipses = """⠤⠄"""
-        table_truncated_ellipses_width = len(table_truncated_ellipses) + 1 # added extra space after truncation mark before ellipses, looks better
+        horizontal_sep_marker = """__horizontal_sep__""" # never displayed
+        table_truncated_ellipses_width = len(table_truncated_ellipses) # added extra space after truncation mark before ellipses, looks better
         table_bare_newline = """\n"""
         total_available_width, total_available_height = shutil.get_terminal_size()
         display_max_rows = self.display_max_rows if self.display_max_rows is not None else (total_available_height - 6) if (total_available_height - 6 > 0) else 1
@@ -8182,26 +8192,28 @@ class SQLDataModel:
         # print(f'truncation info: {total_required_width} of {total_available_width}, truncation: {table_truncation_required}')
         if table_truncation_required:
             total_available_width -= table_truncated_ellipses_width
-            max_cols, max_width = 0, (row_lh_width + row_rh_width + table_truncated_ellipses_width) # max width starts with the tax of index and border already included, around 5-7 depending on index width
-            for v in header_length_dict.values():
-                if max_width < total_available_width:
-                    max_width += (v+3)
-                    max_cols += 1
-                    continue
-                break
-            if max_width > total_available_width:
-                max_cols -= 1
-                max_width -= (header_length_dict[display_headers[max_cols]] +3)
-            display_headers = display_headers[:max_cols] # +1 to include accounted for column
-            table_dynamic_newline = f""" {table_truncated_ellipses}\n"""
-        else:
-            table_dynamic_newline = """\n"""
+            horiz_max_width = row_lh_width + row_rh_width
+            lh_headers, rh_headers = [], []
+            header_length_dict.update({horizontal_sep_marker:(table_truncated_ellipses_width)}) # required to backport element and width for ensuing string formatting
+            for i in range(len(display_headers) // 2):
+                lh_header, rh_header = display_headers[i], display_headers[-(i + 1)]
+                lh_width, rh_width = (header_length_dict[lh_header] + 3), (header_length_dict[rh_header] + 3)
+                if horiz_max_width < total_available_width:                
+                    horiz_max_width += lh_width
+                    if horiz_max_width > total_available_width:
+                        break
+                    lh_headers.append(lh_header)
+                    horiz_max_width += rh_width
+                    if horiz_max_width > total_available_width:
+                        break                    
+                    rh_headers.append(rh_header)
+            display_headers = [*lh_headers,horizontal_sep_marker,*rh_headers[::-1]]
         row_sep_concat = f"""|| '{row_sep}' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
-        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" if col != horizontal_sep_marker else f"""{SQLDataModel.sqlite_printf_format(table_truncated_ellipses,'custom',table_truncated_ellipses_width,self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
         if vertical_truncation_required:
             vertical_sep_chars = '⠒⠂'
-            vertical_sep_fmt_str = f'''{row_lh}{row_sep.join([f"""{vertical_sep_chars:^{max(0,header_length_dict[col]+1)}}"""[:header_length_dict[col]] for col in display_headers])}{row_rh}{table_dynamic_newline}'''
+            vertical_sep_fmt_str = f'''{row_lh}{row_sep.join([f"""{vertical_sep_chars:^{max(0,header_length_dict[col]+1)}}"""[:header_length_dict[col]] for col in display_headers])}{row_rh}{table_bare_newline}'''
             fetch_fmt_stmt = f"""
             with "_repr" as (
                 select "{self.sql_idx}" as "_row" from "{self.sql_model}" where "{self.sql_idx}" in 
@@ -8212,20 +8224,20 @@ class SQLDataModel:
                 ,"_trigger" as (select "{self.sql_idx}" as "_sep" from "{self.sql_model}" order by "{self.sql_idx}" asc limit 1 offset {split_row})
             select CASE WHEN "{self.sql_idx}" <> (select "_sep" from "_trigger") THEN "_full_row" 
             ELSE '{vertical_sep_fmt_str}' 
-            END from (select "{self.sql_idx}",'{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
+            END from (select "{self.sql_idx}",'{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_bare_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
         else:
-            fetch_fmt_stmt = f"""select '{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
+            fetch_fmt_stmt = f"""select '{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_bare_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if column_alignment is None: # dynamic alignment
-            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
+            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col not in (self.sql_idx, horizontal_sep_marker) else f"""{' ':>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
         else: # left, center, right alignment
-            formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col != self.sql_idx else f"""{' ':>{header_length_dict[col]}}"""for col in display_headers]
+            formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col not in (self.sql_idx, horizontal_sep_marker) else f"""{' ':>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
         # table_top_bar = "".join([top_lh, top_sep.join([top_hbar * header_length_dict[col] for col in display_headers]), top_rh, table_bare_newline])
         col_lengths = [header_length_dict[col] for col in display_headers]
         table_top_bar = "".join([top_lh, top_sep.join([top_hbar * length for length in col_lengths]), top_rh, table_bare_newline])
         table_top_bar = table_top_bar if len(table_top_bar.strip()) >=1 else """"""
         table_repr = "".join([table_repr, table_top_bar])
-        table_repr = "".join([table_repr, row_lh, row_sep.join(formatted_headers), row_rh, table_dynamic_newline])
+        table_repr = "".join([table_repr, row_lh, row_sep.join(formatted_headers), row_rh, table_bare_newline])
         # table_mid_bar = "".join([mid_lh, mid_sep.join([mid_hbar * header_length_dict[col] for col in display_headers]), mid_rh, table_bare_newline])
         table_mid_bar = "".join([mid_lh, mid_sep.join([mid_hbar * length for length in col_lengths]), mid_rh, table_bare_newline])
         table_mid_bar = table_mid_bar if len(table_mid_bar.strip()) >=1 else """"""
@@ -9687,18 +9699,21 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
 
-            # Set color with hex value
+            # Set color using hex value
             sdm.set_display_color('#A6D7E8')
+            
+            # Set color using rgb value
+            sdm.set_display_color((166, 215, 232))
+
+        Change Log:
+            - Version 0.7.0 (2024-06-08):
+                - Removed warning message and modified to raise exception on failure to create display color pen.
 
         Note:
             - By default, no color styling is applied and the native terminal color is used.
             - To use rgb values, ensure a single tuple is provided as an argument.
         """
-        try:
-            pen = ANSIColor(color)
-            self.display_color = pen
-        except:
-            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code"))
+        self.display_color = ANSIColor(color)
 
     def sort(self, by:str|int|list=None, asc:bool=True) -> SQLDataModel:
         """
@@ -10206,6 +10221,7 @@ class SQLDataModel:
             └───┴────────┴──────┴────────────┘
             [4 rows x 3 columns]
         ```
+        
         Filter by multiple parameters:
 
         ```python        
@@ -10278,6 +10294,7 @@ class SQLDataModel:
             # Or create new one by passing in a new column name:
             sdm['New Column'] = sdm['First Name'].apply(uncase_name) # new column will be created with returned values
         ```
+
         Applying to Multiple Columns
         ----------------------------
 
@@ -10291,6 +10308,7 @@ class SQLDataModel:
             # Create a new 'Employee Summary' column for the returned values:
             sdm['Employee Summary'] = sdm.apply(summarize_employee)
         ```
+
         Applying a Built-in Function
         ----------------------------
 
@@ -10304,6 +10322,7 @@ class SQLDataModel:
             # Apply the math.sqrt function to the original 'Number' column:
             sdm_sqrt = sdm.apply(math.sqrt)
         ```
+
         Applying a Lambda Function
         --------------------------
 

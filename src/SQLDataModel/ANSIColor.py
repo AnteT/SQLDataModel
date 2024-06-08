@@ -63,7 +63,7 @@ class ANSIColor:
             except:
                 raise ValueError(
                     ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', string argument for `text_color` must be a valid hexadecimal value between `#000000` and `#ffffff`")
-                )
+                ) from None
             self.text_color_str = text_color
             self.text_color_hex = text_color
             self.text_color_rgb = (fg_r, fg_g, fg_b)
@@ -78,7 +78,7 @@ class ANSIColor:
             except:
                 raise ValueError(
                     ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', tuple argument for `text_color` must be a valid rgb tuple `(r, g, b)` with values between `0` and `255`")
-                )            
+                ) from None  
             self.text_color_str = str(text_color)
             self.text_color_hex = f"#{fg_r:02x}{fg_g:02x}{fg_b:02x}"
             self.text_color_rgb = (fg_r, fg_g, fg_b)

@@ -469,7 +469,206 @@ def test_repr():
     output_repr_lines = [x.strip() for x in output_repr.strip().splitlines()]
     baseline_repr_lines = [x.strip() for x in baseline_repr.strip().splitlines()]
     for i in range(len(baseline_repr_lines)):
-        assert output_repr_lines[i] == baseline_repr_lines[i]              
+        assert output_repr_lines[i] == baseline_repr_lines[i]     
+                 
+@pytest.mark.core
+def test_repr_horizontal_truncation():
+    n_rows = 12
+    headers = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+    data = [[f"{col}{i}" for col in headers] for i in range(n_rows)]
+    sdm = SQLDataModel(data, headers, min_column_width=3, max_column_width=38, table_style='default', column_alignment='dynamic', display_max_rows=None, display_index=True)    
+    output_repr = sdm.__repr__()
+    baseline_repr = """
+┌────┬─────┬─────┬─────┬─────┬─────┬────┬─────┬─────┬─────┬─────┬─────┬─────┐
+│    │ A   │ B   │ C   │ D   │ E   │ ⠤⠄ │ U   │ V   │ W   │ X   │ Y   │ Z   │   
+├────┼─────┼─────┼─────┼─────┼─────┼────┼─────┼─────┼─────┼─────┼─────┼─────┤   
+│  0 │ A0  │ B0  │ C0  │ D0  │ E0  │ ⠤⠄ │ U0  │ V0  │ W0  │ X0  │ Y0  │ Z0  │   
+│  1 │ A1  │ B1  │ C1  │ D1  │ E1  │ ⠤⠄ │ U1  │ V1  │ W1  │ X1  │ Y1  │ Z1  │   
+│  2 │ A2  │ B2  │ C2  │ D2  │ E2  │ ⠤⠄ │ U2  │ V2  │ W2  │ X2  │ Y2  │ Z2  │   
+│  3 │ A3  │ B3  │ C3  │ D3  │ E3  │ ⠤⠄ │ U3  │ V3  │ W3  │ X3  │ Y3  │ Z3  │   
+│  4 │ A4  │ B4  │ C4  │ D4  │ E4  │ ⠤⠄ │ U4  │ V4  │ W4  │ X4  │ Y4  │ Z4  │   
+│  5 │ A5  │ B5  │ C5  │ D5  │ E5  │ ⠤⠄ │ U5  │ V5  │ W5  │ X5  │ Y5  │ Z5  │   
+│  6 │ A6  │ B6  │ C6  │ D6  │ E6  │ ⠤⠄ │ U6  │ V6  │ W6  │ X6  │ Y6  │ Z6  │   
+│  7 │ A7  │ B7  │ C7  │ D7  │ E7  │ ⠤⠄ │ U7  │ V7  │ W7  │ X7  │ Y7  │ Z7  │   
+│  8 │ A8  │ B8  │ C8  │ D8  │ E8  │ ⠤⠄ │ U8  │ V8  │ W8  │ X8  │ Y8  │ Z8  │   
+│  9 │ A9  │ B9  │ C9  │ D9  │ E9  │ ⠤⠄ │ U9  │ V9  │ W9  │ X9  │ Y9  │ Z9  │   
+│ 10 │ A10 │ B10 │ C10 │ D10 │ E10 │ ⠤⠄ │ U10 │ V10 │ W10 │ X10 │ Y10 │ Z10 │   
+│ 11 │ A11 │ B11 │ C11 │ D11 │ E11 │ ⠤⠄ │ U11 │ V11 │ W11 │ X11 │ Y11 │ Z11 │   
+└────┴─────┴─────┴─────┴─────┴─────┴────┴─────┴─────┴─────┴─────┴─────┴─────┘   
+[12 rows x 26 columns]
+"""
+    output_repr_lines = [x.strip() for x in output_repr.strip().splitlines()]
+    baseline_repr_lines = [x.strip() for x in baseline_repr.strip().splitlines()]
+    for i in range(len(baseline_repr_lines)):
+        assert output_repr_lines[i] == baseline_repr_lines[i]
+    # Test repr without displaying index as well        
+    baseline_repr = """
+┌─────┬─────┬─────┬─────┬─────┬─────┬────┬─────┬─────┬─────┬─────┬─────┬─────┐
+│ A   │ B   │ C   │ D   │ E   │ F   │ ⠤⠄ │ U   │ V   │ W   │ X   │ Y   │ Z   │
+├─────┼─────┼─────┼─────┼─────┼─────┼────┼─────┼─────┼─────┼─────┼─────┼─────┤
+│ A0  │ B0  │ C0  │ D0  │ E0  │ F0  │ ⠤⠄ │ U0  │ V0  │ W0  │ X0  │ Y0  │ Z0  │
+│ A1  │ B1  │ C1  │ D1  │ E1  │ F1  │ ⠤⠄ │ U1  │ V1  │ W1  │ X1  │ Y1  │ Z1  │
+│ A2  │ B2  │ C2  │ D2  │ E2  │ F2  │ ⠤⠄ │ U2  │ V2  │ W2  │ X2  │ Y2  │ Z2  │
+│ A3  │ B3  │ C3  │ D3  │ E3  │ F3  │ ⠤⠄ │ U3  │ V3  │ W3  │ X3  │ Y3  │ Z3  │
+│ A4  │ B4  │ C4  │ D4  │ E4  │ F4  │ ⠤⠄ │ U4  │ V4  │ W4  │ X4  │ Y4  │ Z4  │
+│ A5  │ B5  │ C5  │ D5  │ E5  │ F5  │ ⠤⠄ │ U5  │ V5  │ W5  │ X5  │ Y5  │ Z5  │
+│ A6  │ B6  │ C6  │ D6  │ E6  │ F6  │ ⠤⠄ │ U6  │ V6  │ W6  │ X6  │ Y6  │ Z6  │
+│ A7  │ B7  │ C7  │ D7  │ E7  │ F7  │ ⠤⠄ │ U7  │ V7  │ W7  │ X7  │ Y7  │ Z7  │
+│ A8  │ B8  │ C8  │ D8  │ E8  │ F8  │ ⠤⠄ │ U8  │ V8  │ W8  │ X8  │ Y8  │ Z8  │
+│ A9  │ B9  │ C9  │ D9  │ E9  │ F9  │ ⠤⠄ │ U9  │ V9  │ W9  │ X9  │ Y9  │ Z9  │
+│ A10 │ B10 │ C10 │ D10 │ E10 │ F10 │ ⠤⠄ │ U10 │ V10 │ W10 │ X10 │ Y10 │ Z10 │
+│ A11 │ B11 │ C11 │ D11 │ E11 │ F11 │ ⠤⠄ │ U11 │ V11 │ W11 │ X11 │ Y11 │ Z11 │
+└─────┴─────┴─────┴─────┴─────┴─────┴────┴─────┴─────┴─────┴─────┴─────┴─────┘
+[12 rows x 26 columns]
+"""
+    sdm.set_display_index(False)
+    output_repr = sdm.__repr__()
+    output_repr_lines = [x.strip() for x in output_repr.strip().splitlines()]
+    baseline_repr_lines = [x.strip() for x in baseline_repr.strip().splitlines()]
+    for i in range(len(baseline_repr_lines)):
+        assert output_repr_lines[i] == baseline_repr_lines[i]
+
+@pytest.mark.core
+def test_repr_vertical_truncation():
+    n_rows = 48
+    headers = ['A', 'B', 'C', 'D']
+    data = [[f"{col}{i}" for col in headers] for i in range(n_rows)]
+    sdm = SQLDataModel(data, headers, min_column_width=3, max_column_width=38, table_style='default', column_alignment='dynamic', display_max_rows=None, display_index=True)    
+    output_repr = sdm.__repr__()
+    baseline_repr = """
+┌────┬─────┬─────┬─────┬─────┐
+│    │ A   │ B   │ C   │ D   │
+├────┼─────┼─────┼─────┼─────┤
+│  0 │ A0  │ B0  │ C0  │ D0  │
+│  1 │ A1  │ B1  │ C1  │ D1  │
+│  2 │ A2  │ B2  │ C2  │ D2  │
+│  3 │ A3  │ B3  │ C3  │ D3  │
+│  4 │ A4  │ B4  │ C4  │ D4  │
+│  5 │ A5  │ B5  │ C5  │ D5  │
+│  6 │ A6  │ B6  │ C6  │ D6  │
+│  7 │ A7  │ B7  │ C7  │ D7  │
+│  8 │ A8  │ B8  │ C8  │ D8  │
+│ ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │
+│ 39 │ A39 │ B39 │ C39 │ D39 │
+│ 40 │ A40 │ B40 │ C40 │ D40 │
+│ 41 │ A41 │ B41 │ C41 │ D41 │
+│ 42 │ A42 │ B42 │ C42 │ D42 │
+│ 43 │ A43 │ B43 │ C43 │ D43 │
+│ 44 │ A44 │ B44 │ C44 │ D44 │
+│ 45 │ A45 │ B45 │ C45 │ D45 │
+│ 46 │ A46 │ B46 │ C46 │ D46 │
+│ 47 │ A47 │ B47 │ C47 │ D47 │
+└────┴─────┴─────┴─────┴─────┘
+[48 rows x 4 columns]
+"""
+    output_repr_lines = [x.strip() for x in output_repr.strip().splitlines()]
+    baseline_repr_lines = [x.strip() for x in baseline_repr.strip().splitlines()]
+    for i in range(len(baseline_repr_lines)):
+        assert output_repr_lines[i] == baseline_repr_lines[i]  
+    # Test repr without displaying index as well        
+    baseline_repr = """
+┌─────┬─────┬─────┬─────┐
+│ A   │ B   │ C   │ D   │
+├─────┼─────┼─────┼─────┤
+│ A0  │ B0  │ C0  │ D0  │
+│ A1  │ B1  │ C1  │ D1  │
+│ A2  │ B2  │ C2  │ D2  │
+│ A3  │ B3  │ C3  │ D3  │
+│ A4  │ B4  │ C4  │ D4  │
+│ A5  │ B5  │ C5  │ D5  │
+│ A6  │ B6  │ C6  │ D6  │
+│ A7  │ B7  │ C7  │ D7  │
+│ A8  │ B8  │ C8  │ D8  │
+│  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │
+│ A39 │ B39 │ C39 │ D39 │
+│ A40 │ B40 │ C40 │ D40 │
+│ A41 │ B41 │ C41 │ D41 │
+│ A42 │ B42 │ C42 │ D42 │
+│ A43 │ B43 │ C43 │ D43 │
+│ A44 │ B44 │ C44 │ D44 │
+│ A45 │ B45 │ C45 │ D45 │
+│ A46 │ B46 │ C46 │ D46 │
+│ A47 │ B47 │ C47 │ D47 │
+└─────┴─────┴─────┴─────┘
+[48 rows x 4 columns]
+"""
+    sdm.set_display_index(False)
+    output_repr = sdm.__repr__()
+    output_repr_lines = [x.strip() for x in output_repr.strip().splitlines()]
+    baseline_repr_lines = [x.strip() for x in baseline_repr.strip().splitlines()]
+    for i in range(len(baseline_repr_lines)):
+        assert output_repr_lines[i] == baseline_repr_lines[i]
+
+@pytest.mark.core
+def test_repr_combined_truncation():
+    n_rows = 26
+    headers = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+    data = [[f"{col}{i}" for col in headers] for i in range(n_rows)]
+    sdm = SQLDataModel(data, headers, min_column_width=3, max_column_width=38, table_style='default', column_alignment='dynamic', display_max_rows=None, display_index=True)    
+    output_repr = sdm.__repr__()
+    baseline_repr = """
+┌────┬─────┬─────┬─────┬─────┬─────┬────┬─────┬─────┬─────┬─────┬─────┬─────┐
+│    │ A   │ B   │ C   │ D   │ E   │ ⠤⠄ │ U   │ V   │ W   │ X   │ Y   │ Z   │   
+├────┼─────┼─────┼─────┼─────┼─────┼────┼─────┼─────┼─────┼─────┼─────┼─────┤   
+│  0 │ A0  │ B0  │ C0  │ D0  │ E0  │ ⠤⠄ │ U0  │ V0  │ W0  │ X0  │ Y0  │ Z0  │   
+│  1 │ A1  │ B1  │ C1  │ D1  │ E1  │ ⠤⠄ │ U1  │ V1  │ W1  │ X1  │ Y1  │ Z1  │   
+│  2 │ A2  │ B2  │ C2  │ D2  │ E2  │ ⠤⠄ │ U2  │ V2  │ W2  │ X2  │ Y2  │ Z2  │   
+│  3 │ A3  │ B3  │ C3  │ D3  │ E3  │ ⠤⠄ │ U3  │ V3  │ W3  │ X3  │ Y3  │ Z3  │   
+│  4 │ A4  │ B4  │ C4  │ D4  │ E4  │ ⠤⠄ │ U4  │ V4  │ W4  │ X4  │ Y4  │ Z4  │   
+│  5 │ A5  │ B5  │ C5  │ D5  │ E5  │ ⠤⠄ │ U5  │ V5  │ W5  │ X5  │ Y5  │ Z5  │   
+│  6 │ A6  │ B6  │ C6  │ D6  │ E6  │ ⠤⠄ │ U6  │ V6  │ W6  │ X6  │ Y6  │ Z6  │   
+│  7 │ A7  │ B7  │ C7  │ D7  │ E7  │ ⠤⠄ │ U7  │ V7  │ W7  │ X7  │ Y7  │ Z7  │   
+│  8 │ A8  │ B8  │ C8  │ D8  │ E8  │ ⠤⠄ │ U8  │ V8  │ W8  │ X8  │ Y8  │ Z8  │   
+│ ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │ ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │   
+│ 17 │ A17 │ B17 │ C17 │ D17 │ E17 │ ⠤⠄ │ U17 │ V17 │ W17 │ X17 │ Y17 │ Z17 │   
+│ 18 │ A18 │ B18 │ C18 │ D18 │ E18 │ ⠤⠄ │ U18 │ V18 │ W18 │ X18 │ Y18 │ Z18 │   
+│ 19 │ A19 │ B19 │ C19 │ D19 │ E19 │ ⠤⠄ │ U19 │ V19 │ W19 │ X19 │ Y19 │ Z19 │   
+│ 20 │ A20 │ B20 │ C20 │ D20 │ E20 │ ⠤⠄ │ U20 │ V20 │ W20 │ X20 │ Y20 │ Z20 │   
+│ 21 │ A21 │ B21 │ C21 │ D21 │ E21 │ ⠤⠄ │ U21 │ V21 │ W21 │ X21 │ Y21 │ Z21 │   
+│ 22 │ A22 │ B22 │ C22 │ D22 │ E22 │ ⠤⠄ │ U22 │ V22 │ W22 │ X22 │ Y22 │ Z22 │   
+│ 23 │ A23 │ B23 │ C23 │ D23 │ E23 │ ⠤⠄ │ U23 │ V23 │ W23 │ X23 │ Y23 │ Z23 │   
+│ 24 │ A24 │ B24 │ C24 │ D24 │ E24 │ ⠤⠄ │ U24 │ V24 │ W24 │ X24 │ Y24 │ Z24 │   
+│ 25 │ A25 │ B25 │ C25 │ D25 │ E25 │ ⠤⠄ │ U25 │ V25 │ W25 │ X25 │ Y25 │ Z25 │   
+└────┴─────┴─────┴─────┴─────┴─────┴────┴─────┴─────┴─────┴─────┴─────┴─────┘   
+[26 rows x 26 columns]
+"""
+    output_repr_lines = [x.strip() for x in output_repr.strip().splitlines()]
+    baseline_repr_lines = [x.strip() for x in baseline_repr.strip().splitlines()]
+    for i in range(len(baseline_repr_lines)):
+        assert output_repr_lines[i] == baseline_repr_lines[i]
+    # Test repr without displaying index as well
+    baseline_repr = """
+┌─────┬─────┬─────┬─────┬─────┬─────┬────┬─────┬─────┬─────┬─────┬─────┬─────┐
+│ A   │ B   │ C   │ D   │ E   │ F   │ ⠤⠄ │ U   │ V   │ W   │ X   │ Y   │ Z   │
+├─────┼─────┼─────┼─────┼─────┼─────┼────┼─────┼─────┼─────┼─────┼─────┼─────┤
+│ A0  │ B0  │ C0  │ D0  │ E0  │ F0  │ ⠤⠄ │ U0  │ V0  │ W0  │ X0  │ Y0  │ Z0  │
+│ A1  │ B1  │ C1  │ D1  │ E1  │ F1  │ ⠤⠄ │ U1  │ V1  │ W1  │ X1  │ Y1  │ Z1  │
+│ A2  │ B2  │ C2  │ D2  │ E2  │ F2  │ ⠤⠄ │ U2  │ V2  │ W2  │ X2  │ Y2  │ Z2  │
+│ A3  │ B3  │ C3  │ D3  │ E3  │ F3  │ ⠤⠄ │ U3  │ V3  │ W3  │ X3  │ Y3  │ Z3  │
+│ A4  │ B4  │ C4  │ D4  │ E4  │ F4  │ ⠤⠄ │ U4  │ V4  │ W4  │ X4  │ Y4  │ Z4  │
+│ A5  │ B5  │ C5  │ D5  │ E5  │ F5  │ ⠤⠄ │ U5  │ V5  │ W5  │ X5  │ Y5  │ Z5  │
+│ A6  │ B6  │ C6  │ D6  │ E6  │ F6  │ ⠤⠄ │ U6  │ V6  │ W6  │ X6  │ Y6  │ Z6  │
+│ A7  │ B7  │ C7  │ D7  │ E7  │ F7  │ ⠤⠄ │ U7  │ V7  │ W7  │ X7  │ Y7  │ Z7  │
+│ A8  │ B8  │ C8  │ D8  │ E8  │ F8  │ ⠤⠄ │ U8  │ V8  │ W8  │ X8  │ Y8  │ Z8  │
+│  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │ ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │  ⠒⠂ │
+│ A17 │ B17 │ C17 │ D17 │ E17 │ F17 │ ⠤⠄ │ U17 │ V17 │ W17 │ X17 │ Y17 │ Z17 │
+│ A18 │ B18 │ C18 │ D18 │ E18 │ F18 │ ⠤⠄ │ U18 │ V18 │ W18 │ X18 │ Y18 │ Z18 │
+│ A19 │ B19 │ C19 │ D19 │ E19 │ F19 │ ⠤⠄ │ U19 │ V19 │ W19 │ X19 │ Y19 │ Z19 │
+│ A20 │ B20 │ C20 │ D20 │ E20 │ F20 │ ⠤⠄ │ U20 │ V20 │ W20 │ X20 │ Y20 │ Z20 │
+│ A21 │ B21 │ C21 │ D21 │ E21 │ F21 │ ⠤⠄ │ U21 │ V21 │ W21 │ X21 │ Y21 │ Z21 │
+│ A22 │ B22 │ C22 │ D22 │ E22 │ F22 │ ⠤⠄ │ U22 │ V22 │ W22 │ X22 │ Y22 │ Z22 │
+│ A23 │ B23 │ C23 │ D23 │ E23 │ F23 │ ⠤⠄ │ U23 │ V23 │ W23 │ X23 │ Y23 │ Z23 │
+│ A24 │ B24 │ C24 │ D24 │ E24 │ F24 │ ⠤⠄ │ U24 │ V24 │ W24 │ X24 │ Y24 │ Z24 │
+│ A25 │ B25 │ C25 │ D25 │ E25 │ F25 │ ⠤⠄ │ U25 │ V25 │ W25 │ X25 │ Y25 │ Z25 │
+└─────┴─────┴─────┴─────┴─────┴─────┴────┴─────┴─────┴─────┴─────┴─────┴─────┘
+[26 rows x 26 columns]
+"""    
+    sdm.set_display_index(False)
+    output_repr = sdm.__repr__()
+    output_repr_lines = [x.strip() for x in output_repr.strip().splitlines()]
+    baseline_repr_lines = [x.strip() for x in baseline_repr.strip().splitlines()]
+    for i in range(len(baseline_repr_lines)):
+        assert output_repr_lines[i] == baseline_repr_lines[i]
 
 @pytest.mark.core
 def test_set_column_dtypes():
@@ -482,6 +681,20 @@ def test_set_column_dtypes():
         val = sdm[0,name_type].data() if name_type != 'bool' else bool(sdm[0,name_type].data())
         output_types.append(type(val).__name__ if type(val).__name__ != 'NoneType' else 'None')
     assert output_types == correct_types
+
+@pytest.mark.core
+def test_sql_execute_fetch():
+    sdm = SQLDataModel([['F', 'A', 'I', 'L']], headers=['W', 'X', 'Y', 'Z'])
+    expected_data = [('A', 'B', 'C', 'D'), ('P', 'A', 'S', 'S')]
+    # Test as query literal
+    sql_query_literal = """SELECT 'P' as 'A', 'A' as 'B', 'S' as 'C', 'S' as 'D' FROM sdm"""
+    output_data = sdm.execute_fetch(sql_query_literal).data(include_headers=True)
+    assert output_data == expected_data
+    # Test as parameterized statement
+    sql_query_parameterized = """SELECT ? AS 'A', ? AS 'B', ? AS 'C', ? AS 'D' FROM sdm"""
+    sql_query_params = ('P', 'A', 'S', 'S')    
+    output_data = sdm.execute_fetch(sql_query_parameterized, sql_params=sql_query_params).data(include_headers=True)
+    assert output_data == expected_data
 
 @pytest.mark.core
 def test_infer_types_from_data(sample_data):

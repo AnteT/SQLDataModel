@@ -788,7 +788,7 @@ class SQLDataModel:
             ``str``: The formatted SELECT clause for SQLite.
 
         Change Log:
-            - Version 0.6.5 (2024-06-05):
+            - Version 0.7.0 (2024-06-08):
                 - Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
 
         Note:
@@ -8142,7 +8142,7 @@ class SQLDataModel:
         ```
 
         Change Log:
-            - Version 0.6.5 (2024-06-05):
+            - Version 0.7.0 (2024-06-08):
                 - Modified horizontal truncation behavior to alternate column selection between table start and table end instead of sequential left to right ordering.
 
         Note:
@@ -9699,18 +9699,21 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
 
-            # Set color with hex value
+            # Set color using hex value
             sdm.set_display_color('#A6D7E8')
+            
+            # Set color using rgb value
+            sdm.set_display_color((166, 215, 232))
+
+        Change Log:
+            - Version 0.7.0 (2024-06-08):
+                - Removed warning message and modified to raise exception on failure to create display color pen.
 
         Note:
             - By default, no color styling is applied and the native terminal color is used.
             - To use rgb values, ensure a single tuple is provided as an argument.
         """
-        try:
-            pen = ANSIColor(color)
-            self.display_color = pen
-        except:
-            print(SQLDataModel.WarnFormat(f"{type(self).__name__}Warning: invalid color, the terminal display color could not be changed, please provide a valid hex value or rgb color code"))
+        self.display_color = ANSIColor(color)
 
     def sort(self, by:str|int|list=None, asc:bool=True) -> SQLDataModel:
         """
@@ -10218,6 +10221,7 @@ class SQLDataModel:
             └───┴────────┴──────┴────────────┘
             [4 rows x 3 columns]
         ```
+        
         Filter by multiple parameters:
 
         ```python        
@@ -10290,6 +10294,7 @@ class SQLDataModel:
             # Or create new one by passing in a new column name:
             sdm['New Column'] = sdm['First Name'].apply(uncase_name) # new column will be created with returned values
         ```
+
         Applying to Multiple Columns
         ----------------------------
 
@@ -10303,6 +10308,7 @@ class SQLDataModel:
             # Create a new 'Employee Summary' column for the returned values:
             sdm['Employee Summary'] = sdm.apply(summarize_employee)
         ```
+
         Applying a Built-in Function
         ----------------------------
 
@@ -10316,6 +10322,7 @@ class SQLDataModel:
             # Apply the math.sqrt function to the original 'Number' column:
             sdm_sqrt = sdm.apply(math.sqrt)
         ```
+
         Applying a Lambda Function
         --------------------------
 
