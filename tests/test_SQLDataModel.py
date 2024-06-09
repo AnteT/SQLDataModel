@@ -183,6 +183,67 @@ def test_init_empty(sample_data):
     assert output_headers == input_headers
 
 @pytest.mark.core
+def test_boolean():
+    sdm = SQLDataModel(headers=['Col A'])
+    assert sdm.__bool__() == False
+    sdm[0] = ['0,A']
+    assert sdm.__bool__() == True
+
+@pytest.mark.core
+def test_equality_operators():
+    n_rows = 24
+    data, headers = [], ['str','int', 'float', 'date', 'datetime']
+    for _ in range(n_rows):
+        row_data = []
+        for dtype in headers:
+            if dtype == 'str':
+                cell = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=random.randint(3, 7)))
+            elif dtype == 'int':
+                cell = random.randint(-1_000, 1_000)
+            elif dtype == 'float':
+                cell = round(random.uniform(float(-1_000), float(1_000)), 4)
+            elif dtype in ('date','datetime'):
+                year, month, day = random.randint(1900, 2022), random.randint(1, 12), random.randint(1, 28)
+                if dtype =='datetime':
+                    hour, minute, second = random.randint(0, 23), random.randint(0, 59), random.randint(0, 59)
+                    cell = datetime.datetime(year, month, day, hour, minute, second)
+                else:
+                    cell = datetime.date(year, month, day)
+            else:
+                raise ValueError(f"Invalid dtype '{dtype}', all items in headers provided must be valid data types for generation mock data")
+            row_data.append(cell)
+        data.append(row_data)
+    sdm = SQLDataModel(data, headers)
+    # Get pivot cells for each column
+    for cid, col in enumerate(headers):
+        col_data = sorted([row[cid] for row in data])
+        pivot_point = col_data[(len(col_data)//2)]
+        # Test __lt__
+        expected = [c for c in col_data if c < pivot_point]
+        output = sorted(sdm[sdm[col] < pivot_point, col].to_list())
+        assert output == expected
+        # Test __le__
+        expected = [c for c in col_data if c <= pivot_point]
+        output = sorted(sdm[sdm[col] <= pivot_point, col].to_list())        
+        assert output == expected
+        # Test __eq__
+        expected = [c for c in col_data if c == pivot_point]
+        output = sorted(sdm[sdm[col] == pivot_point, col].to_list())        
+        assert output == expected
+        # Test __ne__
+        expected = [c for c in col_data if c != pivot_point]
+        output = sorted(sdm[sdm[col] != pivot_point, col].to_list())        
+        assert output == expected
+        # Test __gt__
+        expected = [c for c in col_data if c > pivot_point]
+        output = sorted(sdm[sdm[col] > pivot_point, col].to_list())        
+        assert output == expected        
+        # Test __ge__
+        expected = [c for c in col_data if c >= pivot_point]
+        output = sorted(sdm[sdm[col] >= pivot_point, col].to_list())        
+        assert output == expected    
+
+@pytest.mark.core
 def test_addition():
     data = [(f"{i}", i, i*1.0) for i in range(1,11)]
     expected_output = [(f"{row[0]}x", row[1]+1, row[2]+0.1, row[1]+1 + row[2]+0.1) for row in data]

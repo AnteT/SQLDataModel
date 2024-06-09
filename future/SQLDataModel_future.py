@@ -2493,9 +2493,9 @@ class SQLDataModel:
                 with open(csv_source, encoding=encoding) as csvfile:
                     tmp_all_rows = list(csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar))
             except Exception as e:
-                raise Exception(
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `csv_source`")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         else:
             csv_source = csv_source.strip()
             try:
@@ -2505,9 +2505,9 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
                 ) from None
             except Exception as e:
-                raise Exception(
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse the provided raw CSV string")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         if not tmp_all_rows:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: no delimited tabular data found in provided `csv_source`, ensure content contains delimited tabular data")
@@ -2764,9 +2764,9 @@ class SQLDataModel:
                 with open(source, 'r', encoding=encoding) as f:
                     source = f.read()
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `source`")
-                ) from None   
+                ).with_traceback(e.__traceback__) from None   
         else:
             source = source.strip()
         try:
@@ -2782,9 +2782,9 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
             ) from None
         except Exception as e:
-            raise Exception(
+            raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse the provided delimited string literal")
-            ) from None
+            ).with_traceback(e.__traceback__) from None
         if not tmp_all_rows:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: no delimited tabular data found in provided `source`, ensure content contains delimited tabular data")
@@ -3087,9 +3087,9 @@ class SQLDataModel:
             headers = data.pop(0) if headers is None else headers
             wb.close()        
         except Exception as e:
-            raise Exception(
+            raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided Excel file")
-            ) from None
+            ).with_traceback(e.__traceback__) from None
         return cls(data=data, headers=headers, **kwargs)
 
     @classmethod
@@ -3241,9 +3241,9 @@ class SQLDataModel:
                     with open(json_source, 'r', encoding=encoding) as f:
                         json_source = f.read()
                 except Exception as e:
-                    raise Exception (
+                    raise type(e)(
                         SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `json_source`")
-                    ) from None    
+                    ).with_traceback(e.__traceback__) from None    
             json_source = json.loads(json_source)
         data_dict = SQLDataModel.flatten_json(json_source)
         return SQLDataModel.from_dict(data_dict, **kwargs)
@@ -3404,17 +3404,17 @@ class SQLDataModel:
             try:
                 html_source = urllib.request.urlopen(html_source, **kwargs).read().decode(encoding)
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check url parameters")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         elif os.path.exists(html_source):
             try:
                 with open(html_source, 'r', encoding=encoding, **kwargs) as f:
                     html_source = f.read()
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         tparser = HTMLParser(table_identifier=table_identifier)
         for c in SQLDataModel.generate_html_table_chunks(html_source):
             if tparser._is_finished:
@@ -3576,9 +3576,9 @@ class SQLDataModel:
                 with open(latex_source, 'r', encoding=encoding) as f:
                     latex_source = f.read()
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `latex_source`")
-                ) from None          
+                ).with_traceback(e.__traceback__) from None          
         tables = re.findall(r'\\begin{tabular}.*?\\end{tabular}', latex_source, re.DOTALL)
         if not tables:
             raise ValueError(
@@ -3742,9 +3742,9 @@ class SQLDataModel:
                 with open(markdown_source, 'r') as f:
                     markdown_source = f.read()
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `markdown_source`")
-                ) from None  
+                ).with_traceback(e.__traceback__) from None  
         table = None
         in_table = False
         prev_line = None
@@ -3972,9 +3972,9 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"FileNotFoundError: file not found '{filename}' encountered when trying to open and read from parquet")
             ) from None
         except Exception as e:
-            raise Exception (
+            raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from parquet")
-            ) from None
+            ).with_traceback(e.__traceback__) from None
         return SQLDataModel.from_dict(pq_array.to_pydict())
 
     @classmethod
@@ -4359,9 +4359,9 @@ class SQLDataModel:
                 with open(text_source, 'r', encoding=encoding) as f:
                     text_source = f.read()
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `text_source`")
-                ) from None                  
+                ).with_traceback(e.__traceback__) from None                  
         tables = re.findall(r'┌.*?┘', text_source, re.DOTALL)
         if not tables:
             try:
@@ -4381,9 +4381,9 @@ class SQLDataModel:
             try:
                 delimiter = csv.Sniffer().sniff(text_source).delimiter
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse delimiter from `text_source`")
-                ) from None 
+                ).with_traceback(e.__traceback__) from None 
         table = []
         for row in target_table.strip().split('\n'):
             if delimiter in row:
@@ -4845,9 +4845,9 @@ class SQLDataModel:
             wb.save(filename=filename)
             wb.close()
         except Exception as e:
-            raise Exception(
+            raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write and save to the provided Excel file")
-            ) from None    
+            ).with_traceback(e.__traceback__) from None    
 
     def to_html(self, filename:str=None, index:bool=None, encoding:str='utf-8', style_params:dict=None) -> str:
         """
@@ -4939,9 +4939,9 @@ class SQLDataModel:
             with open(filename, "w", encoding=encoding) as f:
                 f.write(html_table)
         except Exception as e:
-            raise Exception (
+            raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write html")
-            ) from None
+            ).with_traceback(e.__traceback__) from None
 
     def to_json(self, filename:str=None, index:bool=None, **kwargs) -> list|None:
         """
@@ -5056,9 +5056,9 @@ class SQLDataModel:
                 with open(filename, "w") as f:
                     json.dump(json_data, f, cls=DataTypesEncoder, **kwargs)
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write json")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         else:
             return json.dumps(json_data, cls=DataTypesEncoder, **kwargs)
 
@@ -5265,9 +5265,9 @@ class SQLDataModel:
                 with open(filename, "w", encoding='utf-8') as f:
                     f.write(latex_repr)
             except Exception as e:
-                raise Exception(
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write LaTeX")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         else:
             return latex_repr 
 
@@ -5475,7 +5475,6 @@ class SQLDataModel:
         Note:
             - All markdown output will contain the alignment characters ``':'`` as determined by the :py:attr:`SQLDataModel.column_alignment` attribute or parameter.
             - Any exception encountered during file read or writing operations is caught and reraised, see related :meth:`SQLDataModel.from_markdown`.
-            
         """
         if not isinstance(filename, str) and filename is not None:
             raise TypeError(
@@ -5542,9 +5541,9 @@ class SQLDataModel:
                 with open(filename, "w", encoding='utf-8') as f:
                     f.write(md_repr)
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write markdown")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         else:
             return md_repr   
 
@@ -5758,9 +5757,9 @@ class SQLDataModel:
         try:
             pqtable = _pa.Table.from_pydict(self.to_dict(orient='columns'))
         except Exception as e:
-            raise Exception (
+            raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write parquet file")
-            ) from None        
+            ).with_traceback(e.__traceback__) from None        
         _pq.write_table(pqtable, filename, **kwargs)
 
     def to_pickle(self, filename:str=None) -> None:
@@ -5940,9 +5939,9 @@ class SQLDataModel:
         try:
             table = _pa.Table.from_pydict(self.to_dict(orient='columns', index=index))
         except Exception as e:
-            raise Exception (
+            raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to convert to pyarrow format")
-            ) from None        
+            ).with_traceback(e.__traceback__) from None        
         return table
 
     def to_sql(self, table:str, con:sqlite3.Connection|Any, *, schema:str=None, if_exists:Literal['fail','replace','append']='fail', index:bool=True, primary_key:str|int=None) -> None:
@@ -6411,9 +6410,9 @@ class SQLDataModel:
                 with open(filename, "w", encoding='utf-8') as f:
                     f.write(table_repr)
             except Exception as e:
-                raise Exception (
+                raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and write text to '{filename}'")
-                ) from None
+                ).with_traceback(e.__traceback__) from None
         else:
             return table_repr 
 
@@ -6488,6 +6487,32 @@ class SQLDataModel:
 ############################################## dunder special methods ##############################################
 ####################################################################################################################
 
+    def __bool__(self) -> bool:
+        """
+        Implements logical boolean operator for ``SQLDataModel`` using the current row count.
+
+        Returns:
+            ``bool``: True if :py:attr:`SQLDataModel.row_count` != 0, False otherwise.
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Create an empty model
+            sdm = SQLDataModel(headers=['Stage', 'Match', 'Result'])
+
+            # Use boolean method to avoid duplicating result
+            if not sdm:
+                sdm[0] = ['Group', 1, 'Scotland Win']
+            else:
+                print('Match result already stored')
+        
+        Note:
+            - This method is equivalent to ``sdm.row_count != 0``
+            - See :meth:`SQLDataModel.__eq__()` and related comparison methods for more details.
+        """
+        return self.row_count != 0
+
     def __lt__(self, other) -> SQLDataModel:
         """
         Implements the less than operator ``<`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
@@ -6539,15 +6564,15 @@ class SQLDataModel:
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
-
         """        
         self_data = self.data()
         if isinstance(other, SQLDataModel):
             other_data = other.data()
-            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] < other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, (int,str,float)):
-            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] < other)
-        return (row_idxs)
+            return set(i for i in range(self.row_count) if all(self_data[i][j] < other_data[i][j] for j in range(self.column_count)))
+        elif isinstance(other, (int,str,float,datetime.date)):
+            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] < other)
+        else:
+            return set()
     
     def __le__(self, other) -> SQLDataModel:
         """
@@ -6600,15 +6625,15 @@ class SQLDataModel:
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
-
         """          
         self_data = self.data()
         if isinstance(other, SQLDataModel):
             other_data = other.data()
-            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] <= other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, (int,str,float)):
-            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] <= other)
-        return (row_idxs)
+            return set(i for i in range(self.row_count) if all(self_data[i][j] <= other_data[i][j] for j in range(self.column_count)))
+        elif isinstance(other, (int,str,float,datetime.date)):
+            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] <= other)
+        else:
+            return set()
     
     def __eq__(self, other) -> SQLDataModel:
         """
@@ -6660,15 +6685,15 @@ class SQLDataModel:
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
-
         """        
         self_data = self.data()
         if isinstance(other, SQLDataModel):
             other_data = other.data()
-            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] == other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, (int,str,float)):
-            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] == other)
-        return (row_idxs)
+            return set(i for i in range(self.row_count) if all(self_data[i][j] == other_data[i][j] for j in range(self.column_count)))
+        elif isinstance(other, (int,str,float,datetime.date)):
+            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] == other)
+        else:
+            return set()
 
     def __ne__(self, other) -> SQLDataModel:
         """
@@ -6722,15 +6747,15 @@ class SQLDataModel:
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
-
         """          
         self_data = self.data()
         if isinstance(other, SQLDataModel):
             other_data = other.data()
-            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] != other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, (int,str,float)):
-            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] != other)
-        return (row_idxs)
+            return set(i for i in range(self.row_count) if all(self_data[i][j] != other_data[i][j] for j in range(self.column_count)))
+        elif isinstance(other, (int,str,float,datetime.date)):
+            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] != other)
+        else:
+            return set()
 
     def __gt__(self, other) -> SQLDataModel:
         """
@@ -6782,15 +6807,15 @@ class SQLDataModel:
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
-
         """          
         self_data = self.data()
         if isinstance(other, SQLDataModel):
             other_data = other.data()
-            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] > other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, (int,str,float)):
-            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] > other)
-        return (row_idxs)
+            return set(i for i in range(self.row_count) if all(self_data[i][j] > other_data[i][j] for j in range(self.column_count)))
+        elif isinstance(other, (int,str,float,datetime.date)):
+            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] > other)
+        else:
+            return set()
 
     def __ge__(self, other) -> SQLDataModel:
         """
@@ -6843,16 +6868,16 @@ class SQLDataModel:
             - All the equality operations return a python ``set`` object containing the row indicies which result from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
-
         """          
         self_data = self.data()
         if isinstance(other, SQLDataModel):
             other_data = other.data()
-            row_idxs = set(i for i in range(self.row_count) if all(self_data[i][j] >= other_data[i][j] for j in range(self.column_count)))
-        if isinstance(other, (int,str,float,datetime.date)):
-            row_idxs = set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] >= other)
-        return (row_idxs)
-
+            return set(i for i in range(self.row_count) if all(self_data[i][j] >= other_data[i][j] for j in range(self.column_count)))
+        elif isinstance(other, (int,str,float,datetime.date)):
+            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] >= other)
+        else:
+            return set()
+        
     def __add__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``+`` operator functionality for compatible ``SQLDataModel`` operations.
@@ -6901,6 +6926,7 @@ class SQLDataModel:
             └─────┴─────┴─────────┴───────┘
             [5 rows x 4 columns]
         ```
+        
         We can also use addition to concatenate strings:
 
         ```python
@@ -6939,7 +6965,6 @@ class SQLDataModel:
 
         Note:
             - Mixing summands such as ``int + float`` will work, however an exception will be raised when attempting to perform addition on incompatible types such as ``str + float``.
-
         """
         if not isinstance(value, (str,int,float,SQLDataModel)):
             raise TypeError(
@@ -7011,7 +7036,6 @@ class SQLDataModel:
 
         Note:
             - Mixing subtractors such as ``int + float`` will work, however an exception will be raised when attempting to perform subtraction on incompatible types such as ``str - float``.
-
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -7083,7 +7107,6 @@ class SQLDataModel:
 
         Note:
             - Mixing multipliers such as ``int * float`` will work, however an exception will be raised when attempting to perform multiplication on incompatible types such as ``str * float``.
-
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -7156,7 +7179,6 @@ class SQLDataModel:
 
         Note:
             - Mixing divisor types such as ``int / float`` will work, however an exception will be raised when attempting to perform division on incompatible types such as ``str / float``.
-
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -7233,7 +7255,6 @@ class SQLDataModel:
 
         Note:
             - Mixing divisor types such as ``int // float`` will work, however an exception will be raised when attempting to perform division on incompatible types such as ``str // float``.
-
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -7309,7 +7330,6 @@ class SQLDataModel:
 
         Note:
             - Mixing exponent types such as ``int ** float`` will work, however an exception will be raised when attempting to exponentiate incompatible types such as ``str ** float``.
-            
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
