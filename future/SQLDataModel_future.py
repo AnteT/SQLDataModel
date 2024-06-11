@@ -11866,3 +11866,13 @@ class SQLDataModel:
         sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
         dtype_dict = {col:dtype for col in self.headers}
         return self.execute_fetch(sql_stmt, dtypes=dtype_dict)
+
+    def isna(self) -> set[int]:
+        """Returns the row indicies that are null or na like from the current model."""
+        self_data = self.data(strict_2d=True)
+        return set(i for i in range(len(self_data)) if all(self_data[i][j] is None for j in range(len(self_data[0]))))
+    
+    def notna(self) -> set[int]:
+        """Returns the row indicies that are not null or not na like from the current model."""
+        self_data = self.data(strict_2d=True)
+        return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0])))) 
