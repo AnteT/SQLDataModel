@@ -6565,12 +6565,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """        
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] < other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] < other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] < other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] < other)
         else:
             return set()
     
@@ -6626,12 +6627,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] <= other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] <= other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] <= other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] <= other)
         else:
             return set()
     
@@ -6686,12 +6688,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """        
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] == other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] == other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] == other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] == other)
         else:
             return set()
 
@@ -6748,12 +6751,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] != other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] != other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] != other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] != other)
         else:
             return set()
 
@@ -6808,12 +6812,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] > other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] > other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] > other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] > other)
         else:
             return set()
 
@@ -6869,12 +6874,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] >= other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] >= other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] >= other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] >= other)
         else:
             return set()
         
