@@ -11654,9 +11654,9 @@ class SQLDataModel:
             try:
                 row_index = self.indicies[row_index] # TODO: RIMOD
             except IndexError:
-                if row_index != max(self.indicies): # auto add escape, ok to be out of range
+                if row_index != self.row_count: # auto add escape, ok to be out of range if row index == row count since implies append row
                     raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within current model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}' ")
                     ) from None
             return (row_index, self.headers)
         ### single row slice index ###
@@ -11664,7 +11664,7 @@ class SQLDataModel:
             rows_in_scope = self.indicies[indicies]
             if (num_rows_in_scope := len(rows_in_scope)) < 1:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                 )
             return (rows_in_scope, self.headers)
         ### single set of row indicies ###

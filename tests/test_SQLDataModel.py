@@ -1372,6 +1372,22 @@ def test_transpose():
     assert output_data == input_data
 
 @pytest.mark.core
+def test_is_na():
+    prob, n_cols, n_rows = 0.5, 3, 100
+    rand_data =  [[None if random.random() < prob else random.randint(0, 100) for _ in range(n_cols)] for _ in range(n_rows)]
+    expected_data = set(i for i in range(len(rand_data)) if all(rand_data[i][j] is None for j in range(len(rand_data[0]))))
+    output_data = SQLDataModel(rand_data).isna()
+    assert output_data == expected_data
+
+@pytest.mark.core
+def test_not_na():
+    prob, n_cols, n_rows = 0.5, 3, 100 # enough to produce full null rows with rand_prob at 0.5
+    rand_data =  [[None if random.random() < prob else random.randint(0, 100) for _ in range(n_cols)] for _ in range(n_rows)]
+    expected_data = set(i for i in range(len(rand_data)) if any(rand_data[i][j] is not None for j in range(len(rand_data[0]))))
+    output_data = SQLDataModel(rand_data).notna()
+    assert output_data == expected_data
+
+@pytest.mark.core
 def test_min(sample_data_parameterized):
     data, headers = sample_data_parameterized(exclude_nonetype=True)
     expected_data = tuple(min([row[j] for row in data]) for j in range(len(data[0])))

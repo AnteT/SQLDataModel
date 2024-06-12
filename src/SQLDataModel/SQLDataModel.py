@@ -6565,12 +6565,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """        
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] < other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] < other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] < other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] < other)
         else:
             return set()
     
@@ -6626,12 +6627,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] <= other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] <= other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] <= other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] <= other)
         else:
             return set()
     
@@ -6686,12 +6688,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """        
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] == other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] == other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] == other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] == other)
         else:
             return set()
 
@@ -6748,12 +6751,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] != other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] != other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] != other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] != other)
         else:
             return set()
 
@@ -6808,12 +6812,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] > other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] > other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] > other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] > other)
         else:
             return set()
 
@@ -6869,12 +6874,13 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
         """          
-        self_data = self.data()
+        self_data = self.data(strict_2d=True)
+        i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
-            other_data = other.data()
-            return set(i for i in range(self.row_count) if all(self_data[i][j] >= other_data[i][j] for j in range(self.column_count)))
+            other_data = other.data(strict_2d=True)
+            return set(i for i in range(i_dim) if all(self_data[i][j] >= other_data[i][j] for j in range(j_dim)))
         elif isinstance(other, (int,str,float,datetime.date)):
-            return set(i for j in range(self.column_count) for i in range(self.row_count) if self_data[i][j] >= other)
+            return set(i for j in range(j_dim) for i in range(i_dim) if self_data[i][j] >= other)
         else:
             return set()
         
@@ -11648,22 +11654,17 @@ class SQLDataModel:
             try:
                 row_index = self.indicies[row_index] # TODO: RIMOD
             except IndexError:
-                if row_index != max(self.indicies): # auto add escape, ok to be out of range
+                if row_index != self.row_count: # auto add escape, ok to be out of range if row index == row count since implies append row
                     raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within current model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
+                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}' ")
                     ) from None
             return (row_index, self.headers)
         ### single row slice index ###
         if isinstance(indicies, slice):
-            try:
-                rows_in_scope = self.indicies[indicies]
-            except ValueError:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows indexed, provided row index returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
-                ) from None
+            rows_in_scope = self.indicies[indicies]
             if (num_rows_in_scope := len(rows_in_scope)) < 1:
                 raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                 )
             return (rows_in_scope, self.headers)
         ### single set of row indicies ###
@@ -11672,7 +11673,7 @@ class SQLDataModel:
                 raise ValueError(
                     SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
                 )
-            return (tuple(indicies), self.headers)
+            return (tuple([self.indicies[rid] for rid in indicies]), self.headers)
         ### columns by str or list of str ###
         if isinstance(indicies, (str,list)):
             col_index = indicies
@@ -11687,7 +11688,7 @@ class SQLDataModel:
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns indicies are required, use `get_headers()` to view current valid arguments")
                     )
-            return (slice(0,self.row_count), col_index)
+            return (None, col_index) # +REVINDEX
         ### indexing by rows and columns ###        
         if not isinstance(indicies, tuple):
             raise TypeError(
@@ -11717,16 +11718,7 @@ class SQLDataModel:
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid row index type '{type(row_indicies[0]).__name__}', rows must be indexed by type 'int'")
                 )
-            min_row_idx, max_row_idx = min(row_indicies), max(row_indicies)
-            if min_row_idx < 0:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{min_row_idx}' outside of current model range of '{min(self.indicies)}:{max(self.indicies)}'")
-                )
-            if max_row_idx >= self.row_count:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: provided row index '{max_row_idx}' outside of current model range of '{min(self.indicies)}:{max(self.indicies)}'")
-                )
-            validated_row_indicies = row_indicies
+            validated_row_indicies = tuple([self.indicies[rid] for rid in row_indicies])
         else: # is slice
             try:
                 rows_in_scope = self.indicies[row_indicies]
@@ -11866,3 +11858,121 @@ class SQLDataModel:
         sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
         dtype_dict = {col:dtype for col in self.headers}
         return self.execute_fetch(sql_stmt, dtypes=dtype_dict)
+
+    def isna(self) -> set[int]:
+        """
+        Return the row indicies that are null from the current model.
+        
+        Returns:
+            ``set[int]``: Set of row indicies containing null values.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Gender', 'City']
+            data = [
+                ('Sarah', 35, 'Female', 'Houston'),
+                ('Alice', None, 'Female', 'Milwaukee'),
+                ('Mike', None, 'Male', 'Atlanta'),
+                ('John', 25, 'Male', 'Boston'),
+                ('Bob', None, 'Male', 'Chicago'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Filter for rows where 'Age' is null
+            sdm = sdm[sdm['Age'].isna()]
+
+            # View result
+            print(sdm)
+
+        This will output the result containing the rows where 'Age' was null:
+
+        ```text
+            ┌───────┬─────┬────────┬───────────┐
+            │ Name  │ Age │ Gender │ City      │
+            ├───────┼─────┼────────┼───────────┤
+            │ Alice │     │ Female │ Milwaukee │
+            │ Mike  │     │ Male   │ Atlanta   │
+            │ Bob   │     │ Male   │ Chicago   │
+            └───────┴─────┴────────┴───────────┘
+            [3 rows x 4 columns]    
+        ```
+
+        This can be used in combination with the setitem syntax to selectively update values as well:
+
+        ```python
+            # Filter and set the null values
+            sdm[sdm['Age'].isna(), 'Age'] = 'Missing'
+        ```
+
+        Note:
+            - Null or na like is determined by satisfying the SQL NULL value or the Python equivalent ``None`` for all values in the row.
+            - See related :meth:`SQLDataModel.notna()` to filter for rows containing values that are not null.
+            - See :meth:`SQLDataModel.fillna()` to fill all missing or null values in the model.
+        """
+        self_data = self.data(strict_2d=True)
+        return set(i for i in range(len(self_data)) if all(self_data[i][j] is None for j in range(len(self_data[0]))))
+    
+    def notna(self) -> set[int]:
+        """
+        Return the row indicies that are not null from the current model.
+        
+        Returns:
+            ``set[int]``: Set of row indicies containing values that are not null.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Gender', 'City']
+            data = [
+                ('Sarah', 35, 'Female', 'Houston'),
+                ('Alice', None, 'Female', 'Milwaukee'),
+                ('Mike', None, 'Male', 'Atlanta'),
+                ('John', 25, 'Male', 'Boston'),
+                ('Bob', None, 'Male', 'Chicago'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Filter for rows where 'Age' is not null
+            sdm = sdm[sdm['Age'].notna()]
+
+            # View result
+            print(sdm)
+
+        This will output the result containing the rows where 'Age' was not null:
+
+        ```text
+            ┌───────┬─────┬────────┬─────────┐
+            │ Name  │ Age │ Gender │ City    │
+            ├───────┼─────┼────────┼─────────┤
+            │ Sarah │  35 │ Female │ Houston │
+            │ John  │  25 │ Male   │ Boston  │
+            └───────┴─────┴────────┴─────────┘
+            [2 rows x 4 columns]
+        ```
+
+        This can be used in combination with the setitem syntax to selectively update values as well:
+
+        ```python
+            # Create a 'Notes' column with a default value
+            sdm['Notes'] = 'Missing'
+            
+            # Filter and set the values that are not null
+            sdm[sdm['Age'].notna(), 'Notes'] = 'Valid'    
+        ```
+
+        Note:
+            - Null or na like is determined by satisfying the SQL NOT NULL value or the Python equivalent ``None`` for any values in the row.
+            - See related :meth:`SQLDataModel.isna()` to filter for rows containing values that are null.
+            - See :meth:`SQLDataModel.fillna()` to fill all missing or null values in the model.
+        """
+        self_data = self.data(strict_2d=True)
+        return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0])))) 
