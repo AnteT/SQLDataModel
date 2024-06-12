@@ -257,6 +257,19 @@ def test_addition():
     assert model_output == expected_output
 
 @pytest.mark.core
+def test_right_addition():
+    data = [(f"{i}", i, i*1.0) for i in range(1,11)]
+    expected_output = [(f"x{row[0]}", row[1]+1, row[2]+0.1, row[1]+1 + row[2]+0.1) for row in data]
+    headers = ['str', 'int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['str concat'] =  'x' + sdm['str']
+    sdm['int scalar'] = 1 + sdm['int']
+    sdm['float scalar'] = 0.1 + sdm['float']
+    sdm['vector'] = sdm['float scalar'] + sdm['int scalar']
+    model_output = sdm[:,[3,4,5,6]].data()
+    assert model_output == expected_output
+    
+@pytest.mark.core
 def test_subtraction():
     data = [(i, i*1.0) for i in range(1,11)]
     expected_output = [(row[0]-1, row[1]-0.1, (row[1]-0.1) - (row[0]-1)) for row in data]

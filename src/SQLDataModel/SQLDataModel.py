@@ -499,7 +499,7 @@ class SQLDataModel:
             self.indicies = tuple(range(self.row_count))
             data = data[1:] # remove first row from remaining data
         else:
-            self.indicies = tuple([row[0] for row in data])
+            self.indicies = tuple(sorted([row[0] for row in data]))
         try:
             self.sql_db_conn.executemany(sql_insert_stmt,data)
         except sqlite3.ProgrammingError as e:
@@ -6991,6 +6991,114 @@ class SQLDataModel:
         if isinstance(value, (str,int,float)):
             return self.apply(lambda x: x + value)
 
+    def __radd__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the right side operand for ``+`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (str | int | float | SQLDataModel): The value to be added to each element in the SQLDataModel.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (str, int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as addition) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the addition operation.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar addition
+            sdm['x + 100'] = 100 + sdm['x']
+
+            # Perform vector addition using another column
+            sdm['x + y'] = sdm['y'] + sdm['x']
+
+            # View both results
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬─────────┬───────┐
+            │   x │   y │ x + 100 │ x + y │
+            ├─────┼─────┼─────────┼───────┤
+            │   2 │  10 │     102 │    12 │
+            │   4 │  20 │     104 │    24 │
+            │   8 │  30 │     108 │    38 │
+            │  16 │  40 │     116 │    56 │
+            │  32 │  50 │     132 │    82 │
+            └─────┴─────┴─────────┴───────┘
+            [5 rows x 4 columns]
+        ```
+        
+        We can also use addition to concatenate strings:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['First', 'Last']
+            data = [['Alice', 'Smith'],['Bob', 'Johnson'],['Charlie', 'Hall'],['David', 'Brown']]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Concatenate scalar character
+            sdm['Prefixed First'] = 'First Name: ' + sdm['First']
+
+            # Concatenate scalar and vector using existing columns
+            sdm['Full Name'] = sdm['First'] + ' ' + sdm['Last']
+
+            # View it
+            print(sdm)
+        ```
+
+        This will output:
+
+        ```shell
+            ┌─────────┬─────────┬────────────────┬──────────────┐
+            │ First   │ Last    │ Prefixed First │ Full Name    │
+            ├─────────┼─────────┼────────────────┼──────────────┤
+            │ Alice   │ Smith   │ Name: Alice    │ Alice Smith  │
+            │ Bob     │ Johnson │ Name: Bob      │ Bob Johnson  │
+            │ Charlie │ Hall    │ Name: Charlie  │ Charlie Hall │
+            │ David   │ Brown   │ Name: David    │ David Brown  │
+            └─────────┴─────────┴────────────────┴──────────────┘
+            [4 rows x 4 columns]
+        ```
+
+        Note:
+            - Mixing summands such as ``int + float`` will work, however an exception will be raised when attempting to perform addition on incompatible types such as ``str + float``.
+            - See :meth:`SQLDataModel.__add__()` for left side operand addition or :meth:`SQLDataModel.__iadd__()` for in-place addition.
+        """
+        if not isinstance(value, (str,int,float,SQLDataModel)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', addition operations can only be performed on types 'str', 'int', 'float' or 'SQLDataModel'")
+            )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.get_shape()
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
+                new_data = [tuple(value_data[i][j] + base_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data
+        if isinstance(value, (str,int,float)):
+            return self.apply(lambda x: value + x)
+
     def __sub__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``-`` operator functionality for compatible ``SQLDataModel`` operations.
@@ -7042,16 +7150,17 @@ class SQLDataModel:
 
         Note:
             - Mixing subtractors such as ``int + float`` will work, however an exception will be raised when attempting to perform subtraction on incompatible types such as ``str - float``.
+            - See :meth:`SQLDataModel.__rsub__()` for right side operand subtraction operations.
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
         if isinstance(value, SQLDataModel):
-            value_shape = value.get_shape()
+            value_shape = value.shape
             if value_shape == (1,1):
                 value = value.data()
-            else: 
+            else:
                 if value_shape != (model_shape := self.get_shape()):
                     raise DimensionError(
                         SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
@@ -7061,6 +7170,78 @@ class SQLDataModel:
                 return new_data
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x - value)
+
+    def __rsub__(self, value:int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the right side operand for ``-`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float | SQLDataModel): The value to subtract from each element in the SQLDataModel.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int or float).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as subtraction) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the subtraction operation.
+            
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar subtraction
+            sdm['x - 100'] = 100 - sdm['x']
+
+            # Perform vector subtraction using another column
+            sdm['x - y'] = sdm['y'] - sdm['x']
+
+            # View both results
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬─────────┬───────┐
+            │   x │   y │ x - 100 │ x - y │
+            ├─────┼─────┼─────────┼───────┤
+            │   2 │  10 │      98 │     8 │
+            │   4 │  20 │      96 │    16 │
+            │   8 │  30 │      92 │    22 │
+            │  16 │  40 │      84 │    24 │
+            │  32 │  50 │      68 │    18 │
+            └─────┴─────┴─────────┴───────┘
+            [5 rows x 4 columns]
+        ```
+
+        Note:
+            - Mixing subtractors such as ``int + float`` will work, however an exception will be raised when attempting to perform subtraction on incompatible types such as ``str - float``.
+            - See :meth:`SQLDataModel.__sub__()` for left side operand subtraction or :meth:`SQLDataModel.__isub__()` for in-place subtraction.
+        """
+        if not isinstance(value, (int,float,SQLDataModel)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', subtraction operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
+            )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.shape
+            if value_shape == (1,1):
+                value = value.data()
+            else:
+                if value_shape != (model_shape := self.get_shape()):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
+                new_data = [tuple(value_data[i][j] - base_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data
+        if isinstance(value, (int,float)):
+            return self.apply(lambda x: value - x)
 
     def __mul__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
@@ -7736,6 +7917,9 @@ class SQLDataModel:
             └───┴─────────┴──────┴──────────┘
             [5 rows x 3 columns]
         ```
+
+        Values for multiple columns can also be set:
+
         ```python
             # Update multiple rows and columns with a list of values
             sdm[1:5, ["Name", "Age", "Job"]] = [("Alice", 30, "Manager"), ("Bob", 28, "Developer"), ("Charlie", 35, "Designer"), ("David", 32, "Analyst")]
@@ -7758,6 +7942,9 @@ class SQLDataModel:
             └───┴─────────┴──────┴───────────┘
             [5 rows x 3 columns]
         ```
+
+        Values can also be set along the row axes:
+
         ```python
             # Create a new column "Hobby" and set the values
             sdm["Hobby"] = [('Fishing',), ('Biking',), ('Computers',), ('Photography',), ('Studying',)]
@@ -7782,9 +7969,10 @@ class SQLDataModel:
         ```
 
         Note:
-            - If ``update_values`` is another SQLDataModel object, its data will be normalized using the :meth:`SQLDataModel.data()` method.
+            - If ``update_values`` is another ``SQLDataModel`` object, its data will be normalized using the :meth:`SQLDataModel.data()` method.
             - The ``target_indicies`` parameter can be an integer, a tuple of disconnected row indices, a slice representing a range of rows, a string or list of strings representing column names, or a tuple combining row and column indices.
             - Values can be single values or iterables matching the specified rows and columns.
+            - See :meth:`SQLDataModel.apply()` for setting values using a function.
         """        
         # first check if target is new column that needs to be created, if so create it and return so long as the target values aren't another sqldatamodel object:
         if isinstance(update_values, SQLDataModel):
@@ -11861,7 +12049,7 @@ class SQLDataModel:
 
     def isna(self) -> set[int]:
         """
-        Return the row indicies that are null from the current model.
+        Return the row indicies containing null values from the current model.
         
         Returns:
             ``set[int]``: Set of row indicies containing null values.
@@ -11919,7 +12107,7 @@ class SQLDataModel:
     
     def notna(self) -> set[int]:
         """
-        Return the row indicies that are not null from the current model.
+        Return the row indicies that do not contain null values from the current model.
         
         Returns:
             ``set[int]``: Set of row indicies containing values that are not null.
