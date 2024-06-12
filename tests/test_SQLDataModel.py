@@ -268,7 +268,7 @@ def test_right_addition():
     sdm['vector'] = sdm['float scalar'] + sdm['int scalar']
     model_output = sdm[:,[3,4,5,6]].data()
     assert model_output == expected_output
-    
+
 @pytest.mark.core
 def test_subtraction():
     data = [(i, i*1.0) for i in range(1,11)]
@@ -280,6 +280,18 @@ def test_subtraction():
     sdm['vector'] = sdm['float scalar'] - sdm['int scalar']
     model_output = sdm[:,[2,3,4]].data()
     assert model_output == expected_output    
+
+@pytest.mark.core
+def test_right_subtraction():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(1-row[0], 0.1-row[1], (1-row[0])-(0.1-row[1])) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] = 1-sdm['int']
+    sdm['float scalar'] = 0.1-sdm['float']
+    sdm['vector'] = sdm['int scalar']-sdm['float scalar']
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output
 
 @pytest.mark.core
 def test_multiplication():
@@ -294,6 +306,18 @@ def test_multiplication():
     assert model_output == expected_output    
 
 @pytest.mark.core
+def test_right_multiplication():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(row[0] * 2, row[1]*3.0, (row[1]*3.0) * (row[0] * 2)) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] =   2 * sdm['int'] 
+    sdm['float scalar'] =  3.0 * sdm['float']
+    sdm['vector'] =  sdm['int scalar'] * sdm['float scalar'] 
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output 
+
+@pytest.mark.core
 def test_division():
     data = [(i, i*1.0) for i in range(1,11)]
     expected_output = [(row[0] / 2, row[1]/3.0, (row[1]/3.0) / (row[0] / 2)) for row in data]
@@ -305,6 +329,18 @@ def test_division():
     model_output = sdm[:,[2,3,4]].data()
     assert model_output == expected_output    
 
+@pytest.mark.core
+def test_right_division():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(2/row[0], 3.0/row[1],  (2/row[0]) / (3.0/row[1])) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] =  2 /  sdm['int'] 
+    sdm['float scalar'] = 3.0 /  sdm['float']
+    sdm['vector'] = sdm['int scalar'] / sdm['float scalar'] 
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output   
+    
 @pytest.mark.core
 def test_floor_division():
     data = [(i*2+10, i*1.0) for i in range(1,11)]

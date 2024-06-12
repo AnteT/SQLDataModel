@@ -7017,10 +7017,10 @@ class SQLDataModel:
             sdm = SQLDataModel(data, headers)
 
             # Perform scalar addition
-            sdm['x + 100'] = 100 + sdm['x']
+            sdm['100 + x'] = 100 + sdm['x']
 
             # Perform vector addition using another column
-            sdm['x + y'] = sdm['y'] + sdm['x']
+            sdm['y + x'] = sdm['y'] + sdm['x']
 
             # View both results
             print(sdm)
@@ -7029,7 +7029,7 @@ class SQLDataModel:
 
         ```shell
             ┌─────┬─────┬─────────┬───────┐
-            │   x │   y │ x + 100 │ x + y │
+            │   x │   y │ 100 + x │ y + x │
             ├─────┼─────┼─────────┼───────┤
             │   2 │  10 │     102 │    12 │
             │   4 │  20 │     104 │    24 │
@@ -7197,10 +7197,10 @@ class SQLDataModel:
             sdm = SQLDataModel(data, headers)
 
             # Perform scalar subtraction
-            sdm['x - 100'] = 100 - sdm['x']
+            sdm['100 - x'] = 100 - sdm['x']
 
             # Perform vector subtraction using another column
-            sdm['x - y'] = sdm['y'] - sdm['x']
+            sdm['y - x'] = sdm['y'] - sdm['x']
 
             # View both results
             print(sdm)
@@ -7209,7 +7209,7 @@ class SQLDataModel:
 
         ```shell
             ┌─────┬─────┬─────────┬───────┐
-            │   x │   y │ x - 100 │ x - y │
+            │   x │   y │ 100 - x │ y - x │
             ├─────┼─────┼─────────┼───────┤
             │   2 │  10 │      98 │     8 │
             │   4 │  20 │      96 │    16 │
@@ -7300,19 +7300,40 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', multiplication operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
         if isinstance(value, SQLDataModel):
-            value_shape = value.get_shape()
+            value_shape = value.shape
             if value_shape == (1,1):
                 value = value.data()
             else: 
-                if value_shape != (model_shape := self.get_shape()):
+                if value_shape != (model_shape := self.shape):
                     raise DimensionError(
                         SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
                     )
-                base_data, value_data = self.data(), value.data()
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
                 new_data = [tuple(base_data[i][j] * value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
                 return new_data        
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x * value)
+
+    def __rmul__(self, value:int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the right side operand for ``*`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float | SQLDataModel): The value to multiply each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as multiplication) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the multiplication operation.
+        
+        Note:
+            - See :meth:`SQLDataModel.__mul__()` for additional details and usage examples.
+            - This function simply wraps the primary multiplication method after swapping the order of the arguments.
+        """
+        return self.__mul__(value)
+
 
     def __truediv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
@@ -7372,15 +7393,15 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
         if isinstance(value, SQLDataModel):
-            value_shape = value.get_shape()
+            value_shape = value.shape
             if value_shape == (1,1):
                 value = value.data()
             else: 
-                if value_shape != (model_shape := self.get_shape()):
+                if value_shape != (model_shape := self.shape):
                     raise DimensionError(
                         SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
                     )
-                base_data, value_data = self.data(), value.data()
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
                 new_data = [tuple(base_data[i][j] / value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
                 return new_data 
         if value == 0:
@@ -7389,7 +7410,84 @@ class SQLDataModel:
             )
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x / value)
+
+    def __rtruediv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the right side operand ``/`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as division) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
+            ``ZeroDivisionError``: If ``value`` is 0.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the division operation.
+
+        Example::
         
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar division
+            sdm['10 / y'] = 10 / sdm['y']
+
+            # Perform vector division using another column
+            sdm['x / y'] = sdm['x'] / sdm['y']
+
+            # View both results
+            print(sdm)
+        
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬────────┬───────┐
+            │   x │   y │ 10 / y │ x / y │
+            ├─────┼─────┼────────┼───────┤
+            │   2 │  10 │   1.00 │  0.20 │
+            │   4 │  20 │   0.50 │  0.20 │
+            │   8 │  30 │   0.33 │  0.27 │
+            │  16 │  40 │   0.25 │  0.40 │
+            │  32 │  50 │   0.20 │  0.64 │
+            └─────┴─────┴────────┴───────┘
+            [5 rows x 4 columns]
+        ```
+
+        Note:
+            - Mixing divisor types such as ``int / float`` will work, however an exception will be raised when attempting to perform division on incompatible types such as ``str / float``.
+            - See :meth:`SQLDataModel.__truediv__()` for left side operand division operations.
+        """
+        if not isinstance(value, (int,float,SQLDataModel)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', division operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
+            )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.shape
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.shape):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
+                new_data = [tuple(value_data[i][j] / base_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                return new_data 
+        if value == 0:
+            raise ZeroDivisionError(
+                SQLDataModel.ErrorFormat(f"ZeroDivisionError: invalid argument '{value}', division operations cannot be performed with a divisor of zero")
+            )
+        if isinstance(value, (int,float)):
+            return self.apply(lambda x: value / x)       
+
     def __floordiv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``//`` operator functionality for compatible ``SQLDataModel`` operations.
