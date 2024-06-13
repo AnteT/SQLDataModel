@@ -7053,7 +7053,7 @@ class SQLDataModel:
             sdm = SQLDataModel(data, headers)
 
             # Concatenate scalar character
-            sdm['Prefixed First'] = 'First Name: ' + sdm['First']
+            sdm['Prefixed First'] = 'Name: ' + sdm['First']
 
             # Concatenate scalar and vector using existing columns
             sdm['Full Name'] = sdm['First'] + ' ' + sdm['Last']
