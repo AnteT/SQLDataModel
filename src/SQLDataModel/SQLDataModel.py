@@ -6483,9 +6483,9 @@ class SQLDataModel:
         with sqlite3.connect(filename) as target:
             self.sql_db_conn.backup(target)
 
-####################################################################################################################
-############################################## dunder special methods ##############################################
-####################################################################################################################
+##################################################################################################################
+##################################### arithmetic & bitwise operators methods #####################################
+##################################################################################################################
 
     def __bool__(self) -> bool:
         """
@@ -6527,7 +6527,7 @@ class SQLDataModel:
             
             from SQLDataModel import SQLDataModel
 
-            headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
                 ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
                 ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
@@ -6539,8 +6539,8 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel(data, headers) 
 
-            # Filter by 'age' column
-            sdm = sdm[sdm['age'] < 40]
+            # Filter by 'Age' column
+            sdm = sdm[sdm['Age'] < 40]
                     
             # View result
             print(sdm)
@@ -6549,7 +6549,7 @@ class SQLDataModel:
 
         ```shell
             ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
-            │   │ first │ last   │  age │ service │ hire_date  │ gender │
+            │   │ First │ Last   │  Age │ Service │ Hired      │ Gender │
             ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
             │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
             │ 1 │ Kelly │ Lee    │   32 │    8.00 │ 2016-09-18 │ Female │
@@ -6564,7 +6564,7 @@ class SQLDataModel:
             - All the equality operations return a python ``set`` object containing the row indicies which were returned from the evaluation.
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
-        """        
+        """           
         self_data = self.data(strict_2d=True)
         i_dim, j_dim = len(self_data), len(self_data[0])
         if isinstance(other, SQLDataModel):
@@ -6589,7 +6589,7 @@ class SQLDataModel:
         
             from SQLDataModel import SQLDataModel
 
-            headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
                 ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
                 ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
@@ -6601,8 +6601,8 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel(data, headers) 
 
-            # Filter by 'age' column
-            sdm = sdm[sdm['age'] <= 40]
+            # Filter by 'Age' column
+            sdm = sdm[sdm['Age'] <= 40]
                     
             # View result
             print(sdm)
@@ -6611,7 +6611,7 @@ class SQLDataModel:
 
         ```shell
             ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
-            │   │ first │ last   │  age │ service │ hire_date  │ gender │
+            │   │ First │ Last   │  Age │ Service │ Hired      │ Gender │
             ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
             │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
             │ 1 │ Kelly │ Lee    │   32 │    8.00 │ 2016-09-18 │ Female │
@@ -6651,7 +6651,7 @@ class SQLDataModel:
 
             from SQLDataModel import SQLDataModel
 
-            headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
                 ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
                 ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
@@ -6663,8 +6663,8 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel(data, headers) 
 
-            # Filter by 'gender' column
-            sdm = sdm[sdm['gender'] == 'Female']
+            # Filter by 'Gender' column
+            sdm = sdm[sdm['Gender'] == 'Female']
                     
             # View result
             print(sdm)
@@ -6673,7 +6673,7 @@ class SQLDataModel:
         
         ```shell            
             ┌───┬───────┬──────┬──────┬─────────┬────────────┬────────┐
-            │   │ first │ last │  age │ service │ hire_date  │ gender │
+            │   │ First │ Last │  Age │ Service │ Hired      │ Gender │
             ├───┼───────┼──────┼──────┼─────────┼────────────┼────────┤
             │ 0 │ Kelly │ Lee  │   32 │    8.00 │ 2016-09-18 │ Female │
             │ 1 │ Sarah │ West │   51 │    0.70 │ 2023-10-01 │ Female │
@@ -6712,7 +6712,7 @@ class SQLDataModel:
         
             from SQLDataModel import SQLDataModel
 
-            headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
                 ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
                 ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
@@ -6724,8 +6724,8 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel(data, headers) 
 
-            # Filter by 'first' column
-            sdm = sdm[sdm['first'] != 'John']
+            # Filter by 'First' column
+            sdm = sdm[sdm['First'] != 'John']
                     
             # View result
             print(sdm)
@@ -6734,7 +6734,7 @@ class SQLDataModel:
         
         ```shell            
             ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
-            │   │ first │ last    │  age │ service │ hire_date  │ gender │
+            │   │ First │ Last    │  Age │ Service │ Hired      │ Gender │
             ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
             │ 0 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │ Female │
             │ 1 │ Mike  │ Harlin  │   36 │    3.90 │ 2020-08-27 │ Male   │
@@ -6775,7 +6775,7 @@ class SQLDataModel:
         
             from SQLDataModel import SQLDataModel
 
-            headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
                 ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
                 ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
@@ -6787,8 +6787,8 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel(data, headers) 
 
-            # Filter by 'service' column
-            sdm = sdm[sdm['service'] > 5.0]
+            # Filter by 'Service' column
+            sdm = sdm[sdm['Service'] > 5.0]
                     
             # View result
             print(sdm)
@@ -6797,7 +6797,7 @@ class SQLDataModel:
 
         ```shell            
             ┌───┬───────┬─────────┬──────┬─────────┬────────────┬────────┐
-            │   │ first │ last    │  age │ service │ hire_date  │ gender │
+            │   │ First │ Last    │  Age │ Service │ Hired      │ Gender │
             ├───┼───────┼─────────┼──────┼─────────┼────────────┼────────┤
             │ 0 │ Kelly │ Lee     │   32 │    8.00 │ 2016-09-18 │ Female │
             │ 1 │ Pat   │ Douglas │   42 │   11.50 │ 2015-11-06 │ Male   │
@@ -6836,7 +6836,7 @@ class SQLDataModel:
         
             from SQLDataModel import SQLDataModel
 
-            headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
                 ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
                 ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
@@ -6848,8 +6848,8 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel(data, headers) 
 
-            # Filter by 'hire_date' column
-            sdm = sdm[sdm['hire_date'] >= datetime.date(2020,1,1)]
+            # Filter by 'Hired' column
+            sdm = sdm[sdm['Hired'] >= datetime.date(2020,1,1)]
 
             # View result
             print(sdm)
@@ -6858,7 +6858,7 @@ class SQLDataModel:
 
         ```shell
             ┌───┬───────┬────────┬──────┬─────────┬────────────┬────────┐
-            │   │ first │ last   │  age │ service │ hire_date  │ gender │
+            │   │ First │ Last   │  Age │ Service │ Hired      │ Gender │
             ├───┼───────┼────────┼──────┼─────────┼────────────┼────────┤
             │ 0 │ John  │ Smith  │   27 │    1.22 │ 2023-02-01 │ Male   │
             │ 1 │ Mike  │ Harlin │   36 │    3.90 │ 2020-08-27 │ Male   │
@@ -7863,6 +7863,128 @@ class SQLDataModel:
         """        
         return self.__pow__(value)
     
+    def __and__(self, other:SQLDataModel) -> set[int]:
+        """
+        Implements the bitwise AND operator ``&`` for combining the result sets of ``self`` and ``other``.
+
+        Parameters:
+            ``other``: The ``SQLDataModel`` to combine with.
+
+        Returns:
+            ``set[int]``: A set of indices representing the intersection of the result rows from both ``SQLDataModel`` instances.
+
+        Example::
+            
+            from SQLDataModel import SQLDataModel
+
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
+            data = [
+                ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+                ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+                ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+                ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+                ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+            ]  
+
+            # Create the sample model
+            sdm = SQLDataModel(data, headers)
+
+            # Apply some filtering conditions to both models
+            filter_1 = sdm[sdm['Age'] <= 40]
+            filter_2 = sdm[sdm['Service'] > 2]
+
+            # Perform a bitwise AND operation to return a new model
+            result = sdm[filter_1 & filter_2]
+
+            # View result
+            print(result)
+
+        This will output the result of filtering by 'Age' and 'Service':
+
+        ```shell
+            ┌───┬───────┬────────┬─────┬─────────┬────────────┬────────┐
+            │   │ First │ Last   │ Age │ Service │ Hired      │ Gender │
+            ├───┼───────┼────────┼─────┼─────────┼────────────┼────────┤
+            │ 1 │ Kelly │ Lee    │  32 │    8.00 │ 2016-09-18 │ Female │
+            │ 2 │ Mike  │ Harlin │  36 │    3.90 │ 2020-08-27 │ Male   │
+            └───┴───────┴────────┴─────┴─────────┴────────────┴────────┘
+            [2 rows x 6 columns]
+        ```
+
+        Note:
+            - If ``other`` is not an instance of ``SQLDataModel``, a ``NotImplementedError`` is raised to be consistent with current conventions.
+            - See :meth:`SQLDataModel.__or__()` for bitwise OR operation.
+        """        
+        if not isinstance(other, SQLDataModel):
+            raise NotImplementedError(
+                SQLDataModel.ErrorFormat(f"NotImplementedError: unsupported type '{type(other).__name__}', operand `&` is only supported for type `SQLDataModel`")
+            )
+        return (set(self.indicies) & set(other.indicies))
+
+    def __or__(self, other:SQLDataModel) -> set[int]:
+        """
+        Implements the bitwise OR operator ``|`` for combining the result sets of ``self`` and ``other``.
+
+        Parameters:
+            ``other``: The ``SQLDataModel`` to combine with.
+
+        Returns:
+            ``set[int]``: A set of indices representing the union of the result rows from both ``SQLDataModel`` instances.
+
+        Example::
+            
+            from SQLDataModel import SQLDataModel
+            
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
+            data = [
+                ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+                ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+                ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+                ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+                ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+            ]  
+
+            # Create the sample model
+            sdm = SQLDataModel(data, headers)
+
+            # Apply some filtering conditions to both models
+            filter_1 = sdm[sdm['Age'] > 40]
+            filter_2 = sdm[sdm['Gender'] == 'Male']
+
+            # Perform a bitwise OR operation to return a new model
+            result = sdm[filter_1 | filter_2]
+
+            # View result
+            print(result) 
+
+        This will output the result of filtering by 'Age' or 'Gender':
+
+        ```shell
+            ┌───┬───────┬─────────┬─────┬─────────┬────────────┬────────┐
+            │   │ First │ Last    │ Age │ Service │ Hired      │ Gender │
+            ├───┼───────┼─────────┼─────┼─────────┼────────────┼────────┤
+            │ 0 │ John  │ Smith   │  27 │    1.22 │ 2023-02-01 │ Male   │
+            │ 2 │ Mike  │ Harlin  │  36 │    3.90 │ 2020-08-27 │ Male   │
+            │ 3 │ Sarah │ West    │  51 │    0.70 │ 2023-10-01 │ Female │
+            │ 4 │ Pat   │ Douglas │  42 │   11.50 │ 2015-11-06 │ Male   │
+            └───┴───────┴─────────┴─────┴─────────┴────────────┴────────┘
+            [4 rows x 6 columns]
+        ```
+
+        Note:
+            - If ``other`` is not an instance of ``SQLDataModel``, a ``NotImplementedError`` is raised to be consistent with current conventions.
+            - See :meth:`SQLDataModel.__and__()` for bitwise AND operation.
+        """        
+        if not isinstance(other, SQLDataModel):
+            raise NotImplementedError(
+                SQLDataModel.ErrorFormat(f"NotImplementedError: unsupported type '{type(other).__name__}', operand `|` is only supported for type `SQLDataModel`")
+            )
+        return (set(self.indicies) | set(other.indicies))
+    
+##################################################################################################################
+############################################## other dunder methods ##############################################
+##################################################################################################################
+
     def __iter__(self) -> Iterator:
         """
         Iterates over a range of rows in the ``SQLDataModel`` based on the current model's row indices.
