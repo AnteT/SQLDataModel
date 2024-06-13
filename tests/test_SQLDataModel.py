@@ -1336,6 +1336,50 @@ def test_drop_column(sample_data):
         assert output_data == validation_data
 
 @pytest.mark.core
+def test_drop_row(sample_data):
+    data, headers = sample_data[1:], sample_data[0]
+    n_rows = len(data) # ensure same as rowcount
+    sdm = SQLDataModel(data, headers=headers)
+    rand_rids = random.sample(range(0, n_rows), n_rows)
+    rand_rids = random.sample(rand_rids, n_rows//2) # reselect half again
+    ### Delete single regular indexing ###
+    rand_pos_rid = random.sample(range(0, n_rows), 1)
+    sdm_pos_idx = sdm.drop_row(rand_pos_rid, inplace=False, ignore_index=False)
+    expected_shape = (n_rows-1, len(data[0]))
+    output_shape = sdm_pos_idx.shape
+    assert output_shape == expected_shape
+    assert rand_pos_rid not in sdm_pos_idx.indicies
+    ### Delete single negative indexing ###
+    rand_neg_rid = random.sample(range((-n_rows-1), -1), 1)
+    sdm_neg_idx = sdm.drop_row(rand_neg_rid, inplace=False, ignore_index=False)
+    expected_shape = (n_rows-1, len(data[0]))
+    output_shape = sdm_neg_idx.shape
+    assert output_shape == expected_shape
+    assert rand_neg_rid not in sdm_neg_idx.indicies    
+    ### Delete rows: inplace=False, ignore_index=False ###
+    test_FF = sdm.drop_row(rand_rids, inplace=False, ignore_index=False)
+    expected_rids = tuple([i for i in range(n_rows) if i not in rand_rids])
+    output_rids = test_FF.indicies
+    assert output_rids == expected_rids
+    ### Delete rows: inplace=False, ignore_index=True ###
+    test_FT = sdm.drop_row(rand_rids, inplace=False, ignore_index=True)
+    expected_rids = tuple([i for i in range(len(rand_rids))])
+    output_rids = test_FT.indicies
+    assert output_rids == expected_rids    
+    ### Delete rows: inplace=True, ignore_index=False ###
+    test_TF = SQLDataModel(data, headers=headers)
+    test_TF.drop_row(rand_rids, inplace=True, ignore_index=False)
+    expected_rids = tuple([i for i in range(n_rows) if i not in rand_rids])
+    output_rids = test_FF.indicies
+    assert output_rids == expected_rids
+    ### Delete rows: inplace=True, ignore_index=True ###
+    test_TT = SQLDataModel(data, headers=headers)
+    test_TT.drop_row(rand_rids, inplace=True, ignore_index=True)
+    expected_rids = tuple([i for i in range(len(rand_rids))])
+    output_rids = test_TT.indicies
+    assert output_rids == expected_rids 
+
+@pytest.mark.core
 def test_count_min_max():
     headers = ['string', 'int', 'float', 'bool', 'date', 'bytes', 'nonetype', 'datetime']
     data = [
