@@ -340,7 +340,7 @@ def test_right_division():
     sdm['vector'] = sdm['int scalar'] / sdm['float scalar'] 
     model_output = sdm[:,[2,3,4]].data()
     assert model_output == expected_output   
-    
+
 @pytest.mark.core
 def test_floor_division():
     data = [(i*2+10, i*1.0) for i in range(1,11)]
@@ -364,6 +364,46 @@ def test_exponentiation():
     sdm['vector'] = sdm['int'] ** sdm['float']
     model_output = sdm[:,[2,3,4]].data()
     assert model_output == expected_output 
+
+@pytest.mark.core
+def test_bitwise_and():
+    random.seed(42)
+    num_rows = 100 # enough to ensure conditions are satisified eventually
+    rand_bool = lambda x: 1 if x < .5 else 0
+    data = [[rand_bool(random.random()) for _ in range(2)] for _ in range(num_rows)] # 2 columns for each row
+    set_1 = set([i for i in range(len(data)) if data[i][0]==1])
+    set_2 = set([i for i in range(len(data)) if data[i][1]==0])
+    expected_data = set_1 & set_2
+    sdm = SQLDataModel(data)
+    output_data = set(sdm[sdm[sdm['0']==1] & sdm[sdm['1']==0]].indicies)
+    assert output_data == expected_data
+    # Variation on values
+    set_1 = set([i for i in range(len(data)) if data[i][0]==1])
+    set_2 = set([i for i in range(len(data)) if data[i][1]==1])
+    expected_data = set_1 & set_2
+    sdm = SQLDataModel(data)
+    output_data = set(sdm[sdm[sdm['0']==1] & sdm[sdm['1']==1]].indicies)
+    assert output_data == expected_data
+
+@pytest.mark.core
+def test_bitwise_or():
+    random.seed(42)
+    num_rows = 100 # enough to ensure conditions are satisified eventually
+    rand_bool = lambda x: 1 if x < .5 else 0
+    data = [[rand_bool(random.random()) for _ in range(2)] for _ in range(num_rows)] # 2 columns for each row
+    set_1 = set([i for i in range(len(data)) if data[i][0]==1])
+    set_2 = set([i for i in range(len(data)) if data[i][1]==0])
+    expected_data = set_1 | set_2
+    sdm = SQLDataModel(data)
+    output_data = set(sdm[sdm[sdm['0']==1] | sdm[sdm['1']==0]].indicies)
+    assert output_data == expected_data
+    # Variation on values
+    set_1 = set([i for i in range(len(data)) if data[i][0]==1])
+    set_2 = set([i for i in range(len(data)) if data[i][1]==1])
+    expected_data = set_1 | set_2
+    sdm = SQLDataModel(data)
+    output_data = set(sdm[sdm[sdm['0']==1] | sdm[sdm['1']==1]].indicies)
+    assert output_data == expected_data
 
 @pytest.mark.core
 def test_headers(sample_data):
