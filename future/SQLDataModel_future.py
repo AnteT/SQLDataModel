@@ -1,6 +1,6 @@
 from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random, urllib.request
-from collections.abc import Generator, Callable, Iterator
+from collections.abc import Generator, Callable, Iterator, Iterable
 from collections import namedtuple
 from typing import Literal, Any
 from ast import literal_eval
@@ -1141,6 +1141,130 @@ class SQLDataModel:
             keep_headers = [col for col in self.headers if col not in column]
             sql_stmt = self._generate_sql_stmt(columns=keep_headers)
             return self.execute_fetch(sql_stmt)    
+
+    def drop_row(self, row:int|Iterable[int], inplace:bool=True, ignore_index:bool=False) -> None|SQLDataModel:
+        """
+        Drops the specified row(s) indicies from the ``SQLDataModel``. Values for ``row`` can be a single row index, or an iterable collection of multiple row indicies to drop.
+
+        Parameters:
+            ``row`` (int | Iterable[int]): The row index or row indicies to drop.
+            ``inplace`` (bool, optional): If True, drops the rows(s) in-place and updates the model metadata. If False, returns a new ``SQLDataModel`` object without the dropped row(s). Default is True.
+            ``ignore_index`` (bool, optional): If True, drops the row(s) and ignores the index for the resulting model. Default is False, keeping original indicies in new model.
+
+        Returns:
+            ``None | SQLDataModel``: If in-place is True, returns None. Otherwise, returns a new ``SQLDataModel`` object without the dropped rows(s).
+
+        Raises:
+            ``TypeError``: If the row parameter is not of type 'int' or an iterable collection of type 'int' representing the row indicies to drop.
+            ``IndexError``: If any provided row index is outside the current row range determined by the values at :py:attr:`SQLDataModel.indicies`.
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            headers = ['Rank', 'Location', 'Population']
+            data = [(1, "Tokyo, Japan", 37.4),
+                    (2, "Delhi, India", 31.0),
+                    (3, "Shanghai, China", 27.1),
+                    (4, "São Paulo, Brazil", 22.0),
+                    (5, "Mexico City, Mexico", 21.8),
+                    (6, "Cairo, Egypt", 21.3),
+                    (7, "Dhaka, Bangladesh", 21.0),
+                    (8, "Mumbai, India", 20.7),
+                    (9, "Beijing, China", 20.5),
+                    (10,"Osaka, Japan", 19.1)]
+
+            # Create the sample model
+            sdm = SQLDataModel(data, headers)
+
+            # Drop the last row
+            sdm.drop_row(-1)
+
+            # Drop rows based on condition of less than 25 Million population
+            sdm.drop_row(sdm['Population'] < 25.0)
+
+            # View result
+            print(sdm)  
+
+        This will output:
+
+        ```shell
+            ┌──────┬─────────────────┬────────────┐
+            │ Rank │ Location        │ Population │
+            ├──────┼─────────────────┼────────────┤
+            │    1 │ Tokyo, Japan    │       37.4 │
+            │    2 │ Delhi, India    │       31.0 │
+            │    3 │ Shanghai, China │       27.1 │
+            └──────┴─────────────────┴────────────┘
+            [3 rows x 3 columns]
+        ```
+
+        Dropping multiple rows and returning a new model:
+
+        ```python
+            # Create a new model using the same sample data
+            sdm = SQLDataModel(data, headers)
+
+            # Set row indicies to drop
+            row_indices = range(0, 5) # or [0, 1, 2, 3, 4]
+
+            # Drop top 5 cities and return as a new model
+            sdm_new = sdm.drop_row(row_indices, inplace=False)
+
+            # View new model
+            print(sdm_new)
+        ```
+
+        This will output:
+
+        ```shell
+            ┌──────┬───────────────────┬────────────┐
+            │ Rank │ Location          │ Population │
+            ├──────┼───────────────────┼────────────┤
+            │    6 │ Cairo, Egypt      │       21.3 │
+            │    7 │ Dhaka, Bangladesh │       21.0 │
+            │    8 │ Mumbai, India     │       20.7 │
+            │    9 │ Beijing, China    │       20.5 │
+            │   10 │ Osaka, Japan      │       19.1 │
+            └──────┴───────────────────┴────────────┘
+            [5 rows x 3 columns]
+        ```
+
+        Important:
+            - Rows are referenced by their integer index, and not by their value. 
+            This means that row index ``0`` will always refer to the first row in the model, and ``-1`` will always refer to the last. 
+            This distinction is usually irrelevant when the two are aligned, however this is no longer the case when row(s) are dropped from anywhere except the very last row.
+
+        Note:
+            - Row indicies are retained after being deleted by default, provide ``ignore_index=True`` to reset row indicies if required.
+            - The equivalent of this method can also be achieved by simply indexing the required rows and columns using ``sdm[rows, column]`` notation, see :meth:`SQLDataModel.__getitem__()` for additional details.
+        """
+        if isinstance(row, int):
+            row = [row]
+        if not isinstance(row, Iterable) or not all(isinstance(rid, int) for rid in row):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(row).__name__}', argument for `row` must be of type 'int' or an iterable collection of type 'int' representing row indicies to drop")
+            )
+        row = tuple(row) if len(row) != 1 else tuple((row[0], row[0]))
+        for rid in row:
+            try:
+                _ = self.indicies[rid]
+            except IndexError:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{rid}', provided row index is outisde of current model range '0:{self.row_count}'")
+                ) from None
+        row = tuple([self.indicies[rid] for rid in row])
+        if inplace:
+            sql_stmt = f"""DELETE FROM "{self.sql_model}" WHERE "{self.sql_idx}" IN {row}"""
+            self.execute_statement(sql_stmt)
+            if ignore_index:
+                self.reset_index()
+            return
+        else:
+            columns = self.headers if ignore_index else [self.sql_idx, *self.headers] # Keep original index if not ignoring
+            cols_str = ",".join([f'"{col}" as "{col}"' for col in columns])
+            sql_stmt = " ".join(("SELECT ",cols_str,f'FROM "{self.sql_model}" WHERE "{self.sql_idx}" NOT IN {row}'))
+            return self.execute_fetch(sql_stmt)
 
     def rename_column(self, column:int|str, new_column_name:str) -> None:
         """
@@ -11031,6 +11155,7 @@ class SQLDataModel:
 
         Parameters:
             ``sql_query`` (str): The SQL query to execute with the expectation of rows returned.
+            ``sql_params`` (tuple, optional): The SQL parameters to provide for parameterized queries.
             ``**kwargs`` (optional): Additional keyword args to pass to ``SQLDataModel`` constructor
 
         Raises:
@@ -11088,12 +11213,13 @@ class SQLDataModel:
             sdm_args.update({k:v for k,v in kwargs.items()})
         return type(self)(fetch_result, headers=fetch_headers, **sdm_args)
 
-    def execute_statement(self, sql_stmt:str) -> None:
+    def execute_statement(self, sql_stmt:str, sql_params:tuple=None) -> None:
         """
         Executes an arbitrary SQL query against the current model without the expectation of selection or returned rows.
 
         Parameters:
             ``sql_stmt`` (str): The SQL query to execute.
+            ``sql_params`` (tuple, optional): The SQL parameters to provide for parameterized queries.
             
         Raises:
             ``SQLProgrammingError``: If the SQL execution fails.
@@ -11111,12 +11237,19 @@ class SQLDataModel:
             # Execute statement without results, modifying column in place
             sdm.execute_statement('UPDATE table SET column = value WHERE condition')
 
+            # Execute a parameterized with statement by providing values
+            sdm.execute_statement('DELETE FROM table WHERE idx = ? or name = ?', (7,'Bob'))
+
+        Change Log:
+            - Version 0.7.4 (2024-06-13):
+                - Added ``sql_params`` parameter to allow parameterized statements similar to other SQL execution methods.
+
         Note:
-            - To execute a query with the expectation of results, see :meth:`SQLDataModel.execute_fetch()` method
-            - To execute multiple queries within a single transaction, see :meth:`SQLDataModel.execute_transaction()` method        
+            - To execute a query with the expectation of results, see :meth:`SQLDataModel.execute_fetch()` method.
+            - To execute multiple queries within a single transaction, see :meth:`SQLDataModel.execute_transaction()` method.
         """
         try:
-            self.sql_db_conn.execute(sql_stmt)
+            self.sql_db_conn.execute(sql_stmt, sql_params) if sql_params else self.sql_db_conn.execute(sql_stmt)
             self.sql_db_conn.commit()
         except Exception as e:
             self.sql_db_conn.rollback()
