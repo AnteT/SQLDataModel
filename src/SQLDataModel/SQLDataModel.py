@@ -259,11 +259,11 @@ class SQLDataModel:
         │ 9 │ Hunter Donaldson    │ 2023-06-30 │ Belgium     │   1593 │    4.58 │
         └───┴─────────────────────┴────────────┴─────────────┴────────┴─────────┘
     ```
+
     Note:
         - No additional dependencies are installed with this package, however you will obviously need to have pandas or numpy to create pandas or numpy objects.
         - Use :meth:`SQLDataModel.set_display_color()` to modify the terminal color of the table, by default no color styling is applied.
         - Use :meth:`SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
-
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies','dtypes','shape','table_style')
     
@@ -1883,6 +1883,7 @@ class SQLDataModel:
         ```text
             shape: (3, 3)
         ```
+
         The shape can also be seen when printing the model:
 
         ```python
@@ -1984,6 +1985,9 @@ class SQLDataModel:
             │ 3 │ pat    │ douglas │     42 │         7.02 │
             └───┴────────┴─────────┴────────┴──────────────┘
         ```
+
+        Use :meth:`SQLDataModel.get_display_float_precision()` to get the current value set:
+
         ```python
             # Get the updated float display precision
             updated_precision = sdm.get_display_float_precision()
@@ -2332,6 +2336,9 @@ class SQLDataModel:
             └───────┴─────────┴──────┴─────────┴────────────┘
             [5 rows x 5 columns]
         ```
+
+        Use :meth:`SQLDataModel.get_column_dtypes()` or :py:attr:`SQLDataModel.dtypes` to view current types:
+        
         ```python
             # Get new column types to confirm
             dtypes_after = sdm.get_column_dtypes()
@@ -8262,6 +8269,47 @@ class SQLDataModel:
             [5 rows x 3 columns]
         ```
 
+        Conditional updates can also be made using multiple columns:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            headers = ['Employee', 'Base', 'Salary']
+            data = [
+                ('Alice', '58,500', '62,250'),
+                ('Bobby', '60,750',  None),
+                ('Chloe', '58,500', '63,125'),
+                ('David', '65,000',  None),
+                ('Ellie', '65,000',  None),
+                ('Fiona', '65,000', '71,450'),
+            ]
+
+            # Create sample model
+            sdm = SQLDataModel(data, headers)
+
+            # Selectively update values based on conditions
+            sdm[sdm['Salary'].isna(), 'Salary'] = sdm['Base']
+
+            # View updates
+            print(sdm)
+        ```
+
+        This will output the resulting model where 'Salary' was updated with values from 'Base' only if missing:
+
+        ```shell
+            ┌───┬──────────┬────────┬────────┐
+            │   │ Employee │ Base   │ Salary │
+            ├───┼──────────┼────────┼────────┤
+            │ 0 │ Alice    │ 58,500 │ 62,250 │
+            │ 1 │ Bobby    │ 60,750 │ 60,750 │
+            │ 2 │ Chloe    │ 58,500 │ 63,125 │
+            │ 3 │ David    │ 65,000 │ 65,000 │
+            │ 4 │ Ellie    │ 65,000 │ 65,000 │
+            │ 5 │ Fiona    │ 65,000 │ 71,450 │
+            └───┴──────────┴────────┴────────┘
+            [6 rows x 3 columns]
+        ```
+
         Values for multiple columns can also be set:
 
         ```python
@@ -8312,6 +8360,10 @@ class SQLDataModel:
             [5 rows x 4 columns]            
         ```
 
+        Change Log:
+            - Version 0.7.5 (2024-06-14):
+                - Added row indicies masking to allow selective updating when ``update_values`` is also an instance of ``SQLDataModel`` using ``target_indicies`` as mask.
+
         Note:
             - If ``update_values`` is another ``SQLDataModel`` object, its data will be normalized using the :meth:`SQLDataModel.data()` method.
             - The ``target_indicies`` parameter can be an integer, a tuple of disconnected row indices, a slice representing a range of rows, a string or list of strings representing column names, or a tuple combining row and column indices.
@@ -8320,13 +8372,17 @@ class SQLDataModel:
         """        
         # first check if target is new column that needs to be created, if so create it and return so long as the target values aren't another sqldatamodel object:
         if isinstance(update_values, SQLDataModel):
-            update_values = update_values.data() # normalize data input
+            other_is_sdm = True
+            update_values = update_values.data(strict_2d=True, index=True) # normalize data input
+        else:
+            other_is_sdm = False
         if not isinstance(update_values, (str,int,float,bool,bytes,list,tuple,datetime.date)) and (update_values is not None):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid values type '{type(update_values).__name__}', update values must be compatible with SQL datatypes such as <'str', 'int', 'float', 'datetime', 'bool', 'bytes'>")
             )
         # short circuit remaining operations and proceed to insert row if target_indicies is int and equals current row count
         if isinstance(target_indicies, int) and target_indicies == self.row_count:
+            update_values = update_values[0][1:] if other_is_sdm else update_values
             try:
                 self.append_row(update_values)
                 return
@@ -8358,9 +8414,11 @@ class SQLDataModel:
                 ) from None             
         # convert various row options to be tuple or int
         if isinstance(validated_rows,slice):
-            validated_rows = tuple(range(validated_rows.start, validated_rows.stop))
+            validated_rows = self.indicies[validated_rows]
         if isinstance(validated_rows,int):
             validated_rows = (validated_rows,)
+        if other_is_sdm:
+            update_values = [row[1:] for row in update_values if row[0] in validated_rows]
         self._update_rows_and_columns_with_values(rows_to_update=validated_rows,columns_to_update=validated_columns,values_to_update=update_values)
         return
 
@@ -12016,6 +12074,8 @@ class SQLDataModel:
             rowwise_update = False
         else:
             rowwise_update = True
+        if isinstance(values_to_update, Iterable) and len(values_to_update) < 1:
+            return None # Nothing to update
         if isinstance(values_to_update, list):
             if not isinstance(values_to_update[0], (tuple,list)):
                 values_to_update = tuple(values_to_update)
@@ -12036,9 +12096,9 @@ class SQLDataModel:
             values_to_update = "null" if values_to_update is None else f"""{values_to_update}""" if not isinstance(values_to_update, (str,bytes,datetime.date)) else f"datetime('{values_to_update}')" if isinstance(values_to_update,datetime.datetime) else f"date('{values_to_update}')" if isinstance(values_to_update,datetime.date) else f"""'{values_to_update.replace("'","''")}'""" if not isinstance(values_to_update,bytes) else f"""X'{values_to_update.hex()}'"""
             col_val_param = ','.join([f""" "{column}" = {values_to_update} """ for column in columns_to_update]) 
             if update_sql_script is None:
-                update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
+                update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update != 1 else f'({rows_to_update[0]})'};"""
             else:
-                update_sql_script += f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update > 1 else f'({rows_to_update[0]})'};"""
+                update_sql_script += f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update != 1 else f'({rows_to_update[0]})'};"""
             self.execute_transaction(update_sql_script)
             return            
         if num_rows_to_update != num_value_rows_to_update:

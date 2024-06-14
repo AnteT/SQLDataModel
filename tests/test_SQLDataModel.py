@@ -117,6 +117,44 @@ def test_setitem():
     assert num_checked == (sdm.row_count * sdm.column_count)
 
 @pytest.mark.core
+def test_setitem_masking():
+    random.seed(42)
+    n_rows = 120
+    random_null = lambda: (None, 'B') if random.random() < 0.5 else ('A', None)
+    data = [[*random_null(), 'X', 'X', None] for _ in range(n_rows)]
+    sdm = SQLDataModel(data, headers=['A','B','T1','T2','T3'])
+    sdm[sdm['A']=='A', 'T1'] = sdm['A']
+    sdm[sdm['B']=='B', 'T2'] = sdm['B']
+    sdm[(sdm['A']=='A') & (sdm['T1']!='X'), 'T3'] = sdm['A']
+    sdm[(sdm['B']=='B') & (sdm['T2']!='X'), 'T3'] = sdm['B']
+    expected_data = []
+    for rid, row in enumerate(data):
+        A, B, T1, T2, T3 = row[0], row[1], row[2], row[3], row[4]
+        if A == 'A':
+            T1 = A
+        if B == 'B':
+            T2 = B
+        if A == 'A' and T1 != 'X':
+            T3 = A
+        if B == 'B' and T2 != 'X':
+            T3 = B
+        expected_data.append(tuple([A, B, T1, T2, T3]))
+    output_data = sdm.data(strict_2d=True)
+    assert output_data == expected_data
+    # Test many unit size masks
+    cols = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']
+    n_cols = len(cols)
+    data = [[f"{j},{i}" for j in cols] for i in range(1,n_cols+1)]
+    sdm = SQLDataModel(data, cols)
+    sdm['All'] = 'Fail'
+    for rid,letter in enumerate(cols):
+        cell_val = sdm[rid, letter].data()
+        sdm[sdm[letter]==cell_val, 'All'] = sdm[letter]
+    output_data = sdm['All'].data()
+    expected_data = [tuple([f"{col},{row+1}"]) for row, col in enumerate(cols)]
+    assert output_data == expected_data
+    
+@pytest.mark.core
 def test_setitem_triggers():
     """Tests append row triggers for setitem and index value vs position sync for row and column indexing."""
     grid_size = 10 # creates grid_size as (grid_size x grid_size)

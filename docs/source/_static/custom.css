@@ -9,7 +9,8 @@ html {
 
 /* GitHub code link text appearing as [source] next to definition */
 .viewcode-link {
-    color: #115b8c;
+    color: #115b8c !important;
+    font-size: 85% !important;
 }
 /* regular unlinked code literals, pivoted from #0c5280 */
 .rst-content code.literal, .rst-content tt.literal {
