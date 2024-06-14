@@ -7,6 +7,10 @@ html {
     scrollbar-color: #2980b9 #2b2d2e;
 }
 
+/* GitHub code link text appearing as [source] next to definition */
+.viewcode-link {
+    color: #115b8c;
+}
 /* regular unlinked code literals, pivoted from #0c5280 */
 .rst-content code.literal, .rst-content tt.literal {
     color: #115b8c;

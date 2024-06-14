@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, inspect
 
 project_root = os.path.abspath('../../src')
 sys.path.append(project_root)
@@ -23,6 +23,7 @@ extensions = [
     'sphinx.ext.autodoc',  # Enable autodoc extension
     'sphinx.ext.napoleon',  # Enable Napoleon extension
     'sphinx.ext.mathjax', #  Enable math formulas
+    'sphinx.ext.linkcode', #  Enable links to external GitHub source code
     'myst_parser', #  Enable parsing of Markdown files
 ]
 
@@ -42,7 +43,7 @@ napoleon_use_rtype = True
 # napoleon_custom_sections = [('Metrics', 'params_style')]
 
 templates_path = ['_templates']
-modindex_common_prefix = ['SQLDataModel'] # doesnt seem to do anything
+# modindex_common_prefix = ['SQLDataModel'] # doesnt seem to do anything
 add_modules_names = False # doesnt seem to make a difference
 
 # -- Options for HTML output -------------------------------------------------
@@ -56,6 +57,36 @@ html_theme_options = {
     'logo_only': True,
     'display_version': False
 }
+
+def linkcode_resolve(domain: str, info: dict):
+    """
+    Resolves link to source module to enable links in module documentation.
+
+    Example Link: 
+        ``https://github.com/AnteT/SQLDataModel/blob/master/src/SQLDataModel/SQLDataModel.py#L11566-L11671``
+
+    Notes:
+        Required for ``sphinx.ext.linkcode`` extension.
+
+    Important:
+        Ensure ``SQLDataModel`` is not installed in the virtual environment to avoid versioning issues.
+    """
+    info_module, info_fullname = info['module'], info['fullname']
+    if domain != 'py' or not info_module or not info_fullname:
+        return None
+    try:
+        obj = __import__(info_module, fromlist=['SQLDataModel'])
+        if obj is None:
+            return None
+        for part in info_fullname.split('.'):
+            obj = getattr(obj, part)
+        source, lineno = inspect.getsourcelines(obj)
+        fn = f"{info_module.replace('.','/')}.py"
+        linespec = f"#L{lineno}-L{lineno + len(source) - 1}"
+    except Exception as e:
+        fn = f"{info_module.replace('.','/')}.py"
+        linespec = ""
+    return f"https://github.com/AnteT/SQLDataModel/blob/master/src/{fn}{linespec}"
 
 def process_docstring(app, what, name, obj, options, lines:list[str]):
     i = 0
