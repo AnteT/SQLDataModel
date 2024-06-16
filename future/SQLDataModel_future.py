@@ -2,7 +2,7 @@ from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random, urllib.request
 from collections.abc import Generator, Callable, Iterator, Iterable
 from collections import namedtuple
-from typing import Literal, Any
+from typing import Literal, Any, Type
 from ast import literal_eval
 from io import StringIO
 
@@ -12384,15 +12384,16 @@ class SQLDataModel:
         validated_column_indicies = col_indicies
         return (validated_row_indicies, validated_column_indicies)
     
-    def astype(self, dtype:Literal['bool','bytes','date','datetime','float','int','None','str']) -> SQLDataModel:
+    def astype(self, dtype:Callable|Type|Literal['bool','bytes','date','datetime','float','int','None','str']) -> SQLDataModel:
         """
         Casts the model data into the specified python ``dtype``.
 
         Parameters:
-            ``dtype`` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type to cast the values to.
+            ``dtype`` (Callable|Type|Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type to cast the values to.
 
         Raises:
-            ``ValueError``: If ``dtype`` is not one of 'bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str'.
+            ``ValueError``: If ``dtype`` is a string and not one of 'bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str'.
+            ``TypeError``: If ``dtype`` is a ``Type`` object that does not map to the current values, such as trying to convert a string column using the built-in ``float`` type.
 
         Returns:
             ``SQLDataModel``: The data casted as the specified type as a new ``SQLDataModel``.
@@ -12457,18 +12458,55 @@ class SQLDataModel:
             [3 rows x 5 columns]
         ```        
         
+        Types can also be passed directly to ``dtype``:
+
+        ```python
+            # Convert 'Age' directly to float using the built-in type:
+            sdm['Age float'] = sdm['Age'].astype(float)
+
+            # View updated model
+            print(sdm)
+        ```
+
+        This will output the result of mapping the built-in ``float`` type to 'Age' as a new column:
+
+        ```shell
+            ┌────────┬─────┬─────────┬───────┬────────────┬───────────┐
+            │ Name   │ Age │  Height │ Hired │ Height int │ Age float │
+            ├────────┼─────┼─────────┼───────┼────────────┼───────────┤
+            │ John   │  30 │  175.30 │ 1     │        175 │     30.00 │
+            │ Alice  │  28 │  162.00 │ 1     │        162 │     28.00 │
+            │ Travis │  35 │  185.80 │ 0     │        185 │     35.00 │
+            └────────┴─────┴─────────┴───────┴────────────┴───────────┘
+            [3 rows x 6 columns]
+        ```
+
+        Change Log:
+            - Version 0.7.6 (2024-06-16):
+                - Modified to allow ``Callable`` or ``Type`` to be provided directly for ``dtype`` argument to map to data and return as new model for broader type conversion.
+        
         Note:
             - Unless the returned values are saved as a new column, using this method does not change the underlying column's type currently assigned to it, to modify the column type use :meth:`SQLDataModel.set_column_dtypes()` instead.
             - Any ``None`` or ``null`` values encountered will not be coerced to the specified ``dtype``, see :meth:`SQLDataModel.fillna()` for handling and filling null values appropriately.
+            - When passing a type directly, ``dtype=Type``, the type must be a ``Callable`` that can be mapped directly to a value like the built-in ``str``, ``int``, ``float`` and ``bool`` types.
         """
-        if dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
+        if dtype in ('bool','bytes','date','datetime','float','int','None','str'):
+            str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
+            sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
+            dtype_dict = {col:dtype for col in self.headers}
+            return self.execute_fetch(sql_stmt, dtypes=dtype_dict)                
+        elif isinstance(dtype, (Callable,Type)):
+            try:
+                data = [tuple([dtype(val) for val in row]) for row in self.data(strict_2d=True, include_headers=False)]
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to return as type '{dtype}'")
+                ).with_traceback(e.__traceback__) from None
+            return type(self)(data, headers=self.headers, infer_types=False, **self._get_display_args())
+        else:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{type(dtype).__name__}', argument for `dtype` must be one of 'bool','bytes','date','datetime','float','int','None' or 'str'")
-            )        
-        str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
-        sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
-        dtype_dict = {col:dtype for col in self.headers}
-        return self.execute_fetch(sql_stmt, dtypes=dtype_dict)
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{dtype}', argument for `dtype` must be a `Callable` type or one of 'bool','bytes','date','datetime','float','int','None' or 'str'")
+            )
 
     def isna(self) -> set[int]:
         """
