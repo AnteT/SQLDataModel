@@ -917,6 +917,25 @@ def test_infer_types_post_init(sample_data):
         assert typed_input[i] == inferred_output[i]
 
 @pytest.mark.core
+def test_infer_types_date_formats():
+    num_rows = 50
+    random.seed(12_345)
+    date_formats = ["%m/%d/%Y","%m-%d-%Y","%m.%d.%Y","%Y/%m/%d","%Y-%m-%d","%Y.%m.%d"]
+    rand_date = lambda: datetime.date(random.randint(1900, 2022),random.randint(1, 12),random.randint(1, 28))
+    # Generate random dates as input data with type datetime.date
+    input_data = [tuple([rand_date() for _ in date_formats]) for _ in range(num_rows)]
+    # Convert to strings using all supported date formats
+    str_data = [tuple([dt.strftime(date_formats[did]) for did, dt in enumerate(row)]) for row in input_data]
+    # Test date format inference on init
+    output_data = SQLDataModel(str_data, headers=None, infer_types=True).data(strict_2d=True)
+    assert output_data == input_data
+    # Test date format inference post init with infer_dtypes
+    sdm = SQLDataModel(str_data, headers=None, infer_types=False)
+    sdm.infer_dtypes()
+    output_data = sdm.data(strict_2d=True)
+    assert output_data == input_data
+
+@pytest.mark.core
 def test_from_shape(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     row_lower, row_upper = 1, len(input_data)
