@@ -12299,7 +12299,7 @@ class SQLDataModel:
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns indicies are required, use `get_headers()` to view current valid arguments")
                     )
-            return (None, col_index) # +REVINDEX
+            return (self.indicies, col_index) # +REVINDEX
         ### indexing by rows and columns ###        
         if not isinstance(indicies, tuple):
             raise TypeError(
