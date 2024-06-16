@@ -506,9 +506,6 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid or inconsistent data, failed with '{e}'")
             ) from None  
-        if 'bytes' in headers_to_py_dtypes_dict.values():
-            fix_str_to_bytes_stmt = "".join(["BEGIN TRANSACTION;","".join([f"""UPDATE "{self.sql_model}" SET "{column}" = CAST(SUBSTR("{column}",3,LENGTH("{column}")-3) AS BLOB) WHERE (SUBSTR("{column}",1,2) = x'6227' AND SUBSTR("{column}",-1) = x'27');""" for column, coltype in headers_to_py_dtypes_dict.items() if coltype == 'bytes']),"END TRANSACTION;"])
-            self.sql_db_conn.executescript(fix_str_to_bytes_stmt)
 
 ################################################################################################################
 ################################################ static methods ################################################
@@ -737,6 +734,7 @@ class SQLDataModel:
                     continue
         return parsed_dtypes
 
+
     @staticmethod
     def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','str','bytes','date','datetime','NoneType','bool']='str', as_binding:bool=True, as_alias:bool=False):
         """
@@ -751,27 +749,39 @@ class SQLDataModel:
         Returns:
             ``str``: The parameter formatted for SQL type casting.
 
+        Change Log:
+            - Version 0.7.6 (2024-06-16):
+                - Added support for additional date formats when ``dtype='date'``:
+                    - ``'%m/%d/%Y'`` (MM/DD/YYYY)
+                    - ``'%m-%d-%Y'`` (MM-DD-YYYY)
+                    - ``'%m.%d.%Y'`` (MM.DD.YYYY)
+                    - ``'%Y/%m/%d'`` (YYYY/MM/DD)
+                    - ``'%Y-%m-%d'`` (YYYY-MM-DD)
+                    - ``'%Y.%m.%d'`` (YYYY.MM.DD)                
+                - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
+
         Note:
             - This function provides consistent formatting for casting parameters into specific data types for SQLite, changing it will lead to unexpected behaviors.
+            - Used by :meth:`SQLDataModel.__init__()`` with ``as_binding=True`` to allow parameterized inserts to cast to appropriate data type.
         """
         param_alias =  f'''as "{param}"''' if as_alias else ''''''
         if dtype in ('str','None','NoneType'):
-            return '''cast(nullif(nullif(?,'None'),'') as TEXT)''' if as_binding else f'''cast(nullif(nullif("{param}",'None'),'') as TEXT) {param_alias}'''
+            return '''CAST(NULLIF(NULLIF(?,'None'),'') as TEXT)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as TEXT) {param_alias}'''
         elif dtype == 'int':
-            return '''cast(nullif(nullif(?,'None'),'') as INTEGER)''' if as_binding else f'''cast(nullif(nullif("{param}",'None'),'') as INTEGER) {param_alias}'''
+            return '''CAST(NULLIF(NULLIF(?,'None'),'') as INTEGER)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as INTEGER) {param_alias}'''
         elif dtype == 'float':
-            return '''cast(nullif(nullif(?,'None'),'') as REAL)''' if as_binding else f'''cast(nullif(nullif("{param}",'None'),'') as REAL) {param_alias}'''
+            return '''CAST(NULLIF(NULLIF(?,'None'),'') as REAL)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as REAL) {param_alias}'''
         elif dtype == 'bytes':
-            return '''cast(nullif(nullif(?,'None'),'') as BLOB)''' if as_binding else f"""cast(CASE WHEN (SUBSTR("{param}",1,2) = 'b''' AND SUBSTR("{param}",-1,1) ='''') THEN SUBSTR("{param}",3,LENGTH("{param}")-3) ELSE nullif(nullif("{param}",'None'),'') END as BLOB) {param_alias} """
+            return """(SELECT CAST(CASE WHEN (SUBSTR(val,1,2) = 'b''' AND SUBSTR(val,-1,1) ='''') THEN SUBSTR(val,3,LENGTH(val)-3) ELSE NULLIF(NULLIF(val,'None'),'') END as BLOB) FROM (SELECT ? AS val))""" if as_binding else f"""CAST(CASE WHEN (SUBSTR("{param}",1,2) = 'b''' AND SUBSTR("{param}",-1,1) ='''') THEN SUBSTR("{param}",3,LENGTH("{param}")-3) ELSE NULLIF(NULLIF("{param}",'None'),'') END as BLOB) {param_alias} """
         elif dtype == 'date':
-            return '''DATE(nullif(nullif(?,'None'),''))''' if as_binding else f'''DATE(nullif(nullif("{param}",'None'),'')) {param_alias}'''
+            return '''(SELECT CASE WHEN SUBSTR(val, 3, 1) = '-' THEN DATE(SUBSTR(val, 7, 4) || '-' ||SUBSTR(val, 1, 2) || '-' ||SUBSTR(val, 4, 2)) ELSE DATE(NULLIF(NULLIF(val, 'None'), '')) END FROM (SELECT REPLACE(REPLACE(?, '/', '-'), '.', '-') AS val))''' if as_binding else f'''CASE WHEN SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'),3,1) = '-' THEN DATE(SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 7, 4) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 1, 2) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 4, 2)) ELSE DATE(NULLIF(NULLIF(REPLACE(REPLACE("{param}",'/','-'),'.','-'),'None'),'')) END {param_alias} '''
         elif dtype == 'datetime':
-            return '''DATETIME(nullif(nullif(?,'None'),''))''' if as_binding else f'''DATETIME(nullif(nullif("{param}",'None'),'')) {param_alias}'''
+            return '''DATETIME(NULLIF(NULLIF(?,'None'),''))''' if as_binding else f'''DATETIME(NULLIF(NULLIF("{param}",'None'),'')) {param_alias}'''
         elif dtype == 'bool':
-            return '''cast(case coalesce(nullif(?,''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as INTEGER)''' if as_binding else f'''cast(case coalesce(nullif("{param}",''),'None') when 'None' then null when 'False' then 0 when '0' then 0 when 0 then 0 else 1 end as INTEGER) {param_alias}'''
+            return '''CAST(CASE COALESCE(NULLIF(?,''),'None') WHEN 'None' THEN null WHEN 'False' THEN 0 WHEN '0' THEN 0 WHEN 0 THEN 0 ELSE 1 END as INTEGER)''' if as_binding else f'''CAST(CASE coalesce(NULLIF("{param}",''),'None') WHEN 'None' THEN null WHEN 'False' THEN 0 WHEN '0' THEN 0 WHEN 0 THEN 0 ELSE 1 END as INTEGER) {param_alias}'''
         else:
-            return '''nullif(nullif(?,'None'),'')''' if as_binding else f'''nullif(nullif("{param}",'None'),'') {param_alias}'''
-
+            return '''NULLIF(NULLIF(?,'None'),'')''' if as_binding else f'''NULLIF(NULLIF("{param}",'None'),'') {param_alias}'''
+        
     @staticmethod
     def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None) -> str:
         """
