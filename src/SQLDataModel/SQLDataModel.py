@@ -10952,7 +10952,10 @@ class SQLDataModel:
             sdm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
             
             # Create a new 'Column3' using the values returned from the lambda function:
-            sdm['Column3'] = sdm.apply(lambda x, y: x + y, new_column_name='Sum_Columns')
+            sdm['Column3'] = sdm.apply(lambda x, y: x + y)
+
+            # Alternatively, an existing column can be updated in place:
+            sdm['Column1'] = sdm['Column1'].apply(lambda x: x // 4)
         ```
 
         Note:
@@ -11263,7 +11266,12 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, provided query failed with error "{e}"')
             ) from None
-        fetch_result = res.fetchall()
+        try:
+            fetch_result = res.fetchall()
+        except sqlite3.OperationalError as e:
+            raise SQLProgrammingError(
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: '{e}' encountered when trying to fetch and parse SQL query results")
+            ) from None            
         fetch_headers = [x[0] for x in res.description]
         if (rows_returned := len(fetch_result)) < 1:
             raise ValueError(
