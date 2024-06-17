@@ -734,7 +734,6 @@ class SQLDataModel:
                     continue
         return parsed_dtypes
 
-
     @staticmethod
     def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','str','bytes','date','datetime','NoneType','bool']='str', as_binding:bool=True, as_alias:bool=False):
         """
@@ -751,7 +750,7 @@ class SQLDataModel:
 
         Change Log:
             - Version 0.7.6 (2024-06-16):
-                - Added support for additional date formats when ``dtype='date'``including: (``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``)
+                - Added support for additional date formats when ``dtype='date'`` including: ``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``.
                 - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
 
         Note:
