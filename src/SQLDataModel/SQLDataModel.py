@@ -751,18 +751,12 @@ class SQLDataModel:
 
         Change Log:
             - Version 0.7.6 (2024-06-16):
-                - Added support for additional date formats when ``dtype='date'``:
-                    - ``'%m/%d/%Y'`` (MM/DD/YYYY)
-                    - ``'%m-%d-%Y'`` (MM-DD-YYYY)
-                    - ``'%m.%d.%Y'`` (MM.DD.YYYY)
-                    - ``'%Y/%m/%d'`` (YYYY/MM/DD)
-                    - ``'%Y-%m-%d'`` (YYYY-MM-DD)
-                    - ``'%Y.%m.%d'`` (YYYY.MM.DD)                
+                - Added support for additional date formats when ``dtype='date'``including: (``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``)
                 - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
 
         Note:
             - This function provides consistent formatting for casting parameters into specific data types for SQLite, changing it will lead to unexpected behaviors.
-            - Used by :meth:`SQLDataModel.__init__()`` with ``as_binding=True`` to allow parameterized inserts to cast to appropriate data type.
+            - Used by :meth:`SQLDataModel.__init__()` with ``as_binding=True`` to allow parameterized inserts to cast to appropriate data type.
         """
         param_alias =  f'''as "{param}"''' if as_alias else ''''''
         if dtype in ('str','None','NoneType'):
