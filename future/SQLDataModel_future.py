@@ -7680,16 +7680,21 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', floor division operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
         if isinstance(value, SQLDataModel):
-            value_shape = value.get_shape()
+            value_shape = value.shape
             if value_shape == (1,1):
                 value = value.data()
             else: 
-                if value_shape != (model_shape := self.get_shape()):
+                if value_shape != (model_shape := self.shape):
                     raise DimensionError(
                         SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
                     )
-                base_data, value_data = self.data(), value.data()
-                new_data = [tuple(base_data[i][j] // value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
+                try:
+                    new_data = [tuple(base_data[i][j] // value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                except Exception as e:
+                    raise type(e)(
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: '{e}' encountered when trying to perform floor division operations")
+                    ).with_traceback(e.__traceback__) from None                
                 return new_data 
         if value == 0:
             raise ZeroDivisionError(
@@ -7698,6 +7703,84 @@ class SQLDataModel:
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x // value)
 
+    def __rfloordiv__(self, value:int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the right side operand ``//`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float | SQLDataModel): The value to divide each element in the SQLDataModel by.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as division) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
+            ``ZeroDivisionError``: If ``value`` is 0.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the floor division operation.
+
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,8], [4,16], [8,32], [32,64], [32,128]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar floor division
+            sdm['128 // y'] = 128 // sdm['y']
+
+            # Perform vector floor division using another column
+            sdm['y // x'] = sdm['y'] // sdm['x']
+
+            # View both results
+            print(sdm)
+        
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬──────────┬────────┐
+            │   x │   y │ 128 // y │ y // x │
+            ├─────┼─────┼──────────┼────────┤
+            │   2 │   8 │       16 │      4 │
+            │   4 │  16 │        8 │      4 │
+            │   8 │  32 │        4 │      4 │
+            │  32 │  64 │        2 │      2 │
+            │  32 │ 128 │        1 │      4 │
+            └─────┴─────┴──────────┴────────┘
+            [5 rows x 4 columns]
+        ```
+
+        Note:
+            - Mixing divisor types such as ``int // float`` will work, however an exception will be raised when attempting to perform division on incompatible types such as ``str // float``.
+            - See :meth:`SQLDataModel.__floordiv__()` for standard left side operand implementation of floor division operations.
+        """        
+        if not isinstance(value, (int,float,SQLDataModel)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', floor division operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
+            )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.shape
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.shape):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
+                try:
+                    new_data = [tuple(value_data[i][j] // base_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                except Exception as e:
+                    raise type(e)(
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: '{e}' encountered when trying to perform floor division operations")
+                    ).with_traceback(e.__traceback__) from None
+                return new_data 
+        if isinstance(value, (int,float)):
+            return self.apply(lambda x: value // x)
+                
     def __pow__(self, value:int|float|SQLDataModel) -> SQLDataModel:
         """
         Implements the ``**`` operator functionality for compatible ``SQLDataModel`` operations.
@@ -7755,19 +7838,101 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
             )
         if isinstance(value, SQLDataModel):
-            value_shape = value.get_shape()
+            value_shape = value.shape
             if value_shape == (1,1):
                 value = value.data()
             else: 
-                if value_shape != (model_shape := self.get_shape()):
+                if value_shape != (model_shape := self.shape):
                     raise DimensionError(
                         SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
                     )
-                base_data, value_data = self.data(), value.data()
-                new_data = [tuple(base_data[i][j] ** value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
+                try:
+                    new_data = [tuple(base_data[i][j] ** value_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                except Exception as e:
+                    raise type(e)(
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: '{e}' encountered when trying to perform exponential operations")
+                    ).with_traceback(e.__traceback__) from None                
                 return new_data        
         if isinstance(value, (int,float)):
             return self.apply(lambda x: x ** value)      
+
+    def __rpow__(self, value:int|float|SQLDataModel) -> SQLDataModel:
+        """
+        Implements the right side operand ``**`` operator functionality for compatible ``SQLDataModel`` operations.
+
+        Parameters:
+            ``value`` (int | float | SQLDataModel): The exponent value to raise each element in the SQLDataModel to.
+
+        Raises:
+            ``TypeError``: If the provided ``value`` is not a valid type (int, float or SQLDataModel).
+            ``DimensionError``: Raised when the dimensions of the provided ``value`` are incompatible with the current model's dimensions. For example, attempting to perform an operation (such as exponentiation) on data of shape ``(4, 1)`` with values of shape ``(3, 2)`` will raise this exception.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel resulting from the exponential operation.
+
+        Example::
+        
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['x', 'y']
+            data = [[2,1], [4,2], [6,3], [8,4], [10,5]]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Perform scalar exponentiation
+            sdm['2 ** y'] = 2 ** sdm['y']
+
+            # Perform vector exponentiation using another column
+            sdm['y ** x'] = sdm['y'] ** sdm['x']
+
+            # View results
+            print(sdm)  
+
+        This will output:
+
+        ```shell
+            ┌─────┬─────┬────────┬─────────┐
+            │   x │   y │ 2 ** y │  y ** x │
+            ├─────┼─────┼────────┼─────────┤
+            │   2 │   1 │      2 │       1 │
+            │   4 │   2 │      4 │      16 │
+            │   6 │   3 │      8 │     729 │
+            │   8 │   4 │     16 │   65536 │
+            │  10 │   5 │     32 │ 9765625 │
+            └─────┴─────┴────────┴─────────┘
+            [5 rows x 4 columns]
+        ```
+
+        Note:
+            - Mixing exponent types such as ``int ** float`` will work, however an exception will be raised when attempting to exponentiate incompatible types such as ``str ** float``.
+            - See :meth:`SQLDataModel.__pow__()` for standard left side operand implementation of exponential operations.
+        """
+        if not isinstance(value, (int,float,SQLDataModel)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: unsupported operand type '{type(value).__name__}', exponential operations can only be performed on types 'int', 'float' or 'SQLDataModel'")
+            )
+        if isinstance(value, SQLDataModel):
+            value_shape = value.shape
+            if value_shape == (1,1):
+                value = value.data()
+            else: 
+                if value_shape != (model_shape := self.shape):
+                    raise DimensionError(
+                        SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{model_shape} != {value_shape}', model dim '{model_shape}' is not compatible with values dim '{value_shape}' for performing vectorized operations")
+                    )
+                base_data, value_data = self.data(strict_2d=True), value.data(strict_2d=True)
+                try:
+                    new_data = [tuple(value_data[i][j] ** base_data[i][j] for j in range(self.column_count)) for i in range(self.row_count)]
+                except Exception as e:
+                    raise type(e)(
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: '{e}' encountered when trying to perform exponential operations")
+                    ).with_traceback(e.__traceback__) from None                  
+                return new_data        
+        if isinstance(value, (int,float)):
+            return self.apply(lambda x: value ** x) 
 
     def __iadd__(self, value:str|int|float|SQLDataModel) -> SQLDataModel:
         """

@@ -392,6 +392,18 @@ def test_floor_division():
     assert model_output == expected_output  
 
 @pytest.mark.core
+def test_right_floor_division():
+    data = [(i, i*1.0) for i in range(1,11)]
+    expected_output = [(100//row[0], 30.0//row[1],  (100//row[0]) // (30.0//row[1])) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] =  100 //  sdm['int'] 
+    sdm['float scalar'] = 30.0 //  sdm['float']
+    sdm['vector'] = sdm['int scalar'] // sdm['float scalar'] 
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output   
+
+@pytest.mark.core
 def test_exponentiation():
     data = [(i, i*1.0) for i in range(1,11)]
     expected_output = [(row[0] **2, row[1]**1.5, (row[0]**row[1])) for row in data]
@@ -400,6 +412,19 @@ def test_exponentiation():
     sdm['int scalar'] = sdm['int'] **2
     sdm['float scalar'] = sdm['float']**1.5
     sdm['vector'] = sdm['int'] ** sdm['float']
+    model_output = sdm[:,[2,3,4]].data()
+    assert model_output == expected_output 
+
+@pytest.mark.core
+def test_right_exponentiation():
+    data = [(i, i*1.0) for i in range(1,11)]
+    # expected_output = [(row[0] **2, row[1]**1.5, (row[0]**row[1])) for row in data]
+    expected_output = [(2** row[0], 1.5**row[1], (row[1]**row[0])) for row in data]
+    headers = ['int', 'float']
+    sdm = SQLDataModel(data, headers, display_index=False)
+    sdm['int scalar'] = 2**sdm['int']
+    sdm['float scalar'] = 1.5**sdm['float']
+    sdm['vector'] = sdm['float'] ** sdm['int']
     model_output = sdm[:,[2,3,4]].data()
     assert model_output == expected_output 
 
