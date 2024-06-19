@@ -1,9 +1,10 @@
-import datetime, os, tempfile, csv, sqlite3, random
+import datetime, os, tempfile, csv, sqlite3, random, string
 import pytest
 import pandas as pd
 import polars as pl
 import numpy as np
 from .random_data_generator import data_generator
+from typing import Iterable
 from src.SQLDataModel.SQLDataModel import SQLDataModel
 
 @pytest.fixture
@@ -1585,6 +1586,141 @@ def test_transpose():
     input_data = [tuple(f"{i},{j}" for j in range(num_cols)) for i in range(num_rows)]
     output_data = SQLDataModel(input_data).transpose(infer_types=True,include_headers=False).transpose(infer_types=True,include_headers=False).data()
     assert output_data == input_data
+
+@pytest.mark.core
+def test_string_contains():
+    random.seed(12_345)
+    n_rows, n_cols, len_str = 120, 3, 5
+
+    def gen_valid_func(test_pat:str|Iterable[str], test_case:bool=True):
+        """Generate the validation function for ``test_pat in x`` to use for the test cases by returning the appropriate lambda function based on the test_pat and test_case provided."""
+        return (lambda x: test_pat in x if test_case else test_pat.lower() in x.lower()) if isinstance(test_pat, str) else (lambda x: any(p in x for p in test_pat) if test_case else any(p.lower() in x.lower() for p in test_pat))
+    
+    def gen_rand_alphanumeric(n_rows:int=120, n_cols:int=3, len_str:int=5) -> list[tuple[str]]:
+        """Generates random 2-dimensional alphanumeric data of the specified shape with cells of the specified length."""
+        return [tuple([''.join(random.choice(''.join((string.ascii_letters,string.digits))) for _ in range(len_str)) for _ in range(n_cols)]) for _ in range(n_rows)]
+    
+    # input_data = r_ascii(num_rows, num_cols)
+    input_data = gen_rand_alphanumeric(n_rows, n_cols, len_str=len_str)
+    sdm = SQLDataModel(input_data)
+
+    # Test single case-sensitive pattern
+    test_pat, test_case = 'a', True
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.contains(test_pat, case=test_case)
+    assert model_output == expected_output
+
+    # Test single case-insensitive pattern
+    test_pat, test_case = 'b', False
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.contains(test_pat, case=test_case)
+    assert model_output == expected_output
+
+    # Test multiple case-sensitive pattern
+    test_pat, test_case = ['c','d'], True
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.contains(test_pat, case=test_case)
+    assert model_output == expected_output    
+
+    # Test multiple case-insensitive pattern
+    test_pat, test_case = ['e','f'], False
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.contains(test_pat, case=test_case)
+    assert model_output == expected_output 
+
+@pytest.mark.core
+def test_string_startswith():
+    random.seed(12_345)
+    n_rows, n_cols, len_str = 120, 3, 5
+
+    def gen_valid_func(test_pat:str|Iterable[str], test_case:bool=True):
+        """Generate the validation function for ``x.startswith(test_pat)`` to use for the test cases by returning the appropriate lambda function based on the test_pat and test_case provided."""
+        return (lambda x: x.startswith(test_pat) if test_case else x.lower().startswith(test_pat.lower())) if isinstance(test_pat, str) else (lambda x: any(x.startswith(p) for p in test_pat) if test_case else any(x.lower().startswith(p.lower()) for p in test_pat))
+    
+    def gen_rand_alphanumeric(n_rows:int=120, n_cols:int=3, len_str:int=5) -> list[tuple[str]]:
+        """Generates random 2-dimensional alphanumeric data of the specified shape with cells of the specified length."""
+        return [tuple([''.join(random.choice(''.join((string.ascii_letters,string.digits))) for _ in range(len_str)) for _ in range(n_cols)]) for _ in range(n_rows)]
+    
+    # input_data = r_ascii(num_rows, num_cols)
+    input_data = gen_rand_alphanumeric(n_rows, n_cols, len_str=len_str)
+    sdm = SQLDataModel(input_data)
+
+    # Test single case-sensitive pattern
+    test_pat, test_case = 'a', True
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.startswith(test_pat, case=test_case)
+    assert model_output == expected_output
+
+    # Test single case-insensitive pattern
+    test_pat, test_case = 'b', False
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.startswith(test_pat, case=test_case)
+    assert model_output == expected_output
+
+    # Test multiple case-sensitive pattern
+    test_pat, test_case = ['c','d'], True
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.startswith(test_pat, case=test_case)
+    assert model_output == expected_output    
+
+    # Test multiple case-insensitive pattern
+    test_pat, test_case = ['e','f'], False
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.startswith(test_pat, case=test_case)
+    assert model_output == expected_output 
+
+@pytest.mark.core
+def test_string_endswith():
+    random.seed(12_345)
+    n_rows, n_cols, len_str = 120, 3, 5
+
+    def gen_valid_func(test_pat:str|Iterable[str], test_case:bool=True):
+        """Generate the validation function for ``x.endswith(test_pat)`` to use for the test cases by returning the appropriate lambda function based on the test_pat and test_case provided."""
+        return (lambda x: x.endswith(test_pat) if test_case else x.lower().endswith(test_pat.lower())) if isinstance(test_pat, str) else (lambda x: any(x.endswith(p) for p in test_pat) if test_case else any(x.lower().endswith(p.lower()) for p in test_pat))
+    
+    def gen_rand_alphanumeric(n_rows:int=120, n_cols:int=3, len_str:int=5) -> list[tuple[str]]:
+        """Generates random 2-dimensional alphanumeric data of the specified shape with cells of the specified length."""
+        return [tuple([''.join(random.choice(''.join((string.ascii_letters,string.digits))) for _ in range(len_str)) for _ in range(n_cols)]) for _ in range(n_rows)]
+    
+    # input_data = r_ascii(num_rows, num_cols)
+    input_data = gen_rand_alphanumeric(n_rows, n_cols, len_str=len_str)
+    sdm = SQLDataModel(input_data)
+
+    # Test single case-sensitive pattern
+    test_pat, test_case = 'a', True
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.endswith(test_pat, case=test_case)
+    assert model_output == expected_output
+
+    # Test single case-insensitive pattern
+    test_pat, test_case = 'b', False
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.endswith(test_pat, case=test_case)
+    assert model_output == expected_output
+
+    # Test multiple case-sensitive pattern
+    test_pat, test_case = ['c','d'], True
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.endswith(test_pat, case=test_case)
+    assert model_output == expected_output    
+
+    # Test multiple case-insensitive pattern
+    test_pat, test_case = ['e','f'], False
+    test_func = gen_valid_func(test_pat, test_case=test_case)
+    expected_output = set(i for i in range(len(input_data)) if any(test_func(input_data[i][j]) for j in range(len(input_data[0]))))
+    model_output = sdm.endswith(test_pat, case=test_case)
+    assert model_output == expected_output
 
 @pytest.mark.core
 def test_is_na():

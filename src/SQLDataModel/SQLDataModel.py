@@ -12674,6 +12674,370 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{dtype}', argument for `dtype` must be a `Callable` type or one of 'bool','bytes','date','datetime','float','int','None' or 'str'")
             )
 
+###############################################################################################################
+##################################### string methods and value comparison #####################################
+###############################################################################################################
+
+    def contains(self, pat:str|Iterable[str], case:bool=True) -> set[int]:
+        """
+        Return the row indices that contain the specified pattern(s) in any column from the model, converting to ``str(value)`` for comparison.
+
+        Parameters:
+            ``pat`` (str | Iterable[str]): The pattern or iterable of patterns to search for within the data.
+            ``case`` (bool, optional): If True (default), the search is case-sensitive. If False, the search is case-insensitive.
+
+        Raises:
+            ``TypeError``: If argument for ``pat`` is not of type 'str' or an iterable of type 'str' representing the substring pattern(s).
+
+        Returns:
+            ``set[int]``: Set of row indices containing values that match the pattern(s).
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['Name', 'Age', 'Sex', 'City']
+            data = [
+                ('Mike', 31, 'M', 'Chicago'),
+                ('John', 25, 'M', 'Dayton'),
+                ('Alice', 27, 'F', 'Boston'),
+                ('Sarah', 35, 'F', 'Houston'),
+                ('Bobby', 42, 'M', 'Chicago'),
+                ('Steve', 28, 'F', 'Austin'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Filter for rows containing the string 'Chicago'
+            matching_indicies = sdm['City'].contains('Chicago')
+
+            # Apply filter to model
+            sdm_chicago = sdm[matching_indicies]
+
+            # View result
+            print(sdm_chicago)
+
+        This will output the result of applying the filter to the model:
+
+        ```shell
+            ┌───┬───────┬─────┬─────┬─────────┐
+            │   │ Name  │ Age │ Sex │ City    │
+            ├───┼───────┼─────┼─────┼─────────┤
+            │ 0 │ Mike  │  31 │ M   │ Chicago │
+            │ 4 │ Bobby │  42 │ M   │ Chicago │
+            └───┴───────┴─────┴─────┴─────────┘
+            [2 rows x 4 columns]
+        ```
+
+        Instead of searching a single column, the entire model can be searched:
+
+        ```python
+            # Method can also search all columns, and be applied directly
+            sdm_with_e = sdm[sdm.contains('E', case=False)]
+            
+            # View result
+            print(sdm_with_e)
+        ```
+
+        This will output the result of a case-insensitive search:
+
+        ```shell
+            ┌───┬───────┬─────┬─────┬─────────┐
+            │   │ Name  │ Age │ Sex │ City    │
+            ├───┼───────┼─────┼─────┼─────────┤
+            │ 0 │ Mike  │  31 │ M   │ Chicago │
+            │ 2 │ Alice │  27 │ F   │ Boston  │
+            │ 5 │ Steve │  28 │ F   │ Austin  │
+            └───┴───────┴─────┴─────┴─────────┘
+            [3 rows x 4 columns]
+        ```
+
+        This can be used in combination with the setitem syntax to selectively update values as well:
+
+        ```python
+            # Create a 'State' column with a default value
+            sdm['State'] = None
+            
+            # Filter and set the values that contain the pattern
+            sdm[sdm.contains('Chicago'), 'State'] = 'Illinois'
+
+            # Multiple conditions can be used
+            tx_1 = sdm.contains('Houston')
+            tx_2 = sdm.contains('Austin')
+
+            # Then chained together using set notation
+            sdm[(tx_1 | tx_2), 'State'] = 'Texas'
+
+            # Alternatively, an iterable of patterns can be provided
+            sdm[sdm.contains(['Houston','Austin']), 'State'] = 'Texas'
+        ```
+
+        Note:
+            - Any non-string values are converted using ``str(value)`` for comparisons only.
+            - See :meth:`SQLDataModel.__eq__()` for strict equality comparison operations.
+            - See :meth:`SQLDataModel.__and__()` for more details on bitwise and set operations.
+            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``sdm[row, column] = value`` and correct usage.
+            - See :meth:`SQLDataModel.startswith()` and :meth:`SQLDataModel.endswith()` for additional string methods.
+        """
+        if isinstance(pat, str):
+            str_func = lambda x: pat in x if case else pat.lower() in x.lower()
+        elif isinstance(pat, Iterable):
+            str_func = lambda x: any(p in x for p in pat) if case else any(p.lower() in x.lower() for p in pat)
+        else:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(pat).__name__}', argument for `pat` must be of type 'str' or an iterable of 'str' representing the substring pattern(s)")
+            )
+        str_data = [tuple([str(x) for x in row]) for row in self.data(strict_2d=True)]
+        return set(i for i in range(len(str_data)) if any(str_func(str_data[i][j]) for j in range(len(str_data[0]))))
+
+    def startswith(self, pat:str|Iterable[str], case:bool=True) -> set[int]:
+        """
+        Return the row indices that start with the specified pattern(s) in any column from the model, converting to ``str(value)`` for comparison.
+
+        Parameters:
+            ``pat`` (str | Iterable[str]): The pattern or iterable of patterns to search for within the data.
+            ``case`` (bool, optional): If True (default), the search is case-sensitive. If False, the search is case-insensitive.
+
+        Raises:
+            ``TypeError``: If argument for ``pat`` is not of type 'str' or an iterable of type 'str' representing the substring pattern(s).
+
+        Returns:
+            ``set[int]``: Set of row indices containing values that match the pattern(s).
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['Name', 'Age', 'Sex', 'City']
+            data = [
+                ('Mike', 31, 'M', 'Chicago'),
+                ('John', 25, 'M', 'Dayton'),
+                ('Alice', 27, 'F', 'Boston'),
+                ('Sarah', 35, 'F', 'Houston'),
+                ('Bobby', 42, 'M', 'Chicago'),
+                ('Steve', 28, 'F', 'Austin'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Filter for rows where any column starts with the string 'Chi'
+            matching_indices = sdm['City'].startswith('Chi')
+
+            # Apply filter to model
+            sdm_city = sdm[matching_indices]
+
+            # View result
+            print(sdm_city)
+
+        This will output the result of applying the filter to the model:
+
+        ```shell
+            ┌───┬───────┬─────┬─────┬─────────┐
+            │   │ Name  │ Age │ Sex │ City    │
+            ├───┼───────┼─────┼─────┼─────────┤
+            │ 0 │ Mike  │  31 │ M   │ Chicago │
+            │ 4 │ Bobby │  42 │ M   │ Chicago │
+            └───┴───────┴─────┴─────┴─────────┘
+            [2 rows x 4 columns]
+        ```
+
+        Instead of searching a single column, the entire model can be searched:
+
+        ```python
+            # Method can also search all columns, and be applied directly
+            sdm_prefix = sdm[sdm.startswith('A', case=False)]
+            
+            # View result
+            print(sdm_prefix)
+        ```
+
+        This will output the result of a case-insensitive search:
+
+        ```shell
+            ┌───┬───────┬─────┬─────┬─────────┐
+            │   │ Name  │ Age │ Sex │ City    │
+            ├───┼───────┼─────┼─────┼─────────┤
+            │ 2 │ Alice │  27 │ F   │ Boston  │
+            │ 5 │ Steve │  28 │ F   │ Austin  │
+            └───┴───────┴─────┴─────┴─────────┘
+            [2 rows x 4 columns]
+        ```
+
+        This can be used in combination with the setitem syntax to selectively update values as well:
+
+        ```python
+            # Create a 'State' column with a default value
+            sdm['State'] = None
+            
+            # Filter and set the values that start with the pattern
+            sdm[sdm.startswith('Chi'), 'State'] = 'Illinois'
+
+            # Multiple conditions can be used
+            tx_1 = sdm.startswith('Hou')
+            tx_2 = sdm.startswith('Aus')
+
+            # Then chained together using set notation
+            sdm[(tx_1 | tx_2), 'State'] = 'Texas'
+
+            # Alternatively, an iterable of patterns can be provided
+            sdm[sdm.startswith(['Hou','Aus']), 'State'] = 'Texas'
+        ```
+
+        Note:
+            - Any non-string values are converted using ``str(value)`` for comparisons only.
+            - See :meth:`SQLDataModel.__eq__()` for strict equality comparison operations.
+            - See :meth:`SQLDataModel.__and__()` for more details on bitwise and set operations.
+            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``sdm[row, column] = value`` and correct usage.
+            - See :meth:`SQLDataModel.contains()` and :meth:`SQLDataModel.endswith()` for additional string methods.
+        """
+        if isinstance(pat, str):
+            str_func = lambda x: x.startswith(pat) if case else x.lower().startswith(pat.lower())
+        elif isinstance(pat, Iterable):
+            str_func = lambda x: any(x.startswith(str(p)) for p in pat) if case else any(x.lower().startswith(str(p).lower()) for p in pat)
+        else:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(pat).__name__}', argument for `pat` must be of type 'str' or an iterable of 'str' representing the substring pattern(s)")
+            )
+        str_data = [tuple([str(x) for x in row]) for row in self.data(strict_2d=True)]
+        return set(i for i in range(len(str_data)) if any(str_func(str_data[i][j]) for j in range(len(str_data[0]))))
+    
+    def endswith(self, pat:str|Iterable[str], case:bool=True) -> set[int]:
+        """
+        Return the row indices that end with the specified pattern(s) in any column from the model, converting to ``str(value)`` for comparison.
+
+        Parameters:
+            ``pat`` (str | Iterable[str]): The pattern or iterable of patterns to search for within the data.
+            ``case`` (bool, optional): If True (default), the search is case-sensitive. If False, the search is case-insensitive.
+
+        Raises:
+            ``TypeError``: If argument for ``pat`` is not of type 'str' or an iterable of type 'str' representing the substring pattern(s).
+
+        Returns:
+            ``set[int]``: Set of row indices containing values that match the pattern(s).
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+            
+            # Sample data
+            headers = ['Name', 'Age', 'Sex', 'City']
+            data = [
+                ('Mike', 31, 'M', 'Chicago'),
+                ('John', 25, 'M', 'Dayton'),
+                ('Alice', 27, 'F', 'Boston'),
+                ('Sarah', 35, 'F', 'Houston'),
+                ('Bobby', 42, 'M', 'Chicago'),
+                ('Steve', 28, 'F', 'Austin'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Filter for rows where any column ends with the string 'ston'
+            matching_indices = sdm['City'].endswith('ston')
+
+            # Apply filter to model
+            sdm_suffix = sdm[matching_indices]
+
+            # View result
+            print(sdm_suffix)  
+
+        This will output the result of applying the filter to the model:
+
+        ```shell
+            ┌───┬───────┬─────┬─────┬─────────┐
+            │   │ Name  │ Age │ Sex │ City    │
+            ├───┼───────┼─────┼─────┼─────────┤
+            │ 2 │ Alice │  27 │ F   │ Boston  │
+            │ 3 │ Sarah │  35 │ F   │ Houston │
+            └───┴───────┴─────┴─────┴─────────┘
+            [2 rows x 4 columns]
+        ```
+
+        Instead of searching a single column, the entire model can be searched:
+
+        ```python
+            # Method can also search all columns, and be applied directly
+            sdm_n = sdm[sdm.endswith('N', case=False)]
+            
+            # View result
+            print(sdm_n)
+        ```
+
+        This will output the result of a case-insensitive search:
+
+        ```shell
+            ┌───┬───────┬─────┬─────┬─────────┐
+            │   │ Name  │ Age │ Sex │ City    │
+            ├───┼───────┼─────┼─────┼─────────┤
+            │ 1 │ John  │  25 │ M   │ Dayton  │
+            │ 2 │ Alice │  27 │ F   │ Boston  │
+            │ 3 │ Sarah │  35 │ F   │ Houston │
+            │ 5 │ Steve │  28 │ F   │ Austin  │
+            └───┴───────┴─────┴─────┴─────────┘
+            [4 rows x 4 columns]
+        ```
+
+        This can be used in combination with the setitem syntax to selectively update values as well:
+
+        ```python
+            # Create a new column 'Parity' with a default value
+            sdm['Parity'] = None
+            
+            # Create patterns for even or odd suffixes
+            even_suffixes = [0,2,4,6,8]
+            odd_suffixes = [1,3,5,7,9]
+
+            # Create the filters for both outcomes
+            even_filter = sdm.endswith(even_suffixes)
+            odd_filter = sdm.endswith(odd_suffixes)
+
+            # Update values based on filters using setitem syntax
+            sdm[even_filter, 'Parity'] = 'Even'
+            sdm[odd_filter, 'Parity'] = 'Odd'
+
+            # View result
+            print(sdm)
+        ```
+
+        This will output the result of selectively applying updates based on our filters:
+
+        ```shell
+            ┌───┬───────┬─────┬─────┬─────────┬────────┐
+            │   │ Name  │ Age │ Sex │ City    │ Parity │
+            ├───┼───────┼─────┼─────┼─────────┼────────┤
+            │ 0 │ Mike  │  31 │ M   │ Chicago │ Odd    │
+            │ 1 │ John  │  25 │ M   │ Dayton  │ Odd    │
+            │ 2 │ Alice │  27 │ F   │ Boston  │ Odd    │
+            │ 3 │ Sarah │  35 │ F   │ Houston │ Odd    │
+            │ 4 │ Bobby │  42 │ M   │ Chicago │ Even   │
+            │ 5 │ Steve │  28 │ F   │ Austin  │ Even   │
+            └───┴───────┴─────┴─────┴─────────┴────────┘
+            [6 rows x 5 columns]
+        ```
+
+        Note:
+            - Any non-string values are converted using ``str(value)`` for comparisons only.
+            - See :meth:`SQLDataModel.__eq__()` for strict equality comparison operations.
+            - See :meth:`SQLDataModel.__and__()` for more details on bitwise and set operations.
+            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``sdm[row, column] = value`` and correct usage.        
+            - See :meth:`SQLDataModel.contains()` and :meth:`SQLDataModel.startswith()` for additional string methods.
+        """
+        if isinstance(pat, str):
+            str_func = lambda x: x.endswith(pat) if case else x.lower().endswith(pat.lower())
+        elif isinstance(pat, Iterable):
+            str_func = lambda x: any(x.endswith(str(p)) for p in pat) if case else any(x.lower().endswith(str(p).lower()) for p in pat)
+        else:
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(pat).__name__}', argument for `pat` must be of type 'str' or an iterable of 'str' representing the substring pattern(s)")
+            )
+        str_data = [tuple([str(x) for x in row]) for row in self.data(strict_2d=True)]
+        return set(i for i in range(len(str_data)) if any(str_func(str_data[i][j]) for j in range(len(str_data[0]))))
+
     def isna(self) -> set[int]:
         """
         Return the row indicies containing null values from the current model.
