@@ -78,6 +78,42 @@ def test_getitem():
     assert sdm[rand_row,rand_col_slice].data() == tuple([input_data[rand_row][i] for i in range(rand_col_slice.start,rand_col_slice.stop)]) # single row, column slice
 
 @pytest.mark.core
+def test_getitem_randomized():
+    """Randomized version to perform more thorough testing of getitem & setitem indexing ``sdm[row, column]`` which is so crucial to package functionality."""
+    test_pairs = 275 # number of randomized pairs to test
+    test_shape = (100, 18) # (rows, cols)
+    def generate_random_indexes(index_pairs:int, shape:tuple[int, int]) -> list[tuple]:
+        """Generate and return a randomly generated pair of indicies for testing."""
+        row_count, column_count = shape
+        row_upper_bound = int(row_count*.75)
+        def rand_row_index():
+            """Return a randomly selected row index from available options."""
+            row_single_int = lambda: random.randint(0, row_count-1)
+            row_tuple_int = lambda: tuple(random.sample(list(range(row_count)), random.randint(row_count//4, row_upper_bound)))
+            row_slice_int = lambda: slice(random.randint(0,row_count//4), random.randint((row_count//4)+1, row_upper_bound))
+            return random.choice((row_single_int, row_tuple_int, row_slice_int))() 
+        def rand_column_index():
+            """Return a randomly selected column index from available options."""
+            column_single_int = lambda: random.randint(0, column_count-1)
+            column_list_int = lambda: random.sample(list(range(column_count)), random.randint(column_count//2, column_count-1))
+            column_names_list = lambda: random.sample([f'{j}' for j in range(column_count)], random.randint(column_count//2, column_count-1))
+            column_slice_int = lambda: slice(random.randint(0,column_count//2), random.randint((column_count//2)+1,column_count-1))
+            column_indexing_options = (column_single_int, column_list_int, column_names_list, column_slice_int)
+            return random.choice(column_indexing_options)() 
+        return [(rand_row_index(), rand_column_index()) for _ in range(index_pairs)]
+    
+    sdm = SQLDataModel([tuple([f"{i},{j}" for j in range(test_shape[1])]) for i in range(test_shape[0])])
+    rand_indicies = generate_random_indexes(test_pairs, test_shape)
+    for rid, rand_idx in enumerate(rand_indicies):
+        print(f"{rid}: {rand_idx = }")
+        row_idx, col_idx = rand_idx
+        row_idx = (row_idx,) if isinstance(row_idx, int) else tuple(range(row_idx.start, row_idx.stop)) if isinstance(row_idx, slice) else tuple(sorted(row_idx)) 
+        col_idx = (col_idx,) if isinstance(col_idx, int) else tuple(range(col_idx.start, col_idx.stop)) if isinstance(col_idx, slice) else tuple([int(j) for j in col_idx]) if isinstance(col_idx, list) else col_idx
+        expected_data = [tuple([f"{i},{j}" for j in col_idx]) for i in row_idx]        
+        output_data = sdm[rand_idx].data(strict_2d=True)
+        assert output_data == expected_data    
+
+@pytest.mark.core
 def test_setitem():
     """Tests the `__setitem__()` method by using all possible type combinations `row, column` indexing and confirms the expected output."""
     grid_size = 10 # creates grid as (grid_size x grid_size)
