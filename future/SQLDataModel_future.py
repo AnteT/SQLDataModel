@@ -11243,45 +11243,48 @@ class SQLDataModel:
                 )
         return {col:self.header_master[col][dtypes] for col in columns}
 
-    def set_column_dtypes(self, column:str|int, dtype:Literal['bool','bytes','date','datetime','float','int','None','str']) -> None:
+    def set_column_dtypes(self, column:str|int|dict, dtype:Literal['bool','bytes','date','datetime','float','int','None','str']=None) -> None:
         """
-        Casts the specified ``column`` into the provided python ``dtype``. The datatype must be a valid convertable python datatype to map to an equivalent SQL datatype.
+        Casts the specified ``column`` into the provided python ``dtype`` using the equivalent SQL data type.
 
         Parameters:
-            ``column`` (str or int): The name or index of the column to be cast, must be current header or within range of current ``column_count``
-            ``dtype`` (Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type for the specified column.
+            ``column`` (str or int or dict): The name or index of the column to be cast, or a dictionary mapping column names to dtypes. 
+                    If a dictionary, keys are column names or indices and values are the dtypes.
+            ``dtype`` (Literal['bool', 'bytes', 'date', 'datetime', 'float', 'int', 'None', 'str']): The target Python data type for the specified column. 
+                    Ignored if ``column`` is a dictionary.
 
         Raises:
-            ``TypeError``: If ``column`` is not of type 'str' or 'int'.
+            ``TypeError``: If ``column`` is not of type 'str', 'int', or 'dict', or if any dtype is invalid.
             ``IndexError``: If ``column`` is an integer and the index is outside of the current model range.
             ``ValueError``: If ``column`` is a string and the column is not found in the current model.
 
         Returns:
-            ``None``
+            ``None``: The model's data types are successfully casted to the new type and nothing is returned.
 
         Example::
 
             from SQLDataModel import SQLDataModel
 
-            headers = ['idx', 'first', 'last', 'age']
+            # Sample data
+            headers = ['idx', 'First', 'Last', 'Age']
             data = [
-            (0, 'john', 'smith', 27)
-            ,(1, 'sarah', 'west', 29)
-            ,(2, 'mike', 'harlin', 36)
-            ,(3, 'pat', 'douglas', 42)
+                (0, 'John', 'Smith', 27)
+                (1, 'Sarah', 'West', 29),
+                (2, 'Mike', 'Harlin', 36),
+                (3, 'Pat', 'Douglas', 42),
             ]
             
-            # Create the SQLDataModel object
+            # Create the model
             sdm = SQLDataModel(data, headers)        
 
             # Original dtype for comparison
-            old_dtype = sdm.get_column_dtypes('age')
+            old_dtype = sdm.get_column_dtypes('Age')
 
-            # Set the data type of the 'age' column to 'float'
-            sdm.set_column_dtypes('age', 'float')
+            # Set the data type of the 'Age' column to 'float'
+            sdm.set_column_dtypes('Age', 'float')
 
             # Confirm column dtype
-            new_dtype = sdm.get_column_dtypes('age')
+            new_dtype = sdm.get_column_dtypes('Age')
 
             # View result
             print(f"Age dtype: {old_dtype} -> {new_dtype}")
@@ -11291,33 +11294,43 @@ class SQLDataModel:
         ```shell
             Age dtype: int -> float
         ```
+
+        Change Log:
+            - Version 0.7.9 (2024-06-20):
+                - Modified to allow ``column`` argument to be provided as a dictionary mapping column names to dtypes to reflect current structure at :py:attr:`SQLDataModel.dtypes`.
+
         Warning:
             - Type casting will coerce any nonconforming values to the ``dtype`` being set, this means data will be lost if casted incorrectly.
+
+        Note:
+            - Column data types are mapped to SQL types and not Python class types, see ``sqlite3`` docs for additional information.
+            - See :meth:`SQLDataModel.infer_dtypes()` to automatically infer the correct column data types using random sampling.
         """
-        if not isinstance(column, (str,int)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', `column` must be one of 'str' or 'int', use `get_headers()` to view current valid arguments")
-            )
-        if dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(column).__name__}', `dtype` must be one of 'bool','bytes','date','datetime','float','int','None','str' use `get_column_dtypes()` to view current column datatypes")
-            )        
-        if isinstance(column, int):
-            try:
-                column = self.headers[column]
-            except IndexError:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
-                ) from None
-        if isinstance(column, str):
-            if column not in self.headers:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
-                )
-        col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-        dyn_dtype_cast = SQLDataModel.sqlite_cast_type_format(param=column, dtype=dtype, as_binding=False, as_alias=False)
-        update_col_sql = f"""alter table "{self.sql_model}" add column "{column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{column}"; alter table "{self.sql_model}" rename column "{column}_x" to "{column}";"""
-        self.execute_transaction(update_col_sql)
+        if isinstance(column, dict):
+            validated_args = {self._validate_column(k, unmodified=False)[0]:v for k,v in column.items()}
+            for col_dtype in validated_args.values():
+                if col_dtype not in ('bool','bytes','date','datetime','float','int','None','str'):
+                    raise TypeError(
+                        SQLDataModel.ErrorFormat(f"TypeError: invalid argument '{col_dtype}', `column` dictionary values must be one of 'bool','bytes','date','datetime','float','int','None','str' use `get_column_dtypes()` to view current column datatypes")
+                    ) 
+            update_col_sql = """"""
+            for val_column, val_dtype in validated_args.items():
+                col_sql_dtype = self.static_py_to_sql_map_dict[val_dtype]
+                dyn_dtype_cast = SQLDataModel.sqlite_cast_type_format(param=val_column, dtype=val_dtype, as_binding=False, as_alias=False)
+                update_col_sql = """;""".join((update_col_sql,f"""alter table "{self.sql_model}" add column "{val_column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{val_column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{val_column}"; alter table "{self.sql_model}" rename column "{val_column}_x" to "{val_column}";"""))
+            self.execute_transaction(update_col_sql)
+        else:
+            if dtype not in ('bool','bytes','date','datetime','float','int','None','str') or dtype is None:
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument '{dtype}', `dtype` must be one of 'bool','bytes','date','datetime','float','int','None','str' use `get_column_dtypes()` to view current dtypes")
+                )        
+            column = self._validate_column(column, unmodified=False)
+            update_col_sql = """"""
+            for val_column in column:
+                col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
+                dyn_dtype_cast = SQLDataModel.sqlite_cast_type_format(param=val_column, dtype=dtype, as_binding=False, as_alias=False)
+                update_col_sql = """;""".join((update_col_sql,f"""alter table "{self.sql_model}" add column "{val_column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{val_column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{val_column}"; alter table "{self.sql_model}" rename column "{val_column}_x" to "{val_column}";"""))
+            self.execute_transaction(update_col_sql)
         
     def get_model_name(self) -> str:
         """
@@ -13156,13 +13169,14 @@ class SQLDataModel:
         self_data = self.data(strict_2d=True)
         return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0])))) 
     
-    def _validate_row(self, row:int|slice|Iterable[int]) -> tuple[int]:
+    def _validate_row(self, row:int|slice|Iterable[int], unmodified:bool=False) -> tuple[int]:
         """
         Utility function used to validate row selection and return parsed values.
 
         Parameters:
             ``row`` (int|slice|Iterable[int]): The row selection to validate, argument should reflect the integer indexes of the rows to select.
-        
+            ``unmodified`` (bool, optional): Whether ``row`` should be returned as originally indexed. Default is False, returning as tuple.
+
         Raises:
             ``TypeError``: If ``row`` is not one of type 'int', 'slice' or 'Iterable' representing the integer index of row(s) to select.
             ``IndexError``: If ``row`` is outside of current model range bounded by :py:attr:`SQLDataModel.row_count` whether positively or negatively indexed.
@@ -13220,14 +13234,14 @@ class SQLDataModel:
                     raise IndexError(
                         SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{validated_row}', index must be within current model row range of '0:{self.row_count}' ")
                     ) from None
-            return (validated_row,)
+            return (validated_row,) if not unmodified else row
         elif isinstance(row, slice):
             validated_row = self.indicies[row]
             if (num_rows_in_scope := len(validated_row)) < 1:
                 raise IndexError(
                     SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                 )
-            return validated_row
+            return validated_row if not unmodified else row
         else: # Iterable[int]
             try:
                 validated_row = tuple([self.indicies[rid] for rid in row])
@@ -13235,14 +13249,15 @@ class SQLDataModel:
                 raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e}, rows must be referenced by their integer index within current model row range of '0:{self.row_count}'")
                 ).with_traceback(e.__traceback__) from None                
-            return validated_row
+            return validated_row if not unmodified else row
         
-    def _validate_column(self, column:str|int|slice|Iterable) -> list[str]:
+    def _validate_column(self, column:str|int|slice|Iterable, unmodified:bool=False) -> list[str]:
         """
         Utility function used to validate column selection and return parsed values.
 
         Parameters:
             ``column`` (str|int|slice|Iterable): The column selection to validate, argument should reflect the integer indexes or column names.
+            ``unmodified`` (bool, optional): Whether ``column`` should be returned as originally indexed. Default is False, returning as list.
         
         Raises:
             ``TypeError``: If ``column`` is not one of type 'str', 'int', 'slice' or 'Iterable' representing the integer index or values of column(s) to select.
@@ -13298,30 +13313,30 @@ class SQLDataModel:
         if isinstance(column, (str,int,slice)):
             if isinstance(column, int):
                 try:
-                    column = self.headers[column]
+                    validated_column = self.headers[column]
                 except IndexError:
                     raise IndexError(
                         SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
                     ) from None
-                return [column]
+                return [validated_column] if not unmodified else column
             elif isinstance(column, str):
                 if column not in self.headers:
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
                     )
-                return [column]
+                return [column] if not unmodified else column
             else: # Slice
-                column = self.headers[column]
-                if len(column) < 1:
+                validated_column = self.headers[column]
+                if len(validated_column) < 1:
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: no columns selected, at least 1 valid column selection is required when specifying column indicies")
                     )
-                return column
-        validated_columns = []
+                return validated_column if not unmodified else column
+        validated_column = []
         for col in column: # Iterable[str|int]
             if isinstance(col, int):
                 try:
-                    validated_columns.append(self.headers[col])
+                    validated_column.append(self.headers[col])
                 except IndexError:
                     raise IndexError(
                         SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{col}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
@@ -13331,9 +13346,9 @@ class SQLDataModel:
                     raise ValueError(
                         SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', column must be in current model, use `get_headers()` to view valid arguments")
                     )
-                validated_columns.append(col)
+                validated_column.append(col)
             else:
                 raise TypeError(
                     SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(col).__name__}', columns must be referenced by name as type 'str' or by their index as type 'int'")
                 )
-        return validated_columns
+        return validated_column if not unmodified else column
