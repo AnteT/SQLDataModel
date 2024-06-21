@@ -75,6 +75,7 @@ class SQLDataModel:
         # Lets see what we found
         print(sdm)
     ```
+
     This will output:
 
     ```shell
@@ -93,6 +94,7 @@ class SQLDataModel:
         └───────────────┴──────┴──────┴──────────┴──────────┴──────┴──────┴───────┘
         [9 rows x 8 columns]
     ```
+    
     Example::
 
         from SQLDataModel import SQLDataModel
@@ -1108,25 +1110,7 @@ class SQLDataModel:
             - Arguments for ``column`` can be a single ``str`` or ``int`` or ``list[str]`` containing ``str`` or ``list[int]`` containing ``int`` representing column names or column indicies, respectively, but they cannot be combined and provided together. For example, passing ``columns = ['First Name', 3]`` will raise a ``TypeError`` exception.
             - The equivalent of this method can also be achieved by simply indexing the required rows and columns using ``sdm[rows, column]`` notation, see :meth:`SQLDataModel.__getitem__()` for additional details.
         """
-        if not isinstance(column, list):
-            column = [column]
-        if not all(isinstance(col, int) for col in column) and not all(isinstance(col, str) for col in column):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column type '{type(column).__name__}', argument for `column` must be of type 'int' or 'str' or a list containing the equivalent types")
-            )
-        if isinstance(column[0],int):
-            try:
-                column = [self.headers[idx] for idx in column]
-            except IndexError:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid column indicies '{column}', provided index outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
-                ) from None
-        else:
-            for col in column:
-                if col not in self.headers:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', use `.get_headers()` to view current valid column arguments")
-                    )
+        column = self._validate_column(column, unmodified=False) # +VALCOL
         if inplace:
             drop_cols = ";".join([f'''alter table "{self.sql_model}" drop column "{col}"''' for col in column])
             sql_stmt = f"""begin transaction;{drop_cols}; end transaction;"""
@@ -1242,21 +1226,8 @@ class SQLDataModel:
             - Row indicies are retained after being deleted by default, provide ``ignore_index=True`` to reset row indicies if required.
             - The equivalent of this method can also be achieved by simply indexing the required rows and columns using ``sdm[rows, column]`` notation, see :meth:`SQLDataModel.__getitem__()` for additional details.
         """
-        if isinstance(row, int):
-            row = [row]
-        if not isinstance(row, Iterable) or not all(isinstance(rid, int) for rid in row):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(row).__name__}', argument for `row` must be of type 'int' or an iterable collection of type 'int' representing row indicies to drop")
-            )
-        row = tuple(row) if len(row) != 1 else tuple((row[0], row[0]))
-        for rid in row:
-            try:
-                _ = self.indicies[rid]
-            except IndexError:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{rid}', provided row index is outisde of current model range '0:{self.row_count}'")
-                ) from None
-        row = tuple([self.indicies[rid] for rid in row])
+        row = self._validate_row(row, unmodified=False) # +VALROW
+        row = row if len(row) != 1 else (row[0], row[0])
         if inplace:
             sql_stmt = f"""DELETE FROM "{self.sql_model}" WHERE "{self.sql_idx}" IN {row}"""
             self.execute_statement(sql_stmt)
@@ -1311,23 +1282,7 @@ class SQLDataModel:
             - Handles negative indices by adjusting them relative to the end of the column range.
             - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
         """
-        if not isinstance(column, (int,str)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column type '{type(column).__name__}', `column` parameter must be of type 'int' or 'str'")
-            )
-        if isinstance(column,int):
-            if column < 0:
-                column = self.column_count + (column)
-            if (column < 0 or column >= self.column_count):
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', provided index is outside of current column range '0:{self.column_count}', use `.get_headers()` to view current valid columns")
-                )
-            column = self.headers[column]
-        else:
-            if column not in self.headers:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', use `.get_headers()` to view current valid column arguments")
-                )
+        column = self._validate_column(column, unmodified=False)[0] # +VALCOL
         rename_stmts = f"""alter table "{self.sql_model}" rename column "{column}" to "{new_column_name}" """
         full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
         try:
@@ -1459,30 +1414,16 @@ class SQLDataModel:
             sdm.set_headers(['First_Name', 'Last_Name', 'Payment'])
         
         """
-        if not isinstance(new_headers, (list,tuple)):
+        if not isinstance(new_headers, Iterable) or isinstance(new_headers, str):
             raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid header types, type '{type(new_headers).__name__}' is not a valid type for headers, please provide a tuple or list type")
-                )
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(new_headers).__name__}', `new_headers` must be a collection or sequence of type 'str' representing the new header names")
+            )
         if len(new_headers) != self.column_count:
             raise DimensionError(
                 SQLDataModel.ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length '{len(new_headers)} != {self.column_count}' column count, please provide correct dimensions")
                 )
-        if not isinstance(new_headers[0], (str,int,float)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid header values, type '{type(new_headers[0]).__name__}' is not a valid type for header values, please provide a string type")
-                )
-        rename_stmts = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
-        full_stmt = f"""begin transaction; {rename_stmts}; end transaction;"""
-        try:
-            self.sql_db_conn.executescript(full_stmt)
-            self.sql_db_conn.commit()
-        except Exception as e:
-            self.sql_db_conn.rollback()
-            raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f"SQLProgrammingError: unable to rename columns, SQL execution failed with: '{e}'")
-            ) from None
-        self.headers = new_headers
-        self._update_model_metadata()
+        sql_stmt = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
+        self.execute_transaction(sql_stmt)
 
     def normalize_headers(self, apply_function:Callable=None) -> None:
         """
@@ -1520,7 +1461,6 @@ class SQLDataModel:
             apply_function = lambda x: "_".join(x.strip() for x in re.sub('[^0-9a-z_]+', '', x.lower().replace(" ","_")).split('_') if x !='')
         new_headers = [apply_function(x) for x in self.get_headers()]
         self.set_headers(new_headers)
-        return
 
     def get_display_max_rows(self) -> int|None:
         """
@@ -6647,7 +6587,7 @@ class SQLDataModel:
         """
         return self.row_count != 0
 
-    def __lt__(self, other) -> SQLDataModel:
+    def __lt__(self, other) -> set[int]:
         """
         Implements the less than operator ``<`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
@@ -6655,7 +6595,7 @@ class SQLDataModel:
             ``other``: The ``SQLDataModel`` or scalar (``int``, ``str``, ``float``) to compare with.
 
         Returns:
-            ``SQLDataModel``: A new SQLDataModel containing the result rows of the operation.
+            ``set[int]``: The set of row indicies resulting from the operation that satisfy the condition.
 
         Example::
             
@@ -6709,7 +6649,7 @@ class SQLDataModel:
         else:
             return set()
     
-    def __le__(self, other) -> SQLDataModel:
+    def __le__(self, other) -> set[int]:
         """
         Implements the less than or equal to operator ``<=`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
@@ -6717,7 +6657,7 @@ class SQLDataModel:
             ``other``: The ``SQLDataModel`` or scalar (``int``, ``str``, ``float``) to compare with.
 
         Returns:
-            ``SQLDataModel``: A new SQLDataModel containing the result rows of the operation.
+            ``set[int]``: The set of row indicies resulting from the operation that satisfy the condition.
 
         Example::
         
@@ -6771,7 +6711,7 @@ class SQLDataModel:
         else:
             return set()
     
-    def __eq__(self, other) -> SQLDataModel:
+    def __eq__(self, other) -> set[int]:
         """
         Implements the is equal to operator ``==`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
@@ -6779,7 +6719,7 @@ class SQLDataModel:
             ``other``: The ``SQLDataModel`` or scalar (``int``, ``str``, ``float``) to compare with.
 
         Returns:
-            ``SQLDataModel``: A new SQLDataModel containing the result rows of the operation.
+            ``set[int]``: The set of row indicies resulting from the operation that satisfy the condition.
 
         Example::
 
@@ -6832,7 +6772,7 @@ class SQLDataModel:
         else:
             return set()
 
-    def __ne__(self, other) -> SQLDataModel:
+    def __ne__(self, other) -> set[int]:
         """
         Implements the not equal to operator ``!=`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
@@ -6840,7 +6780,7 @@ class SQLDataModel:
             ``other``: The ``SQLDataModel`` or scalar (``int``, ``str``, ``float``) to compare with.
 
         Returns:
-            ``SQLDataModel``: A new SQLDataModel containing the result rows of the operation.
+            ``set[int]``: The set of row indicies resulting from the operation that satisfy the condition.
 
         Example::
         
@@ -6895,7 +6835,7 @@ class SQLDataModel:
         else:
             return set()
 
-    def __gt__(self, other) -> SQLDataModel:
+    def __gt__(self, other) -> set[int]:
         """
         Implements the greater than operator ``>`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
@@ -6903,7 +6843,7 @@ class SQLDataModel:
             ``other``: The ``SQLDataModel`` or scalar (`int`, ``str``, ``float``) to compare with.
 
         Returns:
-            ``SQLDataModel``: A new SQLDataModel containing the result rows of the operation.
+            ``set[int]``: The set of row indicies resulting from the operation that satisfy the condition.
 
         Example::
         
@@ -6956,7 +6896,7 @@ class SQLDataModel:
         else:
             return set()
 
-    def __ge__(self, other) -> SQLDataModel:
+    def __ge__(self, other) -> set[int]:
         """
         Implements the greater than or equal to operator ``>=`` for comparing ``SQLDataModel`` against ``other`` and performing the equivalent set operation against the model's current indicies.
 
@@ -6964,7 +6904,7 @@ class SQLDataModel:
             ``other``: The ``SQLDataModel`` or scalar (`int`, ``str``, ``float``) to compare with.
 
         Returns:
-            ``SQLDataModel``: A new SQLDataModel containing the result rows of the operation.
+            ``set[int]``: The set of row indicies resulting from the operation that satisfy the condition.
 
         Example::
         
@@ -9600,21 +9540,14 @@ class SQLDataModel:
             sdm.group_by(["country", "state", "city"])
         ```
 
+        Change Log:
+            - Version 0.8.0 (2024-06-21):
+                - Modified to allow ``columns`` to be referenced by their integer index as well as directly to allow broader inputs and reflect similar access patterns across package.
+
         Note:
             - Use ``order_by_count=False`` to change ordering from count to column arguments provided.
-
         """
-        if not isinstance(columns, (str,list,tuple)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(columns).__name__}', arguments for `columns` must be one of 'str', 'list' or 'tuple'")
-                )
-        if isinstance(columns,str):
-            columns = [columns]
-        for col in columns:
-            if col not in self.headers:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns are required for grouping, use `get_headers()` to view current valid arguments")
-                    )
+        columns = self._validate_column(columns, unmodified=False) # +VALCOL
         columns_group_by = ",".join(f'"{col}"' for col in columns)
         order_by = "count(*)" if order_by_count else columns_group_by
         group_by_stmt = f"""select {columns_group_by}, count(*) as count from "{self.sql_model}" group by {columns_group_by} order by {order_by} desc"""
@@ -10499,12 +10432,12 @@ class SQLDataModel:
         """
         self.display_color = ANSIColor(color)
 
-    def sort(self, by:str|int|list=None, asc:bool=True) -> SQLDataModel:
+    def sort(self, by:str|int|Iterable[str|int]=None, asc:bool=True) -> SQLDataModel:
         """
         Sort columns in the dataset by the specified ordering. If no value is specified, the current :py:attr:`SQLDataModel.sql_idx` column is used with the default ordering ``asc = True``.
 
         Parameters:
-            ``by`` (str | int | list, optional): The column or list of columns by which to sort the dataset. Defaults to sorting by the dataset's index.
+            ``by`` (str | int | Iterable[str | int], optional): The column or list of columns by which to sort the dataset. Defaults to sorting by the dataset's index.
             ``asc`` (bool, optional): If True, sort in ascending order; if False, sort in descending order. Defaults to ascending order.
 
         Raises:
@@ -10578,6 +10511,9 @@ class SQLDataModel:
         ```
 
         Change Log:
+            - Version 0.8.0 (2024-06-21):
+                - Modified to allow mixed integer and value indexing for columns sort order in ``by`` argument to reflect similar flexibility for column input across package.
+
             - Version 0.5.1 (2024-05-10):
                 - Modified to allow integer indexing for column sort order in ``by`` argument.
 
@@ -10586,29 +10522,7 @@ class SQLDataModel:
             - Ascending and descending ordering follows this order of operations for multiple columns as well.
         """
         if by is not None:
-            if not isinstance(by, (str,int,list)):
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid argument type '{type(by).__name__}', `by` argument for `sort()` must be one of 'str', 'int' or 'list'")
-                )
-            if isinstance(by, (int,str)):
-                by = [by]
-            for cid,col in enumerate(by):
-                if isinstance(col, int):
-                    try:
-                        by[cid] = self.headers[col]
-                    except IndexError:
-                        raise IndexError(
-                            SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{col}', integer indexing for `by` argument outside of current model range '0:{self.column_count}'")
-                        ) from None
-                elif isinstance(col, str):
-                    if col not in self.headers:
-                        raise ValueError(
-                            SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns required for `sort()`, use `get_headers()` to view current valid headers")
-                        )
-                else:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', argument for `by` must be a valid column name or integer index")
-                    )
+            by = self._validate_column(by, unmodified=False) # +REVCOL
         else:
             by = [self.sql_idx]
         sort_ord = "asc" if asc else "desc"
@@ -11035,7 +10949,8 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid predicate type '{type(predicate).__name__}' received, argument must be of type 'str'")
             )
-        fetch_stmt = f""" select * from "{self.sql_model}" where {predicate} """
+        cols_str = ",".join((f'"{col}" as "{col}"' for col in [self.sql_idx, *self.headers]))
+        fetch_stmt = f""" select {cols_str} from "{self.sql_model}" where {predicate} """
         return self.execute_fetch(fetch_stmt)
 
 ##############################################################################################################
@@ -11145,7 +11060,7 @@ class SQLDataModel:
         derived_query = f"""select {func_name}({input_columns}) as "{func_name}" from "{self.sql_model}" """
         return self.execute_fetch(derived_query)
 
-    def get_column_dtypes(self,columns:str|int|list=None, dtypes:Literal["python","sql"]="python") -> dict:
+    def get_column_dtypes(self, columns:str|int|list=None, dtypes:Literal["python","sql"]="python") -> dict:
         """
         Get the data types of specified columns as either Python or SQL datatypes as a ``dict`` in the format of ``{'column': 'dtype'}``.
 
@@ -11214,33 +11129,20 @@ class SQLDataModel:
             service: REAL
         ```
 
+        Change Log:
+            - Version 0.8.0 (2024-06-21):
+                - Modified to allow ``columns`` argument to be provided as an any valid reference including integer indexes or an iterable sequence of indexes to reflect similar flexibility surrounding column referencing across package.
+
         Note:
             - SQLDataModel index column is not included, only columns specified in the :py:attr:`SQLDataModel.headers` attribute are in scope.
             - Only the dtypes are returned, any primary key references are removed to ensure compatability with external calls.
             - Python datatypes are returned in lower case, while SQL dtypes are returned in upper case to reflect convention.
-            - See :py:attr:`SQLDataModel.dtypes` for direct mapping from column to data type returned as ``{'col': 'dtype'}``.
+            - See :py:attr:`SQLDataModel.dtypes` for direct mapping from column to Python data type returned as ``{'col': 'dtype'}``.
         """        
         dtypes = 1 if dtypes == "python" else 0
         if columns is None:
             return {col:self.header_master[col][dtypes] for col in self.headers}
-        if not isinstance(columns, (str,int,list)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(columns).__name__}', `columns` must be one of 'str', 'int' or 'list', use `get_headers()` to view current valid arguments")
-            )
-        if isinstance(columns, int):
-            try:
-                columns = self.headers[columns]
-            except IndexError:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{columns}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
-                ) from None
-        if isinstance(columns, str):
-            columns = [columns]
-        for col in columns:
-            if col not in self.headers:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', column must be in current model, use `get_headers()` to view current valid arguments")
-                )
+        columns = self._validate_column(columns, unmodified=False) # +VALCOL
         return {col:self.header_master[col][dtypes] for col in columns}
 
     def set_column_dtypes(self, column:str|int|dict, dtype:Literal['bool','bytes','date','datetime','float','int','None','str']=None) -> None:
@@ -11352,6 +11254,8 @@ class SQLDataModel:
             # View it
             print(f'The model is currently using the table name: {model_name}')
         
+        Note:
+            - Use :meth:`SQLDataModel.set_model_name()` to modify the table name used internally to represent the ``SQLDataModel`` instance.
         """
         return self.sql_model
     
@@ -11460,14 +11364,15 @@ class SQLDataModel:
             sdm_args.update({k:v for k,v in kwargs.items()})
         return type(self)(fetch_result, headers=fetch_headers, **sdm_args)
 
-    def execute_statement(self, sql_stmt:str, sql_params:tuple=None) -> None:
+    def execute_statement(self, sql_stmt:str, sql_params:tuple=None, update_row_meta:bool=True) -> None:
         """
         Executes an arbitrary SQL query against the current model without the expectation of selection or returned rows.
 
         Parameters:
             ``sql_stmt`` (str): The SQL query to execute.
             ``sql_params`` (tuple, optional): The SQL parameters to provide for parameterized queries.
-            
+            ``update_row_meta`` (bool, optional): Whether the row count metadata should be updated after executing the statement. Default is True, using :meth:`SQLDataModel._update_model_metadata()` to ensure any schema modifications remain in sync.
+
         Raises:
             ``SQLProgrammingError``: If the SQL execution fails.
         
@@ -11488,6 +11393,10 @@ class SQLDataModel:
             sdm.execute_statement('DELETE FROM table WHERE idx = ? or name = ?', (7,'Bob'))
 
         Change Log:
+            - Version 0.8.0 (2024-06-21):
+                - Added ``update_row_meta`` parameter to speed up transactions that are guaranteed to have no effect on the current model :py:attr:`SQLDataModel.indicies` metadata. 
+                  A shallower and computationally cheaper check will still occur to ensure :py:attr:`SQLDataModel.header_master` remains in sync.
+
             - Version 0.7.4 (2024-06-13):
                 - Added ``sql_params`` parameter to allow parameterized statements similar to other SQL execution methods.
 
@@ -11503,17 +11412,18 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: invalid or malformed SQL, unable to execute provided SQL query with error "{e}"...')
             ) from None
-        self._update_model_metadata(update_row_meta=True)
+        self._update_model_metadata(update_row_meta=update_row_meta)
     
-    def execute_transaction(self, sql_script:str) -> None:
+    def execute_transaction(self, sql_script:str, update_row_meta:bool=True) -> None:
         """
         Executes a prepared SQL script wrapped in a transaction against the current model without the expectation of selection or returned rows.
 
         Parameters:
             ``sql_script`` (str): The SQL script to execute within a transaction.
+            ``update_row_meta`` (bool, optional): Whether the row count metadata should be updated after executing the transaction. Default is True, using :meth:`SQLDataModel._update_model_metadata()` to ensure any schema modifications remain in sync.
 
         Raises:
-            ``SQLProgrammingError``: If the SQL execution fails.
+            ``SQLProgrammingError``: If the provided ``sql_script`` cannot be executed or the SQL execution fails.
 
         Returns:
             ``None``
@@ -11534,11 +11444,15 @@ class SQLDataModel:
             # Execute the script
             sdm.execute_transaction(transaction_script)
 
-        Note:
-            - If no errors were raised, the transaction was successfully executed as provided.
-            - Parameters cannot be passed to as a transaction script in ``sqlite3``, use :meth:`SQLDataModel.execute_fetch()` method if parameter bindings are required.
-            - Many other methods heavily rely on the :meth:`SQLDataModel.execute_transaction` method, therefore modifying it may adversly affect many other methods.
+        Change Log:
+            - Version 0.8.0 (2024-06-21):
+                - Added ``update_row_meta`` parameter to speed up transactions that are guaranteed to have no effect on the current model :py:attr:`SQLDataModel.indicies` metadata. 
+                  A shallower and computationally cheaper check will still occur to ensure :py:attr:`SQLDataModel.header_master` remains in sync.
 
+        Note:
+            - Use :meth:`SQLDataModel.execute_fetch()` method if the SQL script is expected to return a selection or result set upon execution.
+            - Use :meth:`SQLDataModel.execute_statement()` method if the SQL script is not expected to return a selection, but parameter bindings and values are needed.
+            - Many other methods heavily rely on the :meth:`SQLDataModel.execute_transaction` method, therefore modifying it may adversly affect many other methods.
         """
         full_stmt = f"""begin transaction; {sql_script}; end transaction;"""
         try:
@@ -11549,7 +11463,7 @@ class SQLDataModel:
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to execute provided transaction, SQL execution failed with: "{e}"')
             ) from None
-        self._update_model_metadata(update_row_meta=True)        
+        self._update_model_metadata(update_row_meta=update_row_meta)        
 
     def freeze_index(self, column_name:str=None) -> None:
         """
@@ -11863,6 +11777,9 @@ class SQLDataModel:
         ```
 
         Change Log:
+            - Version 0.8.0 (2024-06-21):
+                - Modified to allow ``row_index`` and ``column_index`` arguments the same input type flexibility found across package, allowing both to be referenced directly or by their integer index.
+
             - Version 0.5.2 (2024-05-13):
                 - Modified ``row_index`` parameter to use :py:attr:`SQLDataModel.indicies` to index into rows in lieu of row index value equality.
 
@@ -11873,31 +11790,8 @@ class SQLDataModel:
             - This method only updates individual cells in the current model based on integer indexing for both rows and columns using their (row, column) position.
             - To broadcast updates across row and column dimensions use the syntax of ``sdm[row, column] = value`` or see :meth:`SQLDataModel.__setitem__()` for more details.
         """        
-        if not isinstance(row_index, int):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid row index type '{type(row_index).__name__}', rows must be indexed by type 'int'")
-            )
-        if not isinstance(column_index, (int,str)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(row_index).__name__}', columns must be indexed by type 'int' or 'str', use `.get_headers()` to view current model headers")
-            )
-        try:
-            row_index = self.indicies[row_index]
-        except IndexError:
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', provided row index is outisde of current model range '0:{self.row_count}'")
-            ) from None
-        if isinstance(column_index, int):
-            try:
-                column_index = self.headers[column_index]
-            except IndexError:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column_index}', provided column index is outside of current model range '0:{self.column_count}'")
-                ) from None
-        if column_index not in self.headers:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: column not found '{column_index}', use `.get_headers()` to view current valid model headers")
-            )
+        row_index = self._validate_row(row_index, unmodified=False)[0] # +VALROW
+        column_index = self._validate_column(column_index, unmodified=False)[0] # +VALCOL
         if not isinstance(value,tuple):
             value = (value,)
         if isinstance(value[0], datetime.datetime):
@@ -11907,15 +11801,7 @@ class SQLDataModel:
         else:
             val_binding = "?"
         update_stmt = f"""update "{self.sql_model}" set "{column_index}" = {val_binding} where "{self.sql_idx}" = {row_index}"""
-        try:
-            self.sql_db_conn.execute(update_stmt, value)
-            self.sql_db_conn.commit()
-        except Exception as e:
-            self.sql_db_conn.rollback()
-            raise SQLProgrammingError(
-                SQLDataModel.ErrorFormat(f'SQLProgrammingError: unable to update values, SQL execution failed with: {e}')
-            ) from None
-        self._update_model_metadata()        
+        self.execute_statement(update_stmt, sql_params=value, update_row_meta=False)
 
     def _update_model_metadata(self, update_row_meta:bool=False) -> None:
         """
@@ -12288,7 +12174,7 @@ class SQLDataModel:
                 update_sql_script = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update != 1 else f'({rows_to_update[0]})'};"""
             else:
                 update_sql_script += f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} in {f'{rows_to_update}' if num_rows_to_update != 1 else f'({rows_to_update[0]})'};"""
-            self.execute_transaction(update_sql_script)
+            self.execute_transaction(update_sql_script, update_row_meta=False)
             return            
         if num_rows_to_update != num_value_rows_to_update:
             raise DimensionError(
@@ -12299,7 +12185,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"DimensionError: shape mismatch '{num_columns_to_update} != {num_value_columns_to_update}', number of columns to update '{num_columns_to_update}' must match provided number of value columns to update '{num_value_columns_to_update}'")
             )
         if update_sql_script is not None:
-            self.execute_transaction(update_sql_script)
+            self.execute_transaction(update_sql_script, update_row_meta=False)
         col_val_param = ','.join([f""" "{column}" = ? """ for column in columns_to_update]) 
         update_stmt = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} = ?"""
         update_params = [(*values_to_update[i], row) for i,row in enumerate(rows_to_update)]
@@ -12307,10 +12193,11 @@ class SQLDataModel:
             self.sql_db_conn.executemany(update_stmt, update_params)
             self.sql_db_conn.commit()
         except sqlite3.ProgrammingError as e:
+            self.sql_db_conn.rollback()
             raise SQLProgrammingError(
                 SQLDataModel.ErrorFormat(f"SQLProgrammingError: invalid update values, SQL execution failed with '{e}'")
             ) from None
-        self._update_model_metadata()
+        self._update_model_metadata(update_row_meta=False)
         return
 
     def _get_sql_create_stmt(self) -> str:
@@ -12561,8 +12448,8 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns indicies are required, use `get_headers()` to view current valid arguments")
                 )
         validated_column_indicies = col_indicies
-        return (validated_row_indicies, validated_column_indicies)
-    
+        return (validated_row_indicies, validated_column_indicies)  
+
     def astype(self, dtype:Callable|Type|Literal['bool','bytes','date','datetime','float','int','None','str']) -> SQLDataModel:
         """
         Casts the model data into the specified python ``dtype``.
@@ -13208,7 +13095,7 @@ class SQLDataModel:
 
         This will output the original and validated row indexes:
 
-        ```shell
+        ```text
             2 --> (2,)
             -3 --> (7,)
             {8, 4, 5} --> (8, 4, 5)
@@ -13230,10 +13117,9 @@ class SQLDataModel:
             try:
                 validated_row = self.indicies[row]
             except IndexError:
-                if validated_row != self.row_count: # auto add escape, ok to be out of range if row index == row count since implies append row
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{validated_row}', index must be within current model row range of '0:{self.row_count}' ")
-                    ) from None
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row}', index must be within current model row range of '0:{self.row_count}' ")
+                ) from None
             return (validated_row,) if not unmodified else row
         elif isinstance(row, slice):
             validated_row = self.indicies[row]
@@ -13262,6 +13148,7 @@ class SQLDataModel:
         Raises:
             ``TypeError``: If ``column`` is not one of type 'str', 'int', 'slice' or 'Iterable' representing the integer index or values of column(s) to select.
             ``IndexError``: If ``column`` is outside of current model range bounded by :py:attr:`SQLDataModel.column_count` whether positively or negatively indexed.
+            ``DimensionError``: If ``len(column)`` is greater than :py:attr:`SQLDataModel.column_count` when provided as an iterable or sequence.
             
         Returns:
             ``list[str]``: A list containing the validated column values resulting from the selection.
@@ -13291,7 +13178,7 @@ class SQLDataModel:
 
         This will output the original and validated column indexes:
 
-        ```shell
+        ```text
             2 --> ['C']
             -3 --> ['D']
             ['A', 'B'] --> ['A', 'B']
@@ -13333,7 +13220,12 @@ class SQLDataModel:
                     )
                 return validated_column if not unmodified else column
         validated_column = []
-        for col in column: # Iterable[str|int]
+        # Iterable[str|int]
+        if len(column) > self.column_count:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid column dimensions '{len(column)} > {self.column_count}', provided column count exceeds current model dimensions")
+                )
+        for col in column: 
             if isinstance(col, int):
                 try:
                     validated_column.append(self.headers[col])
