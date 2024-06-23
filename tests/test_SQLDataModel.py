@@ -1,12 +1,276 @@
+from __future__ import annotations
 import datetime, os, tempfile, csv, sqlite3, random, string
-from typing import Iterable
+from typing import Literal, Iterable
+from itertools import cycle, islice
 from collections import Counter
 import pytest
 import pandas as pd
 import polars as pl
 import numpy as np
-from .random_data_generator import data_generator
-from src.SQLDataModel.SQLDataModel import SQLDataModel
+
+if 'Future' in __file__:
+    from future.SQLDataModel_future import SQLDataModel
+else:
+    from src.SQLDataModel.SQLDataModel import SQLDataModel
+
+def get_sqlite3_version() -> tuple[int, int, int]:
+    """Returns the system sqlite version instead of the sqlite3 package version, or returns (0, 0, 0) if sqlite not found."""
+    try:
+        with sqlite3.connect(':memory:') as conn:
+            version = conn.execute('select sqlite_version()').fetchone()[0]
+        return tuple(map(int, version.split('.')))
+    except:
+        return (0, 0, 0)
+
+def data_generator(num_rows:int=12, num_columns:int=8, min_numeric_value:int=-1_000, max_numeric_value:int=1_000, min_literal_length:int=2, max_literal_length:int=12, float_precision:int=6, seed:int=None, return_header_type:Literal['list','tuple']='list', return_row_type:Literal['list','tuple']='list', return_format:Literal["separate","combined"]="separate", as_str:bool=False, nullify_prob:float=None, exclude_nonetype:bool=False) -> tuple[list[list], list[str]]:
+    """
+    Returns randomly generated data for each Python type.
+
+    Parameters:
+        - `num_rows` (int): Number of rows in the generated data. Defaults to 12.
+        - `num_columns` (int): Number of columns in the generated data. Defaults to 8.
+        - `min_numeric_value` (int): Minimum value for numeric types (int and float). Defaults to -1000.
+        - `max_numeric_value` (int): Maximum value for numeric types (int and float). Defaults to 1000.
+        - `min_literal_length` (int): Minimum length for string and bytes literals. Defaults to 2.
+        - `max_literal_length` (int): Maximum length for string and bytes literals. Defaults to 12.
+        - `float_precision` (int): Number of decimal places for floating-point numbers. Defaults to 6.
+        - `seed` (int): Seed for random number generation. Defaults to None.
+        - `return_header_type` (Literal['list','tuple']): Return format of headers:
+            - `'list'`: Returns headers as `list[str]`
+            - `'tuple'`: Returns headers as `tuple[str]`
+        - `return_row_type` (Literal['list','tuple']): Return format of data:
+            - `'list'`: Returns headers and data rows as `list[row]`
+            - `'tuple'`: Returns headers and data rows as `tuple[row]`
+        - `return_format` (Literal['separate','combined']): Return format of data:
+            - `'separate'`: Returns in the format of `(data, headers)`
+            - `'combined'`: Returns in the format of `(data)` with headers at `data[0]`
+        - `as_str` (bool): Overrides data types as type str, used for testing type inferencing methods. Defaults to False.
+        - `nullify_prob` (float | None): Percentage of data to be randomly nullified, used for simulating missing or null values. Defaults to None.
+
+    Returns:
+        - `tuple[list[list], list[str]]`: A tuple containing the generated data as a list of lists and headers as a list of strings.
+    
+    ---
+    
+    Examples:
+    
+    #### Returning Different Formats
+
+    ```python
+
+    # Combined return format as tuple
+    data = data_generator(num_rows = 3, num_columns = 3, seed = 42, return_row_type='tuple', return_format='combined')
+
+    # Result
+    ```
+    ```shell
+    data = [('string', 'int', 'float'), ('hTpigTHKcfoK', -265, 207.452063), ('mNHnKXaXQv', 735, 614.256547), ('nVgx', -296, 459.463573)]
+    ```
+    ```python
+    # Separate return format as list
+    data, headers = data_generator(num_rows = 3, num_columns = 4, seed = 42, return_row_type='list', return_format='separate')
+
+    # Result
+    ```
+    ```shell
+    headers = ['string', 'int', 'float']
+    data = [['hTpigTHKcfoK', -265, 207.452063], ['mNHnKXaXQv', 735, 614.256547], ['nVgx', -296, 459.463573]]
+    ```
+
+    ---
+
+    #### Creating SQLDataModel
+
+    ```python
+    # Generate the data
+    data, headers = data_generator(num_rows = 3, num_columns = 4, seed = 42)
+
+    # Create the model
+    sdm = SQLDataModel(data, headers)
+
+    # Loop over the resulting data
+    for row in data:
+        print(row)
+    
+    # Output
+    ```
+    ```shell
+    ['string', 'bool', 'bytes', 'date']
+    ['hTpigTHKcfoK', False, b'SG', datetime.date(1920, 6, 12)]
+    ['mNHnKXaXQv', False, b'esM2wmeO', datetime.date(1926, 11, 9)]
+    ['nVgx', False, b'901xBZ', datetime.date(1989, 11, 21)]
+    ```
+
+    ---
+
+    Note:
+        - The data consists of random values for each Python type, then types are repeated if `num_columns > 8`.
+        - Repeated types are aliased with the numeric suffix such that the max suffix for each type represents the number of occurences.
+    """
+    def number_duplicates(values):
+        """Utility function scoped to primary supplemental function to alias duplicate values with integer prefix."""
+        counter = Counter()
+        for v in values:
+            counter[v] += 1
+            if counter[v]>1:
+                yield v+f'_{counter[v]}'
+            else:
+                yield v
+
+    def data_nullifier(input_data: list[list], replace_prob: float) -> list[list]:
+        """
+        Utility function scoped to primary supplemental function to nullify random values.
+
+        Randomly replace values in a list of lists with `None` to replicate missing or null values for testing.
+
+        Parameters:
+            - `input_data` (list[list]): A list of lists containing the input data.
+            - `replace_prob` (float): The probability of replacing each value with None.
+
+        Returns:
+            - `list[list]`: A list of lists with values randomly replaced with None.
+
+        This function iterates over each element in the input_data and
+        randomly replaces each value with None based on the specified
+        probability (replace_prob).
+        """
+        row_type = type(input_data[0])
+        replaced_data = []
+        for row in input_data:
+            replaced_row = []
+            for value in row:
+                if random.random() < replace_prob:
+                    replaced_row.append(None)
+                else:
+                    replaced_row.append(value)
+            replaced_data.append(replaced_row)
+        replaced_data = [row_type(str(cell) for cell in row) for row in replaced_data]
+        return replaced_data
+    if seed is not None:
+        random.seed(seed)
+    pytypes = ['string', 'int', 'float', 'bool', 'date', 'bytes', 'nonetype', 'datetime'] if not exclude_nonetype else ['string', 'int', 'float', 'bool', 'date', 'bytes', 'datetime']
+    dtypes = list(islice(cycle(pytypes), num_columns))
+    columns = [[] for _ in range(num_columns)]
+    for col_index, dtype in enumerate(dtypes):
+        for _ in range(num_rows):
+            if dtype == 'int':
+                columns[col_index].append(random.randint(min_numeric_value, max_numeric_value))
+            elif dtype == 'float':
+                columns[col_index].append(round(random.uniform(float(min_numeric_value), float(max_numeric_value)),float_precision))
+            elif dtype == 'bool':
+                columns[col_index].append(random.choice([True, False]))
+            elif dtype == 'string':
+                columns[col_index].append(''.join(random.choices('abcdefghijklmnopqrstuvwxyz_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=random.randint(min_literal_length, max_literal_length))))
+            elif dtype == 'datetime':
+                year = random.randint(1900, 2022)
+                month = random.randint(1, 12)
+                day = random.randint(1, 28)  # Assuming February has at most 28 days
+                hour = random.randint(0, 23)
+                minute = random.randint(0, 59)
+                second = random.randint(0, 59)
+                columns[col_index].append(datetime.datetime(year, month, day, hour, minute, second))
+            elif dtype == 'bytes':
+                columns[col_index].append(bytes(''.join(random.choices('abcdefghijklmnopqrstuvwxyz_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=random.randint(min_literal_length, max_literal_length))),encoding='utf-8'))
+            elif dtype == 'date':
+                year = random.randint(1900, 2022)
+                month = random.randint(1, 12)
+                day = random.randint(1, 28)  # Assuming February has at most 28 days
+                columns[col_index].append(datetime.date(year, month, day))                
+            elif dtype == 'nonetype':
+                columns[col_index].append(None)
+    row_type = list if return_row_type == 'list' else tuple
+    data = list(map(row_type, zip(*columns)))
+    header_type = list if return_header_type == 'list' else tuple
+    headers = header_type(number_duplicates(dtypes))
+    if as_str:
+        data = [row_type(str(cell) for cell in row) for row in data]
+    if nullify_prob is not None:
+        data = data_nullifier(data, replace_prob=nullify_prob)
+    if return_format == 'combined':
+        return [headers, *data]
+    return data, headers
+
+def index_generator(index_pairs:int, shape:tuple[int, int], column_names:list[str]=None, max_rows:int=20, row_bounds:tuple[float, float]=(0.25,0.75), col_bounds:tuple[float, float]=(0.25, 1.0), include_validation:bool=False) -> list[tuple]:
+    """
+    Generate and return a randomly generated pair of indicies for testing.
+
+    Parameters:
+        ``index_pairs`` (int): Number of index test pairs to generate.
+        ``shape`` (tuple[int, int]): The shape of the model to use for index bounds.
+        ``column_names`` (list[str]): The column names to use for column indexing, default is aligned to SQLDataModel default when headers aren't provided.
+        ``max_rows`` (int): The maximum number of rows of return after applying the bounds to index slices and collections.
+        ``row_bounds`` (tuple[float, float]): The modifiers to use for bounding the size of ranged row indicies such as index slices and collections.
+        ``col_bounds`` (tuple[float, float]): The modifiers to use for bounding the size of ranged col indicies such as index slices and collections.
+        ``include_validation`` (bool, optional): Whether the validation result should be returned along with the test indicies.
+    
+    Returns:
+        ``list[tuple]``: A list of index pairs that optionally includes the validation data associated with the corresponding test indicies.   
+
+    Example::
+
+        # When validation not included:
+        rand_indicies = [
+            (row_idx_1, col_idx_1), 
+            ..., 
+            (row_idx_N, col_idx_N)
+        ]
+
+        # When validation is included:
+        rand_indicies = [
+            [(row_idx_1, col_idx_1), (row_validation_1, col_validation_1)], 
+            ..., 
+            [(row_idx_N, col_idx_N), (row_validation_N, col_validation_N)]
+        ]
+    
+    Note:
+        - Used by various testing functions to generate random indicies and the corresponding validation data for testing access
+    """
+    row_count, column_count = shape
+    row_lower_bound, row_upper_bound = int(row_count*row_bounds[0]), int(row_count*row_bounds[1])
+    column_lower_bound, column_upper_bound = int(column_count*col_bounds[0]), int(column_count*col_bounds[1])
+    column_lower_bound = 1 if column_lower_bound < 1 else column_lower_bound
+    column_names = [f'{j}' for j in range(column_count)] if column_names is None else column_names
+    def rand_row_index():
+        """Return a randomly selected row index from available options."""
+        row_single_int = lambda: random.randint(0, row_count-1)
+        row_set_int = lambda: set(random.sample(list(range(row_count)), random.randint(2, max_rows)))
+        row_tuple_int = lambda: tuple(random.sample(list(range(row_count)), random.randint(2, max_rows)))
+        row_slice_int = lambda: slice(random.randint(0,row_lower_bound), random.randint((row_lower_bound)+1, row_upper_bound))
+        return random.choice((row_single_int, row_set_int, row_tuple_int, row_slice_int))() 
+    def rand_column_index():
+        """Return a randomly selected column index from available options."""
+        column_single_int = lambda: random.randint(0, column_count-1)
+        column_single_str = lambda: random.choice(column_names)
+        column_list_int = lambda: random.sample(list(range(column_count)), random.randint(column_lower_bound, column_upper_bound-1))
+        column_names_list = lambda: random.sample(column_names, random.randint(1, column_upper_bound-1))
+        column_slice_int = lambda: slice(random.randint(0,column_lower_bound), random.randint((column_lower_bound)+1,column_upper_bound-1))
+        column_indexing_options = (column_single_int, column_single_str, column_list_int, column_names_list, column_slice_int)
+        return random.choice(column_indexing_options)() 
+    def generate_independent_validation(row_idx, col_idx, validation_row_indicies:tuple[int], validation_headers:list[str]) -> tuple[tuple[int], list[str]]:
+        """Validates row and column selections independently to use for validation SQLDataModel validation output."""
+        if isinstance(row_idx, slice):
+            expected_row = validation_row_indicies[row_idx]
+        elif isinstance(row_idx, int):
+            expected_row = (validation_row_indicies[row_idx],)
+        else: # set[int] | tuple[int]
+            expected_row = tuple([validation_row_indicies[rid] for rid in row_idx])
+        if isinstance(col_idx, slice):
+            expected_column = validation_headers[col_idx]
+        elif isinstance(col_idx, int):
+            expected_column = [validation_headers[col_idx]]
+        elif isinstance(col_idx, list):
+            if isinstance(col_idx[0], str):
+                expected_column = [col for col in col_idx if col in validation_headers]
+            else: # list[int]
+                expected_column = [validation_headers[cid] for cid in col_idx]
+        else: # str
+            expected_column = [col_idx]    
+        return (expected_row, expected_column)
+    if not include_validation:
+        return [(rand_row_index(), rand_column_index()) for _ in range(index_pairs)] 
+    else:
+        test_pairs = [(rand_row_index(), rand_column_index()) for _ in range(index_pairs)] 
+        return [[(row_idx, col_idx), generate_independent_validation(row_idx=row_idx, col_idx=col_idx, validation_row_indicies=tuple(range(row_count)), validation_headers=column_names)] for row_idx, col_idx in test_pairs]
 
 @pytest.fixture
 def sample_data() -> tuple[list[list], list[str]]:
@@ -84,7 +348,7 @@ def test_getitem_randomized():
     test_pairs = 275 # number of randomized pairs to test
     test_shape = (100, 18) # (rows, cols)
     sdm = SQLDataModel([tuple([f"{i},{j}" for j in range(test_shape[1])]) for i in range(test_shape[0])])
-    rand_indicies = generate_random_indexes(test_pairs, test_shape, column_names=sdm.headers, include_validation=False)
+    rand_indicies = index_generator(test_pairs, test_shape, column_names=sdm.headers, include_validation=False)
     for rand_idx in rand_indicies:
         row_idx, col_idx = rand_idx
         row_idx = (row_idx,) if isinstance(row_idx, int) else tuple(range(row_idx.start, row_idx.stop)) if isinstance(row_idx, slice) else tuple(sorted(row_idx)) 
@@ -1336,6 +1600,12 @@ def test_to_list(sample_data):
 
 @pytest.mark.core
 def test_merge():
+    major, minor, _ = get_sqlite3_version()
+    if major >= 3 and minor >= 39:
+        supports_right_and_full_outer_join = True
+    else:
+        supports_right_and_full_outer_join = False
+
     left_headers = ["Name", "Age", "ID"]
     left_data = [        
         ["Bob", 35, 1],
@@ -1360,10 +1630,11 @@ def test_merge():
     assert joined_output == expected_output
 
     ### right join ###
-    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="right", left_on="ID", right_on="ID", include_join_column=False)
-    joined_output = sdm_joined.data(include_headers=True)
-    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]      
-    assert joined_output == expected_output
+    if supports_right_and_full_outer_join:
+        sdm_joined = sdm_left.merge(merge_with=sdm_right, how="right", left_on="ID", right_on="ID", include_join_column=False)
+        joined_output = sdm_joined.data(include_headers=True)
+        expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]      
+        assert joined_output == expected_output
 
     ### inner join ###
     sdm_joined = sdm_left.merge(merge_with=sdm_right, how="inner", left_on="ID", right_on="ID", include_join_column=False)
@@ -1372,10 +1643,11 @@ def test_merge():
     assert joined_output == expected_output
 
     ### full outer join ###
-    sdm_joined = sdm_left.merge(merge_with=sdm_right, how="full outer", left_on="ID", right_on="ID", include_join_column=False)
-    joined_output = sdm_joined.data(include_headers=True)
-    expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Alice', 30, 5, None), ('David', 40, None, None), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]
-    assert joined_output == expected_output
+    if supports_right_and_full_outer_join:
+        sdm_joined = sdm_left.merge(merge_with=sdm_right, how="full outer", left_on="ID", right_on="ID", include_join_column=False)
+        joined_output = sdm_joined.data(include_headers=True)
+        expected_output = [('Name', 'Age', 'ID', 'Country'), ('Bob', 35, 1, 'USA'), ('Alice', 30, 5, None), ('David', 40, None, None), ('Charlie', 25, 2, 'Germany'), (None, None, None, 'France'), (None, None, None, 'Latvia')]
+        assert joined_output == expected_output
 
     ### cross join ###
     sdm_joined = sdm_left.merge(merge_with=sdm_right, how="cross", left_on="ID", right_on="ID", include_join_column=False)
@@ -2007,93 +2279,13 @@ def test_update_index_at():
     output_data = sdm.data(strict_2d=True)[0]
     assert output_data == input_data 
 
-def generate_random_indexes(index_pairs:int, shape:tuple[int, int], column_names:list[str]=None, include_validation:bool=False) -> list[tuple]:
-    """
-    Generate and return a randomly generated pair of indicies for testing.
-
-    Parameters:
-        ``index_pairs`` (int): Number of index test pairs to generate.
-        ``shape`` (tuple[int, int]): The shape of the model to use for index bounds.
-        ``column_names`` (list[str]): The column names to use for column indexing, default is aligned to SQLDataModel default when headers aren't provided.
-        ``include_validation`` (bool, optional): Whether the validation result should be returned along with the test indicies.
-    
-    Returns:
-        ``list[tuple]``: A list of index pairs that optionally includes the validation data associated with the corresponding test indicies.   
-
-    Example::
-
-        # When validation not included:
-        rand_indicies = [
-            (row_idx_1, col_idx_1), 
-            ..., 
-            (row_idx_N, col_idx_N)
-        ]
-
-        # When validation is included:
-        rand_indicies = [
-            [(row_idx_1, col_idx_1), (row_validation_1, col_validation_1)], 
-            ..., 
-            [(row_idx_N, col_idx_N), (row_validation_N, col_validation_N)]
-        ]
-    
-    Note:
-        - Used by various testing functions to generate random indicies and the corresponding validation data for testing access
-    """
-    row_count, column_count = shape
-    row_lower_bound = int(row_count*.25)
-    row_upper_bound = int(row_count*.45)
-    column_lower_bound = int(column_count*.25)
-    column_lower_bound = 1 if column_lower_bound < 1 else column_lower_bound
-    column_names = [f'{j}' for j in range(column_count)] if column_names is None else column_names
-    def rand_row_index():
-        """Return a randomly selected row index from available options."""
-        row_single_int = lambda: random.randint(0, row_count-1)
-        row_tuple_int = lambda: tuple(random.sample(list(range(row_count)), random.randint(row_lower_bound, row_upper_bound)))
-        row_slice_int = lambda: slice(random.randint(0,row_lower_bound), random.randint((row_lower_bound)+1, row_upper_bound))
-        return random.choice((row_single_int, row_tuple_int, row_slice_int))() 
-    def rand_column_index():
-        """Return a randomly selected column index from available options."""
-        column_single_int = lambda: random.randint(0, column_count-1)
-        column_single_str = lambda: random.choice(column_names)
-        column_list_int = lambda: random.sample(list(range(column_count)), random.randint(column_lower_bound, column_count-1))
-        column_names_list = lambda: random.sample(column_names, random.randint(1, column_count-1))
-        column_slice_int = lambda: slice(random.randint(0,column_lower_bound), random.randint((column_lower_bound)+1,column_count-1))
-        column_indexing_options = (column_single_int, column_single_str, column_list_int, column_names_list, column_slice_int)
-        return random.choice(column_indexing_options)() 
-    def generate_independent_validation(row_idx, col_idx, validation_row_indicies:tuple[int], validation_headers:list[str]) -> tuple[tuple[int], list[str]]:
-        """Validates row and column selections independently to use for validation SQLDataModel validation output."""
-        if isinstance(row_idx, slice):
-            expected_row = validation_row_indicies[row_idx]
-        elif isinstance(row_idx, int):
-            expected_row = (validation_row_indicies[row_idx],)
-        else: # tuple[int]
-            expected_row = tuple([validation_row_indicies[rid] for rid in row_idx])
-        if isinstance(col_idx, slice):
-            expected_column = validation_headers[col_idx]
-        elif isinstance(col_idx, int):
-            expected_column = [validation_headers[col_idx]]
-        elif isinstance(col_idx, list):
-            if isinstance(col_idx[0], str):
-                expected_column = [col for col in col_idx if col in validation_headers]
-            else: # list[int]
-                expected_column = [validation_headers[cid] for cid in col_idx]
-        else: # str
-            expected_column = [col_idx]    
-        return (expected_row, expected_column)
-    
-    if not include_validation:
-        return [(rand_row_index(), rand_column_index()) for _ in range(index_pairs)] 
-    else:
-        test_pairs = [(rand_row_index(), rand_column_index()) for _ in range(index_pairs)] 
-        return [[(row_idx, col_idx), generate_independent_validation(row_idx=row_idx, col_idx=col_idx, validation_row_indicies=tuple(range(row_count)), validation_headers=column_names)] for row_idx, col_idx in test_pairs]
-
 @pytest.mark.core
 def test_validate_row():
     num_pairs = 100
     sdm_shape = (250, 8)
     input_data = [tuple([f"{i}, {j}" for j in range(sdm_shape[1])]) for i in range(sdm_shape[0])]
     sdm = SQLDataModel(input_data)
-    test_indicies = generate_random_indexes(num_pairs, sdm_shape, column_names=sdm.headers, include_validation=True)
+    test_indicies = index_generator(num_pairs, sdm_shape, column_names=sdm.headers, include_validation=True)
     for test_index, test_validation in test_indicies:
         row_idx, _ = test_index
         expected_row, _ = test_validation
@@ -2106,9 +2298,20 @@ def test_validate_column():
     sdm_shape = (250, 8)
     input_data = [tuple([f"{i}, {j}" for j in range(sdm_shape[1])]) for i in range(sdm_shape[0])]
     sdm = SQLDataModel(input_data)
-    test_indicies = generate_random_indexes(num_pairs, sdm_shape, column_names=sdm.headers, include_validation=True)
+    test_indicies = index_generator(num_pairs, sdm_shape, column_names=sdm.headers, include_validation=True)
     for test_index, test_validation in test_indicies:
         _, col_idx = test_index
         _, expected_column = test_validation
         output_column = sdm._validate_column(col_idx, unmodified=False)
         assert output_column == expected_column
+
+@pytest.mark.core
+def test_validate_indicies():
+    num_pairs = 100
+    sdm_shape = (250, 8)
+    input_data = [tuple([f"{i}, {j}" for j in range(sdm_shape[1])]) for i in range(sdm_shape[0])]
+    sdm = SQLDataModel(input_data)
+    test_indicies = index_generator(num_pairs, sdm_shape, column_names=sdm.headers, include_validation=True)
+    for test_index, test_validation in test_indicies:
+        output_indicies = sdm._validate_indicies(test_index)
+        assert output_indicies == test_validation    

@@ -11,10 +11,7 @@ import numpy as np
 if 'Future' in __file__:
     from future.SQLDataModel_future import SQLDataModel
 else:
-    try:
-        from src.SQLDataModel.SQLDataModel import SQLDataModel
-    except ModuleNotFoundError:
-        from SQLDataModel import SQLDataModel
+    from src.SQLDataModel.SQLDataModel import SQLDataModel
 
 def get_sqlite3_version() -> tuple[int, int, int]:
     """Returns the system sqlite version instead of the sqlite3 package version, or returns (0, 0, 0) if sqlite not found."""

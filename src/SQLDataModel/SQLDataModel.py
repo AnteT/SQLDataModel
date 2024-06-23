@@ -4828,18 +4828,20 @@ class SQLDataModel:
             return {headers[i]:tuple([x[i] for x in data]) for i in range(len(headers))}    
         return [{col:row[i] for i,col in enumerate(headers)} for row in data]
         
-    def to_excel(self, filename:str, worksheet:int|str=0, index:bool=False) -> None:
+    def to_excel(self, filename:str, worksheet:int|str=1, index:bool=False, if_exists:Literal['append','replace','fail']='replace') -> None:
         """
         Writes the current ``SQLDataModel`` to the specified Excel ``filename``.
 
         Parameters:
             ``filename`` (str): The file path to save the Excel file, e.g., ``filename = 'output.xlsx'``.
-            ``worksheet`` (int | str, optional): The index or name of the worksheet to write to. Defaults to 0, indicating the first worksheet.
+            ``worksheet`` (int | str, optional): The index or name of the worksheet to write to. Defaults to 1, indicating the first worksheet.
             ``index`` (bool, optional): If ``SQLDataModel`` index should be included in the output. Default is False.
+            ``if_exists`` (Literal['append','replace','fail']): Action to take if file already exists. Default is 'replace', overwriting existing file.
 
         Raises:
             ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``_has_xl`` flag.        
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid Excel file path to create or write to.
+            ``ValueError``: If ``if_exists`` is not one of 'append', 'replace' or 'fail' representing action to take if file exists.
             ``IndexError``: If ``worksheet`` is provided as type 'int' but is out of range of the available worksheets.
             ``Exception``: If any unexpected exception occurs during the Excel writing and saving process.
         
@@ -4867,7 +4869,7 @@ class SQLDataModel:
             sdm.to_excel('Team-Overview.xlsx')
 
             # Or append to existing Excel file as a new worksheet
-            sdm.to_excel('Team.xlsx', worksheet='Demographics')
+            sdm.to_excel('Team.xlsx', worksheet='Demographics', if_exists='append')
         
         This will create a new Excel file ``Team-Overview.xlsx``:
 
@@ -4885,14 +4887,17 @@ class SQLDataModel:
         ```
         
         Change Log:
+            - Version 0.8.1 (2024-06-23):
+                - Added ``if_exists`` parameter to provide the options to replace or append to existing file, as well as to fail if already exists.
+
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
-            - If provided ``filename`` does not exist, it will be created. If it already exists, model data will be appended to the existing worksheet contents.
+            - Headers are dynamically inserted based on value for ``if_exists``, where using 'replace' will include headers and 'append' will ignore them unless worksheet creation occurred.
             - When providing a string argument for ``worksheet``, if the sheet does not exist, it will be created. However if providing an integer index for an out of range sheet, an ``IndexError`` will be raised.
             - See related :meth:`SQLDataModel.from_excel()` for creating a ``SQLDataModel`` from existing Excel content.
-        """
+        """        
         if not _has_xl:
             raise ModuleNotFoundError(
                 SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method")
@@ -4900,28 +4905,55 @@ class SQLDataModel:
         if not isinstance(filename, str):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid Excel file path")
-            )   
-        try:
-            wb = _xl.load_workbook(filename)
-        except FileNotFoundError:
+            )
+        if if_exists not in ('append','replace','fail'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{if_exists}', argument for `if_exists` must be one of 'append', 'replace' or 'fail' representing action to take if file exists")
+            )
+        if os.path.exists(filename):
+            if if_exists == 'fail':
+                raise FileExistsError(
+                    SQLDataModel.ErrorFormat(f"FileExistsError: '{filename}' already exists, use `if_exists='replace'` to overwrite or `if_exists='append'` to append to existing file")
+                )
+            elif if_exists == 'replace':
+                include_headers = True
+                wb = _xl.Workbook()
+                if isinstance(worksheet, int):
+                    ws = wb.active
+                    ws.title = f"Sheet{worksheet}"
+                else:
+                    ws = wb.create_sheet(title=worksheet)
+            elif if_exists == 'append':
+                include_headers = False
+                wb = _xl.load_workbook(filename)
+                if isinstance(worksheet, int):
+                    try:
+                        ws = wb.worksheets[worksheet-1]  # Index is 1-based for the parameter, but 0-based for list
+                    except IndexError:
+                        include_headers = True
+                        ws = wb.create_sheet(f"Sheet{worksheet}")
+                else:
+                    if worksheet in wb.sheetnames:
+                        ws = wb[worksheet]
+                    else:
+                        ws = wb.create_sheet(title=worksheet)
+        else:
+            include_headers = True
             wb = _xl.Workbook()
+            if isinstance(worksheet, int):
+                ws = wb.active
+                ws.title = f"Sheet{worksheet}"
+            else:
+                ws = wb.create_sheet(title=worksheet)
         try:
-            ws = wb.worksheets[worksheet] if isinstance(worksheet, int) else wb[worksheet]
-        except KeyError:
-            wb.create_sheet(worksheet)
-            ws = wb[worksheet]
-        except IndexError:
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"IndexError: Worksheet '{worksheet}' not found, the worksheet must exist when using an integer index, otherwise provide a string name to create the sheet instead")
-            ) from None
-        try:
-            [ws.append(row) for row in self.data(include_headers=True, index=index)]
+            for row in self.data(strict_2d=True, include_headers=include_headers, index=index):
+                ws.append(row)
             wb.save(filename=filename)
             wb.close()
         except Exception as e:
             raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write and save to the provided Excel file")
-            ).with_traceback(e.__traceback__) from None    
+            ).with_traceback(e.__traceback__) from None   
 
     def to_html(self, filename:str=None, index:bool=None, encoding:str='utf-8', style_params:dict=None) -> str:
         """
@@ -8306,20 +8338,7 @@ class SQLDataModel:
             - The ``slc`` parameter can be an integer, a tuple of disconnected row indices, a slice representing a range of rows, a string or list of strings representing column names, or a tuple combining row and column indices.
             - The returned SQLDataModel instance will contain the specified subset of rows and columns, retaining the row indicies of the original view.
         """         
-        try:
-            validated_rows, validated_columns = self.validate_indicies(target_indicies)
-        except ValueError as e:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
-            ) from None
-        except TypeError as e:
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
-            ) from None
-        except IndexError as e:
-            raise IndexError(
-                SQLDataModel.ErrorFormat(f"{e}") # using existing formatting from validation
-            ) from None 
+        validated_rows, validated_columns = self._validate_indicies(target_indicies)
         sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,index=True) # NOTE: toggle to retain prior indicies after getitem slicing, changed in version 0.5.0 to True
         return self.execute_fetch(sql_stmt_generated)
 
@@ -8477,7 +8496,7 @@ class SQLDataModel:
             - The ``target_indicies`` parameter can be an integer, a tuple of disconnected row indices, a slice representing a range of rows, a string or list of strings representing column names, or a tuple combining row and column indices.
             - Values can be single values or iterables matching the specified rows and columns.
             - See :meth:`SQLDataModel.apply()` for setting values using a function.
-        """        
+        """            
         # first check if target is new column that needs to be created, if so create it and return so long as the target values aren't another sqldatamodel object:
         if isinstance(update_values, SQLDataModel):
             other_is_sdm = True
@@ -8506,30 +8525,13 @@ class SQLDataModel:
         if isinstance(target_indicies, str) and target_indicies not in self.headers:
             validated_rows, validated_columns = self.indicies, [target_indicies]
         else:
-            try:
-                validated_rows, validated_columns = self.validate_indicies(target_indicies)
-            except ValueError as e:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"{e}")
-                ) from None
-            except TypeError as e:
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"{e}")
-                ) from None
-            except IndexError as e:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"{e}")
-                ) from None             
+            validated_rows, validated_columns = self._validate_indicies(target_indicies)
         # convert various row options to be tuple or int
-        if isinstance(validated_rows,slice):
-            validated_rows = self.indicies[validated_rows]
-        if isinstance(validated_rows,int):
-            validated_rows = (validated_rows,)
         if other_is_sdm:
             update_values = [row[1:] for row in update_values if row[0] in validated_rows]
         self._update_rows_and_columns_with_values(rows_to_update=validated_rows,columns_to_update=validated_columns,values_to_update=update_values)
         return
-
+    
     def __len__(self) -> int:
         """
         Returns the :py:attr:`SQLDataModel.row_count` property for the current ``SQLDataModel`` which represents the current number of rows in the model.
@@ -10957,6 +10959,130 @@ class SQLDataModel:
 ################################################ sql commands ################################################
 ##############################################################################################################
 
+    def astype(self, dtype:Callable|Type|Literal['bool','bytes','date','datetime','float','int','None','str']) -> SQLDataModel:
+        """
+        Casts the model data into the specified python ``dtype``.
+
+        Parameters:
+            ``dtype`` (Callable|Type|Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type to cast the values to.
+
+        Raises:
+            ``ValueError``: If ``dtype`` is a string and not one of 'bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str'.
+            ``TypeError``: If ``dtype`` is a ``Type`` object that does not map to the current values, such as trying to convert a string column using the built-in ``float`` type.
+
+        Returns:
+            ``SQLDataModel``: The data casted as the specified type as a new ``SQLDataModel``.
+
+        Warning:
+            - Type casting will coerce any nonconforming values to the ``dtype`` being set, this means data will be lost if casting values to incompatible types.
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Height', 'Hired']
+            data = [
+                ('John', 30, 175.3, 'True'), 
+                ('Alice', 28, 162.0, 'True'), 
+                ('Travis', 35, 185.8, 'False')
+            ]    
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # See what we're working with
+            print(sdm)
+
+        This will output:
+
+        ```shell
+            ┌────────┬──────┬─────────┬───────┐
+            │ Name   │  Age │  Height │ Hired │
+            ├────────┼──────┼─────────┼───────┤
+            │ John   │   30 │  175.30 │ True  │
+            │ Alice  │   28 │  162.00 │ True  │
+            │ Travis │   35 │  185.80 │ False │
+            └────────┴──────┴─────────┴───────┘
+            [3 rows x 4 columns]
+        ```
+        
+        We can return the values as new types or save them to a column:
+
+        ```python
+            # Convert the string based 'Hired' column to boolean values
+            sdm['Hired'] = sdm['Hired'].astype('bool')
+
+            # Let's also create a new 'Height' column, this time as an integer
+            sdm['Height int'] = sdm['Height'].astype('int')
+
+            # See the new values and their types
+            print(sdm)
+        ```
+        
+        This will output:
+
+        ```shell
+            ┌────────┬──────┬─────────┬───────┬────────────┐
+            │ Name   │  Age │  Height │ Hired │ Height int │
+            ├────────┼──────┼─────────┼───────┼────────────┤
+            │ John   │   30 │  175.30 │ 1     │        175 │
+            │ Alice  │   28 │  162.00 │ 1     │        162 │
+            │ Travis │   35 │  185.80 │ 0     │        185 │
+            └────────┴──────┴─────────┴───────┴────────────┘
+            [3 rows x 5 columns]
+        ```        
+        
+        Types can also be passed directly to ``dtype``:
+
+        ```python
+            # Convert 'Age' directly to float using the built-in type:
+            sdm['Age float'] = sdm['Age'].astype(float)
+
+            # View updated model
+            print(sdm)
+        ```
+
+        This will output the result of mapping the built-in ``float`` type to 'Age' as a new column:
+
+        ```shell
+            ┌────────┬─────┬─────────┬───────┬────────────┬───────────┐
+            │ Name   │ Age │  Height │ Hired │ Height int │ Age float │
+            ├────────┼─────┼─────────┼───────┼────────────┼───────────┤
+            │ John   │  30 │  175.30 │ 1     │        175 │     30.00 │
+            │ Alice  │  28 │  162.00 │ 1     │        162 │     28.00 │
+            │ Travis │  35 │  185.80 │ 0     │        185 │     35.00 │
+            └────────┴─────┴─────────┴───────┴────────────┴───────────┘
+            [3 rows x 6 columns]
+        ```
+
+        Change Log:
+            - Version 0.7.6 (2024-06-16):
+                - Modified to allow ``Callable`` or ``Type`` to be provided directly for ``dtype`` argument to map to data and return as new model for broader type conversion.
+        
+        Note:
+            - Unless the returned values are saved as a new column, using this method does not change the underlying column's type currently assigned to it, to modify the column type use :meth:`SQLDataModel.set_column_dtypes()` instead.
+            - Any ``None`` or ``null`` values encountered will not be coerced to the specified ``dtype``, see :meth:`SQLDataModel.fillna()` for handling and filling null values appropriately.
+            - When passing a type directly, ``dtype=Type``, the type must be a ``Callable`` that can be mapped directly to a value like the built-in ``str``, ``int``, ``float`` and ``bool`` types.
+        """
+        if dtype in ('bool','bytes','date','datetime','float','int','None','str'):
+            str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
+            sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
+            dtype_dict = {col:dtype for col in self.headers}
+            return self.execute_fetch(sql_stmt, dtypes=dtype_dict)                
+        elif isinstance(dtype, (Callable,Type)):
+            try:
+                data = [tuple([dtype(val) for val in row]) for row in self.data(strict_2d=True, include_headers=False)]
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to return as type '{dtype}'")
+                ).with_traceback(e.__traceback__) from None
+            return type(self)(data, headers=self.headers, infer_types=False, **self._get_display_args())
+        else:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{dtype}', argument for `dtype` must be a `Callable` type or one of 'bool','bytes','date','datetime','float','int','None' or 'str'")
+            )
+
     def apply(self, func:Callable) -> SQLDataModel:
         """
         Applies ``func`` to the current ``SQLDataModel`` object and returns a modified ``SQLDataModel`` by passing its
@@ -11923,7 +12049,7 @@ class SQLDataModel:
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
-            - No validation is performed on row or column indicies, see :meth:`SQLDataModel.validate_indicies()` for implementation and usage.
+            - No validation is performed on row or column indicies, see :meth:`SQLDataModel._validate_indicies()` for implementation and usage.
         """
         if columns is None:
             columns = self.headers
@@ -12268,20 +12394,213 @@ class SQLDataModel:
             args['dtypes'] = self.dtypes
         return args
 
-    def validate_indicies(self, indicies) -> tuple[int|slice, list[str]]:
+    def _validate_row(self, row:int|slice|Iterable[int], unmodified:bool=False) -> tuple[int]:
         """
-        Validates and returns a predictable notation form of indices for accessing rows and columns in the ``SQLDataModel`` from varying indexing input types.
+        Utility function used to validate row selection and return parsed values.
+
+        Parameters:
+            ``row`` (int|slice|Iterable[int]): The row selection to validate, argument should reflect the integer indexes of the rows to select.
+            ``unmodified`` (bool, optional): Whether ``row`` should be returned as originally indexed. Default is False, returning as tuple.
+
+        Raises:
+            ``TypeError``: If ``row`` is not one of type 'int', 'slice' or 'Iterable' representing the integer index of row(s) to select.
+            ``IndexError``: If ``row`` is outside of current model range bounded by :py:attr:`SQLDataModel.row_count` whether positively or negatively indexed.
+            
+        Returns:
+            ``tuple[int]``: A tuple containing the validated row values resulting from the selection.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Create a 10 rows x 3 column model
+            sdm = SQLDataModel.from_shape(shape=(10, 3), headers=['A','B','C'])
+            
+            # Various row index types
+            row_indicies = [
+                2,
+                -3,
+                {4,5,8},
+                [-1,5,0],
+                slice(2, 5),
+                slice(-8, -1, 2),
+            ]
+
+            # Loop over the indicies
+            for row_index in row_indicies:
+                # Print original and validated indexes
+                print(f"{row_index} --> {sdm._validate_row(row_index)}")
+
+        This will output the original and validated row indexes:
+
+        ```text
+            2 --> (2,)
+            -3 --> (7,)
+            {8, 4, 5} --> (8, 4, 5)
+            [-1, 5, 0] --> (9, 5, 0)
+            slice(2, 5, None) --> (2, 3, 4)
+            slice(-8, -1, 2) --> (2, 4, 6, 8)
+        ```
+
+        Note:
+            - Rows are referenced by their integer index and not their value, as such ``row = 0`` and ``row = -1`` will always return the first and last rows, respectively.
+            - An input of ``row`` == :py:attr:`SQLDataModel.row_count` is allowed to accomodate the append row syntax of ``sdm[sdm.row_count] = (values)``.
+            - See :meth:`SQLDataModel._validate_column()` for validating column indicies and returning the corresponding headers.
+        """
+        if not isinstance(row, (int,slice,Iterable)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(row).__name__}', rows must be referenced by their integer index or by an iterable of indexes as type 'int'")
+            )        
+        if isinstance(row, int):
+            try:
+                validated_row = self.indicies[row]
+            except IndexError:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row}', index must be within current model row range of '0:{self.row_count}' ")
+                ) from None
+            return (validated_row,) if not unmodified else row
+        elif isinstance(row, slice):
+            validated_row = self.indicies[row]
+            if (num_rows_in_scope := len(validated_row)) < 1:
+                raise IndexError(
+                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
+                )
+            return validated_row if not unmodified else row
+        else: # Iterable[int]
+            try:
+                validated_row = tuple([self.indicies[rid] for rid in row])
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e}, rows must be referenced by their integer index within current model row range of '0:{self.row_count}'")
+                ).with_traceback(e.__traceback__) from None                
+            return validated_row if not unmodified else row
+        
+    def _validate_column(self, column:str|int|slice|Iterable, unmodified:bool=False) -> list[str]:
+        """
+        Utility function used to validate column selection and return parsed values.
+
+        Parameters:
+            ``column`` (str|int|slice|Iterable): The column selection to validate, argument should reflect the integer indexes or column names.
+            ``unmodified`` (bool, optional): Whether ``column`` should be returned as originally indexed. Default is False, returning as list.
+        
+        Raises:
+            ``TypeError``: If ``column`` is not one of type 'str', 'int', 'slice' or 'Iterable' representing the integer index or values of column(s) to select.
+            ``IndexError``: If ``column`` is outside of current model range bounded by :py:attr:`SQLDataModel.column_count` whether positively or negatively indexed.
+            ``DimensionError``: If ``len(column)`` is greater than :py:attr:`SQLDataModel.column_count` when provided as an iterable or sequence.
+            
+        Returns:
+            ``list[str]``: A list containing the validated column values resulting from the selection.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Create a 10 rows x 6 column model
+            sdm = SQLDataModel.from_shape((10, 6), headers=['A','B','C','D','E','F'])
+            
+            # Various column index types
+            column_indicies = [
+                2,
+                -3,
+                ['A','B'],
+                (4, 5, 1),
+                [-1, 2, 0],
+                slice(1, 3),
+                slice(-6, -1, 2),
+            ]
+
+            # Loop over the indicies
+            for column_index in column_indicies:
+                # Print original and validated indexes
+                print(f"{column_index} --> {sdm._validate_column(column_index)}")
+
+        This will output the original and validated column indexes:
+
+        ```text
+            2 --> ['C']
+            -3 --> ['D']
+            ['A', 'B'] --> ['A', 'B']
+            (4, 5, 1) --> ['E', 'F', 'B']
+            [-1, 2, 0] --> ['F', 'C', 'A']
+            slice(1, 3, None) --> ['B', 'C']
+            slice(-6, -1, 2) --> ['A', 'C', 'E']
+        ```
+
+        Note:
+            - Columns are referenced by their integer index or directly by their value as a column name, when using integers ``column = 0`` and ``column = -1`` will always return the first and last columns, respectively.
+            - Validated column outputs will be returned as a list containing the results of the indexed columns found at :py:attr:`SQLDataModel.headers` with original ordering intact.
+            - See :meth:`SQLDataModel._validate_row()` for validating row indicies and returning the corresponding values.        
+        """
+        if not isinstance(column, (str,int,slice,Iterable)):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', columns must be referenced by name as type 'str' or by their index as type 'int'")
+            )
+        if isinstance(column, (str,int,slice)):
+            if isinstance(column, int):
+                try:
+                    validated_column = self.headers[column]
+                except IndexError:
+                    raise IndexError(
+                        SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
+                    ) from None
+                return [validated_column] if not unmodified else column
+            elif isinstance(column, str):
+                if column not in self.headers:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
+                    )
+                return [column] if not unmodified else column
+            else: # Slice
+                validated_column = self.headers[column]
+                if len(validated_column) < 1:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: no columns selected, at least 1 valid column selection is required when specifying column indicies")
+                    )
+                return validated_column if not unmodified else column
+        validated_column = []
+        # Iterable[str|int]
+        if len(column) > self.column_count:
+            raise DimensionError(
+                SQLDataModel.ErrorFormat(f"DimensionError: invalid column dimensions '{len(column)} > {self.column_count}', provided column count exceeds current model dimensions")
+                )
+        for col in column: 
+            if isinstance(col, int):
+                try:
+                    validated_column.append(self.headers[col])
+                except IndexError:
+                    raise IndexError(
+                        SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{col}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
+                    ) from None
+            elif isinstance(col, str):
+                if col not in self.headers:
+                    raise ValueError(
+                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', column must be in current model, use `get_headers()` to view valid arguments")
+                    )
+                validated_column.append(col)
+            else:
+                raise TypeError(
+                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(col).__name__}', columns must be referenced by name as type 'str' or by their index as type 'int'")
+                )
+        return validated_column if not unmodified else column
+
+    def _validate_indicies(self, indicies) -> tuple[tuple[int], list[str]]:
+        """
+        Validates and returns a predictable notation form of indices for accessing rows and columns in the ``SQLDataModel`` from varying 2-dimensional ``(row, column)`` indexing input types.
+
+        Two dimensional indexing:
+            - ``tuple[row_index, column_index]``: Where row_index and column_index are defined below.
 
         Row indexing:
-              - int: Single row index.
-              - slice: Range of row indices.
-              - set: Discontiguous row indicies.
-              - tuple: Like set, discontiguous row indices.
+            - ``int``: Single integer index. E.g., ``sdm[0]`` or ``sdm[-1]``
+            - ``slice``: Range of row indices. E.g., ``sdm[2:5]`` or ``sdm[-8:-1]``
+            - ``set[int]``: Discontiguous row indicies. E.g., ``sdm[{13, 7, 42}]``
+            - ``tuple[int]``: Like set, discontiguous row indices. E.g., ``sdm[(-1, 9, 11)]``
         
         Column indexing:
-              - str: Single column name.
-              - list: List of column names.
-              - tuple[int|slice, str|list]: Two-dimensional indexing with rows and columns.
+            - ``int``: Single integer index. E.g., ``sdm[:, 0]`` or ``sdm[:, -1]``
+            - ``str``: Single column name. E.g., ``sdm['Col A']`` or ``sdm['Name']``
+            - ``list[str]``: List of column names. E.g., ``sdm[:,['A', 'B', 'F']]``
+            - ``list[int]``: List of column indicies. E.g., ``sdm[:,[0, 3, 4, 9, -2]]``
 
         Parameters:
             ``indicies``: Specifies the indices for rows and columns.
@@ -12292,287 +12611,76 @@ class SQLDataModel:
             ``IndexError``: If the column indices are outside the current column range or if a column is not found in the current model headers when indexed by ``int``.
 
         Returns:
-            ``tuple``: A tuple containing validated row indices and column indices.
+            ``tuple[tuple[int], list[str]]``: A tuple containing validated row indices as a tuple and validated column indices as a list of column names.
 
         Example::
 
             from SQLDataModel import SQLDataModel
 
-            headers = ['idx', 'first', 'last', 'age']
-            data = [
-                (0, 'john', 'smith', 27)
-                ,(1, 'sarah', 'west', 29)
-                ,(2, 'mike', 'harlin', 36)
-                ,(3, 'pat', 'douglas', 42)
+            # Create a 10 rows by 4 columns model
+            sdm = SQLDataModel.from_shape(shape=(10,4), headers=['A','B','C','D'])
+
+            # Index pairs to validate
+            input_idx = [
+                (0, 'A'),
+                (-1, ['B','D']),
+                ({2,-7,-2}, (-2,-1)),
+                (slice(-6,-1,2), slice(0,3))
             ]
 
-            # Create the sample model
-            sdm = SQLDataModel(data,headers)
+            # Store validated pairs
+            valid_idx = []
 
-            # Example 1: Validate a single row index
-            validated_row_index, validated_columns = sdm.validate_indicies(3)
+            # Loop over the [row, col] pairs
+            for row, col in input_idx:
+                # Validated and store the pairs
+                valid_idx.append(sdm._validate_indicies((row, col)))
+            
+            # View input and validated pairs
+            for original, validated in zip(input_idx, valid_idx):
+                print(f"{original} --> {validated}") 
 
-            # Example 2: Validate a range of row indices and a list of column names
-            validated_row_indices, validated_columns = sdm.validate_indicies((0, 2, 3), ['first', 'last'])
+        This will output both the input and validated row, column index pairs:
 
-            # Example 3: Validate a slice for row indices and a single column name
-            validated_row_indices, validated_columns = sdm.validate_indicies(slice(1, 2), 'col_3')
-
-            # Example 4: Validate two-dimensional indexing with rows and columns
-            validated_row_indices, validated_columns = sdm.validate_indicies((slice(0, 3), ['first', 'last']))
-
-        Note:
-            - For two-dimensional indexing, the first element represents rows, and the second element represents columns.
-            - Strict validation ensures that column names are checked against the current model headers.
-        """        
-        ### single row index ###
-        if isinstance(indicies, int):
-            row_index = indicies
-            try:
-                row_index = self.indicies[row_index] # TODO: RIMOD
-            except IndexError:
-                if row_index != self.row_count: # auto add escape, ok to be out of range if row index == row count since implies append row
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_index}', index must be within current model row range of '0:{self.row_count}' ")
-                    ) from None
-            return (row_index, self.headers)
-        ### single row slice index ###
-        if isinstance(indicies, slice):
-            rows_in_scope = self.indicies[indicies]
-            if (num_rows_in_scope := len(rows_in_scope)) < 1:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                )
-            return (rows_in_scope, self.headers)
-        ### single set of row indicies ###
-        if isinstance(indicies, set):
-            if (len_set := len(indicies)) < 1:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient length '{len_set}', provided set of indicies returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
-                )
-            return (tuple([self.indicies[rid] for rid in indicies]), self.headers)
-        ### columns by str or list of str ###
-        if isinstance(indicies, (str,list)):
-            col_index = indicies
-            if isinstance(indicies, str):
-                col_index = [col_index]
-            if not all(isinstance(col, str) for col in col_index):
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid column index type '{type(col_index[0]).__name__}' received, use `.get_headers()` to view valid column arguments")
-                )
-            for col in col_index:
-                if col not in self.headers and col != self.sql_idx:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns indicies are required, use `get_headers()` to view current valid arguments")
-                    )
-            return (self.indicies, col_index) # +REVINDEX
-        ### indexing by rows and columns ###        
-        if not isinstance(indicies, tuple):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid indexing type '{type(indicies).__name__}', indexing the model must be done using two-dimensional [rows,columns] parameters with 'int' or 'slice' types")
-            )
-        if (arg_length := len(indicies)) != 2:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid indexing args, expected no more than 2 indicies for [row, column] but '{arg_length}' were received")
-            )
-        row_indicies, col_indicies = indicies
-        ### rows first ###
-        if not isinstance(row_indicies, (int,tuple,slice,set)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type for row indexing '{type(row_indicies).__name__}', rows must be indexed by type 'int' or 'slice'")
-            )
-        if isinstance(row_indicies, set):
-            row_indicies = tuple(row_indicies)        
-        if isinstance(row_indicies, int):
-            try:
-                validated_row_indicies = self.indicies[row_indicies] # TODO: RIMOD
-            except IndexError:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row_indicies}', index must be within current model row range of '{min(self.indicies)}:{max(self.indicies)}' ")
-                ) from None
-        elif isinstance(row_indicies, tuple): # tuple of disconnected row indicies
-            if not all(isinstance(row, int) for row in row_indicies):
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid row index type '{type(row_indicies[0]).__name__}', rows must be indexed by type 'int'")
-                )
-            validated_row_indicies = tuple([self.indicies[rid] for rid in row_indicies])
-        else: # is slice
-            try:
-                rows_in_scope = self.indicies[row_indicies]
-            except ValueError:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: insufficient rows indexed, provided row index returns no valid rows within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
-                ) from None
-            if (num_rows_in_scope := len(rows_in_scope)) < 1:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '{min(self.indicies)}:{max(self.indicies)}'")
-                )
-            validated_row_indicies = rows_in_scope
-        ### then columns ###
-        if not isinstance(col_indicies, (int,slice,tuple,str,list)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies).__name__}', for column indexing one of 'slice', 'list' or 'str' type is required")
-                )        
-        if isinstance(col_indicies, int):
-            try:
-                col_indicies = [self.headers[col_indicies]]
-            except IndexError as e:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid columns provided, {e} of current model headers, use `get_headers()` to view current valid arguments")
-                ) from None
-        elif isinstance(col_indicies, slice):
-            col_indicies = self.headers[col_indicies]
-            if (len_col_args := len(col_indicies)) < 1:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient columns '{len_col_args}', provided column slice returned no valid column indicies within current model range of '0:{self.column_count}'")
-                )
-        elif isinstance(col_indicies, tuple):
-            col_indicies = list(col_indicies)
-        elif isinstance(col_indicies, str):
-            col_indicies = [col_indicies]
-        if not all(isinstance(col, (int,str)) for col in col_indicies):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid column indexing type '{type(col_indicies[0].__name__)}', column indexing must be done by 'int' or 'str' types, use `.get_headers()` to view current valid arguments")
-            )
-        if all(isinstance(col, int) for col in col_indicies):
-            try:
-                col_indicies = [self.headers[i] for i in col_indicies]
-            except IndexError as e:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid columns provided, {e} of current model headers, use `get_headers()` to view current valid arguments")
-                ) from None                
-        ### columns validated to be a list of str, not neccessarily currnet columns, but thats ok for setitem method which should be allowed to create columns ###
-        for col in col_indicies:
-            if col not in self.headers and col != self.sql_idx:
-                raise ValueError(
-                    SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', valid columns indicies are required, use `get_headers()` to view current valid arguments")
-                )
-        validated_column_indicies = col_indicies
-        return (validated_row_indicies, validated_column_indicies)  
-
-    def astype(self, dtype:Callable|Type|Literal['bool','bytes','date','datetime','float','int','None','str']) -> SQLDataModel:
-        """
-        Casts the model data into the specified python ``dtype``.
-
-        Parameters:
-            ``dtype`` (Callable|Type|Literal['bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str']): The target python data type to cast the values to.
-
-        Raises:
-            ``ValueError``: If ``dtype`` is a string and not one of 'bool', 'bytes', 'datetime', 'float', 'int', 'None', 'str'.
-            ``TypeError``: If ``dtype`` is a ``Type`` object that does not map to the current values, such as trying to convert a string column using the built-in ``float`` type.
-
-        Returns:
-            ``SQLDataModel``: The data casted as the specified type as a new ``SQLDataModel``.
-
-        Warning:
-            - Type casting will coerce any nonconforming values to the ``dtype`` being set, this means data will be lost if casting values to incompatible types.
-        
-        Example::
-
-            from SQLDataModel import SQLDataModel
-
-            # Sample data
-            headers = ['Name', 'Age', 'Height', 'Hired']
-            data = [
-                ('John', 30, 175.3, 'True'), 
-                ('Alice', 28, 162.0, 'True'), 
-                ('Travis', 35, 185.8, 'False')
-            ]    
-
-            # Create the model
-            sdm = SQLDataModel(data, headers)
-
-            # See what we're working with
-            print(sdm)
-
-        This will output:
-
-        ```shell
-            ┌────────┬──────┬─────────┬───────┐
-            │ Name   │  Age │  Height │ Hired │
-            ├────────┼──────┼─────────┼───────┤
-            │ John   │   30 │  175.30 │ True  │
-            │ Alice  │   28 │  162.00 │ True  │
-            │ Travis │   35 │  185.80 │ False │
-            └────────┴──────┴─────────┴───────┘
-            [3 rows x 4 columns]
-        ```
-        
-        We can return the values as new types or save them to a column:
-
-        ```python
-            # Convert the string based 'Hired' column to boolean values
-            sdm['Hired'] = sdm['Hired'].astype('bool')
-
-            # Let's also create a new 'Height' column, this time as an integer
-            sdm['Height int'] = sdm['Height'].astype('int')
-
-            # See the new values and their types
-            print(sdm)
-        ```
-        
-        This will output:
-
-        ```shell
-            ┌────────┬──────┬─────────┬───────┬────────────┐
-            │ Name   │  Age │  Height │ Hired │ Height int │
-            ├────────┼──────┼─────────┼───────┼────────────┤
-            │ John   │   30 │  175.30 │ 1     │        175 │
-            │ Alice  │   28 │  162.00 │ 1     │        162 │
-            │ Travis │   35 │  185.80 │ 0     │        185 │
-            └────────┴──────┴─────────┴───────┴────────────┘
-            [3 rows x 5 columns]
-        ```        
-        
-        Types can also be passed directly to ``dtype``:
-
-        ```python
-            # Convert 'Age' directly to float using the built-in type:
-            sdm['Age float'] = sdm['Age'].astype(float)
-
-            # View updated model
-            print(sdm)
-        ```
-
-        This will output the result of mapping the built-in ``float`` type to 'Age' as a new column:
-
-        ```shell
-            ┌────────┬─────┬─────────┬───────┬────────────┬───────────┐
-            │ Name   │ Age │  Height │ Hired │ Height int │ Age float │
-            ├────────┼─────┼─────────┼───────┼────────────┼───────────┤
-            │ John   │  30 │  175.30 │ 1     │        175 │     30.00 │
-            │ Alice  │  28 │  162.00 │ 1     │        162 │     28.00 │
-            │ Travis │  35 │  185.80 │ 0     │        185 │     35.00 │
-            └────────┴─────┴─────────┴───────┴────────────┴───────────┘
-            [3 rows x 6 columns]
+        ```text
+            (0, 'A') --> ((0,), ['A'])
+            (-1, ['B', 'D']) --> ((9,), ['B', 'D'])
+            ({-7, 2, -2}, (-2, -1)) --> ((3, 2, 8), ['C', 'D'])
+            (slice(-6, -1, 2), slice(0, 3, None)) --> ((4, 6, 8), ['A', 'B', 'C'])
         ```
 
         Change Log:
-            - Version 0.7.6 (2024-06-16):
-                - Modified to allow ``Callable`` or ``Type`` to be provided directly for ``dtype`` argument to map to data and return as new model for broader type conversion.
-        
+            - Version 0.8.1 (2024-06-23):
+                - Modified implementation to leverage new utility methods :meth:`SQLDataModel._validate_row()` and :meth:`SQLDataModel._validate_column()` to improve performance.
+
         Note:
-            - Unless the returned values are saved as a new column, using this method does not change the underlying column's type currently assigned to it, to modify the column type use :meth:`SQLDataModel.set_column_dtypes()` instead.
-            - Any ``None`` or ``null`` values encountered will not be coerced to the specified ``dtype``, see :meth:`SQLDataModel.fillna()` for handling and filling null values appropriately.
-            - When passing a type directly, ``dtype=Type``, the type must be a ``Callable`` that can be mapped directly to a value like the built-in ``str``, ``int``, ``float`` and ``bool`` types.
-        """
-        if dtype in ('bool','bytes','date','datetime','float','int','None','str'):
-            str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
-            sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
-            dtype_dict = {col:dtype for col in self.headers}
-            return self.execute_fetch(sql_stmt, dtypes=dtype_dict)                
-        elif isinstance(dtype, (Callable,Type)):
-            try:
-                data = [tuple([dtype(val) for val in row]) for row in self.data(strict_2d=True, include_headers=False)]
-            except Exception as e:
-                raise type(e)(
-                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to return as type '{dtype}'")
-                ).with_traceback(e.__traceback__) from None
-            return type(self)(data, headers=self.headers, infer_types=False, **self._get_display_args())
-        else:
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{dtype}', argument for `dtype` must be a `Callable` type or one of 'bool','bytes','date','datetime','float','int','None' or 'str'")
+            - This method expects indicies to be provided as a two dimensional pair of ``(row, column)`` indicies, with exceptions made for single row integer indexes or single column names.
+            - Use empty slice notation to include all indicies from a given dimension, for example ``sdm[:, :]`` will always return the full model by accessing all rows and all columns.
+            - See :meth:`SQLDataModel.__getitem__()`` and :meth:`SQLDataModel.__setitem__()`` for implementations relying on this method.
+            - See :meth:`SQLDataModel._validate_row()`` for one dimensional validation against a single ``row`` index.
+            - See :meth:`SQLDataModel._validate_column()`` for one dimensional validation against a single ``column`` index.
+        """ 
+        # Single row index
+        if isinstance(indicies, (int, slice, set)):
+            validated_rows = self._validate_row(indicies)
+            return (validated_rows, self.headers)        
+        # Single col index
+        if isinstance(indicies, (list, str)):
+            validated_columns = self._validate_column(indicies)
+            return (self.indicies, validated_columns)
+        if not isinstance(indicies, tuple):
+            raise TypeError(
+                SQLDataModel.ErrorFormat(f"TypeError: invalid indexing type '{type(indicies).__name__}', indexing args must be compatible with two-dimensional `sdm[rows, columns]` parameters with correct types")
             )
+        if (arg_length := len(indicies)) != 2:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid indexing args, expected no more than 2 indicies for `sdm[row, column]` but '{arg_length}' were received")
+            )
+        # Two dimensional row, column indicies
+        input_rows, input_cols = indicies
+        validated_rows = self._validate_row(input_rows)
+        validated_cols = self._validate_column(input_cols)
+        return (validated_rows, validated_cols) 
 
 ###############################################################################################################
 ##################################### string methods and value comparison #####################################
@@ -13055,192 +13163,3 @@ class SQLDataModel:
         """
         self_data = self.data(strict_2d=True)
         return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0])))) 
-    
-    def _validate_row(self, row:int|slice|Iterable[int], unmodified:bool=False) -> tuple[int]:
-        """
-        Utility function used to validate row selection and return parsed values.
-
-        Parameters:
-            ``row`` (int|slice|Iterable[int]): The row selection to validate, argument should reflect the integer indexes of the rows to select.
-            ``unmodified`` (bool, optional): Whether ``row`` should be returned as originally indexed. Default is False, returning as tuple.
-
-        Raises:
-            ``TypeError``: If ``row`` is not one of type 'int', 'slice' or 'Iterable' representing the integer index of row(s) to select.
-            ``IndexError``: If ``row`` is outside of current model range bounded by :py:attr:`SQLDataModel.row_count` whether positively or negatively indexed.
-            
-        Returns:
-            ``tuple[int]``: A tuple containing the validated row values resulting from the selection.
-
-        Example::
-
-            from SQLDataModel import SQLDataModel
-
-            # Create a 10 rows x 3 column model
-            sdm = SQLDataModel.from_shape(shape=(10, 3), headers=['A','B','C'])
-            
-            # Various row index types
-            row_indicies = [
-                2,
-                -3,
-                {4,5,8},
-                [-1,5,0],
-                slice(2, 5),
-                slice(-8, -1, 2),
-            ]
-
-            # Loop over the indicies
-            for row_index in row_indicies:
-                # Print original and validated indexes
-                print(f"{row_index} --> {sdm._validate_row(row_index)}")
-
-        This will output the original and validated row indexes:
-
-        ```text
-            2 --> (2,)
-            -3 --> (7,)
-            {8, 4, 5} --> (8, 4, 5)
-            [-1, 5, 0] --> (9, 5, 0)
-            slice(2, 5, None) --> (2, 3, 4)
-            slice(-8, -1, 2) --> (2, 4, 6, 8)
-        ```
-
-        Note:
-            - Rows are referenced by their integer index and not their value, as such ``row = 0`` and ``row = -1`` will always return the first and last rows, respectively.
-            - An input of ``row`` == :py:attr:`SQLDataModel.row_count` is allowed to accomodate the append row syntax of ``sdm[sdm.row_count] = (values)``.
-            - See :meth:`SQLDataModel._validate_column()` for validating column indicies and returning the corresponding headers.
-        """
-        if not isinstance(row, (int,slice,Iterable)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(row).__name__}', rows must be referenced by their integer index or by an iterable of indexes as type 'int'")
-            )        
-        if isinstance(row, int):
-            try:
-                validated_row = self.indicies[row]
-            except IndexError:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: invalid row index '{row}', index must be within current model row range of '0:{self.row_count}' ")
-                ) from None
-            return (validated_row,) if not unmodified else row
-        elif isinstance(row, slice):
-            validated_row = self.indicies[row]
-            if (num_rows_in_scope := len(validated_row)) < 1:
-                raise IndexError(
-                    SQLDataModel.ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
-                )
-            return validated_row if not unmodified else row
-        else: # Iterable[int]
-            try:
-                validated_row = tuple([self.indicies[rid] for rid in row])
-            except Exception as e:
-                raise type(e)(
-                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e}, rows must be referenced by their integer index within current model row range of '0:{self.row_count}'")
-                ).with_traceback(e.__traceback__) from None                
-            return validated_row if not unmodified else row
-        
-    def _validate_column(self, column:str|int|slice|Iterable, unmodified:bool=False) -> list[str]:
-        """
-        Utility function used to validate column selection and return parsed values.
-
-        Parameters:
-            ``column`` (str|int|slice|Iterable): The column selection to validate, argument should reflect the integer indexes or column names.
-            ``unmodified`` (bool, optional): Whether ``column`` should be returned as originally indexed. Default is False, returning as list.
-        
-        Raises:
-            ``TypeError``: If ``column`` is not one of type 'str', 'int', 'slice' or 'Iterable' representing the integer index or values of column(s) to select.
-            ``IndexError``: If ``column`` is outside of current model range bounded by :py:attr:`SQLDataModel.column_count` whether positively or negatively indexed.
-            ``DimensionError``: If ``len(column)`` is greater than :py:attr:`SQLDataModel.column_count` when provided as an iterable or sequence.
-            
-        Returns:
-            ``list[str]``: A list containing the validated column values resulting from the selection.
-
-        Example::
-
-            from SQLDataModel import SQLDataModel
-
-            # Create a 10 rows x 6 column model
-            sdm = SQLDataModel.from_shape((10, 6), headers=['A','B','C','D','E','F'])
-            
-            # Various column index types
-            column_indicies = [
-                2,
-                -3,
-                ['A','B'],
-                (4, 5, 1),
-                [-1, 2, 0],
-                slice(1, 3),
-                slice(-6, -1, 2),
-            ]
-
-            # Loop over the indicies
-            for column_index in column_indicies:
-                # Print original and validated indexes
-                print(f"{column_index} --> {sdm._validate_column(column_index)}")
-
-        This will output the original and validated column indexes:
-
-        ```text
-            2 --> ['C']
-            -3 --> ['D']
-            ['A', 'B'] --> ['A', 'B']
-            (4, 5, 1) --> ['E', 'F', 'B']
-            [-1, 2, 0] --> ['F', 'C', 'A']
-            slice(1, 3, None) --> ['B', 'C']
-            slice(-6, -1, 2) --> ['A', 'C', 'E']
-        ```
-
-        Note:
-            - Columns are referenced by their integer index or directly by their value as a column name, when using integers ``column = 0`` and ``column = -1`` will always return the first and last columns, respectively.
-            - Validated column outputs will be returned as a list containing the results of the indexed columns found at :py:attr:`SQLDataModel.headers` with original ordering intact.
-            - See :meth:`SQLDataModel._validate_row()` for validating row indicies and returning the corresponding values.        
-        """
-        if not isinstance(column, (str,int,slice,Iterable)):
-            raise TypeError(
-                SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(column).__name__}', columns must be referenced by name as type 'str' or by their index as type 'int'")
-            )
-        if isinstance(column, (str,int,slice)):
-            if isinstance(column, int):
-                try:
-                    validated_column = self.headers[column]
-                except IndexError:
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{column}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
-                    ) from None
-                return [validated_column] if not unmodified else column
-            elif isinstance(column, str):
-                if column not in self.headers:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{column}', column must be in current model, use `get_headers()` to view valid arguments")
-                    )
-                return [column] if not unmodified else column
-            else: # Slice
-                validated_column = self.headers[column]
-                if len(validated_column) < 1:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: no columns selected, at least 1 valid column selection is required when specifying column indicies")
-                    )
-                return validated_column if not unmodified else column
-        validated_column = []
-        # Iterable[str|int]
-        if len(column) > self.column_count:
-            raise DimensionError(
-                SQLDataModel.ErrorFormat(f"DimensionError: invalid column dimensions '{len(column)} > {self.column_count}', provided column count exceeds current model dimensions")
-                )
-        for col in column: 
-            if isinstance(col, int):
-                try:
-                    validated_column.append(self.headers[col])
-                except IndexError:
-                    raise IndexError(
-                        SQLDataModel.ErrorFormat(f"IndexError: invalid column index '{col}', column index is outside of current model range '0:{self.column_count}', use `get_headers()` to veiw current valid arguments")
-                    ) from None
-            elif isinstance(col, str):
-                if col not in self.headers:
-                    raise ValueError(
-                        SQLDataModel.ErrorFormat(f"ValueError: column not found '{col}', column must be in current model, use `get_headers()` to view valid arguments")
-                    )
-                validated_column.append(col)
-            else:
-                raise TypeError(
-                    SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(col).__name__}', columns must be referenced by name as type 'str' or by their index as type 'int'")
-                )
-        return validated_column if not unmodified else column
