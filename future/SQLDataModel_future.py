@@ -5795,12 +5795,13 @@ class SQLDataModel:
         columns = ([x[0] for x in res.description[1:]] if index else [x[0] for x in res.description]) if include_headers else None
         return _pd.DataFrame(data=data,columns=columns,index=indicies)
 
-    def to_parquet(self, filename:str, **kwargs) -> None:
+    def to_parquet(self, filename:str, index:bool=True, **kwargs) -> None:
         """
         Writes the current SQLDataModel to the specified parquet filename.
 
         Parameters:
             ``filename`` (str): The file path to save the parquet file, e.g., ``filename = 'user/data/output.parquet'``.
+            ``index`` (bool, optional): Whether or not the SQLDataModel index should be included in the export. Default is True.
             ``**kwargs``: Additional keyword arguments to pass to the pyarrow ``write_table`` function.
 
         Raises:
@@ -5847,6 +5848,10 @@ class SQLDataModel:
             [3 rows x 3 columns]        
         ```
 
+        Change Log:
+            - Version 0.8.2 (2024-06-24):
+                - Added ``index`` parameter to toggle inclusion of SQLDataModel ``index`` column for greater flexibility and package consistency to similar methods.
+
         Note:
             - The ``pyarrow`` package is required to use this method as well as the :meth:`SQLDataModel.from_parquet()` method.
             - The :meth:`SQLDataModel.to_dict()` method is used prior to writing to parquet to convert the ``SQLDataModel`` into a dictionary suitable for parquet Table format.
@@ -5861,7 +5866,7 @@ class SQLDataModel:
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid parquet file path")
             )
         try:
-            pqtable = _pa.Table.from_pydict(self.to_dict(orient='columns'))
+            pqtable = _pa.Table.from_pydict(self.to_dict(orient='columns', index=index))
         except Exception as e:
             raise type(e)(
                 SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to write parquet file")
