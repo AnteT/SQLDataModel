@@ -4329,11 +4329,22 @@ class SQLDataModel:
             sdm_table = SQLDataModel.from_sql("my_table", con)
         ```
 
+        Change Log:
+            - Version 0.8.2 (2024-06-24):
+                - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
+
         Note:
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
             - The ``dtypes``, if provided, are only applied to ``sqlite3`` connection objects as remaining supported connections implement SQL to python adapters.
             - See related :meth:`SQLDataModel.to_sql()` for writing to SQL database connections.
         """
+        if isinstance(con, str):
+            try:
+                con = sqlite3.connect(con)
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
+                ).with_traceback(e.__traceback__) from None        
         if dtypes is not None and not isinstance(dtypes, dict):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', argument for ``dtypes`` must be of type 'dict' representing 'column': 'python dtype' values to assign model")
@@ -6221,6 +6232,9 @@ class SQLDataModel:
         ```
 
         Change Log:
+            - Version 0.8.2 (2024-06-24):
+                - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
+        
             - Version 0.3.0 (2024-03-31):
                 - Renamed arguments ``extern_con``: ``con``, ``replace_existing``: ``if_exists``, ``include_index``: ``index``.
                 - Added ``primary_key`` argument for specifying a primary key column for table schema.
@@ -6234,6 +6248,13 @@ class SQLDataModel:
             - See relevant module documentation for additional details or information pertaining to specific database or connection dialect being used.
             - See related :meth:`SQLDataModel.from_sql()` for creating ``SQLDataModel`` from existing SQL database connections.
         """    
+        if isinstance(con, str):
+            try:
+                con = sqlite3.connect(con)
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
+                ).with_traceback(e.__traceback__) from None     
         try:
             ext_c = con.cursor()
         except Exception as e:
