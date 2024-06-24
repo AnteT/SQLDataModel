@@ -12656,9 +12656,9 @@ class SQLDataModel:
         Note:
             - This method expects indicies to be provided as a two dimensional pair of ``(row, column)`` indicies, with exceptions made for single row integer indexes or single column names.
             - Use empty slice notation to include all indicies from a given dimension, for example ``sdm[:, :]`` will always return the full model by accessing all rows and all columns.
-            - See :meth:`SQLDataModel.__getitem__()`` and :meth:`SQLDataModel.__setitem__()`` for implementations relying on this method.
-            - See :meth:`SQLDataModel._validate_row()`` for one dimensional validation against a single ``row`` index.
-            - See :meth:`SQLDataModel._validate_column()`` for one dimensional validation against a single ``column`` index.
+            - See :meth:`SQLDataModel.__getitem__()` and :meth:`SQLDataModel.__setitem__()` for implementations relying on this method.
+            - See :meth:`SQLDataModel._validate_row()` for one dimensional validation against a single ``row`` index.
+            - See :meth:`SQLDataModel._validate_column()` for one dimensional validation against a single ``column`` index.
         """ 
         # Single row index
         if isinstance(indicies, (int, slice, set)):
