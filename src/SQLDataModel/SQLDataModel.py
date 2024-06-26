@@ -3500,7 +3500,7 @@ class SQLDataModel:
         return cls(data=data, headers=headers, infer_types=infer_types)
 
     @classmethod
-    def from_latex(cls, latex_source:str, table_identifier:int=1, encoding:str='utf-8', **kwargs) -> SQLDataModel:
+    def from_latex(cls, latex_source:str, table_identifier:int=0, encoding:str='utf-8', **kwargs) -> SQLDataModel:
         """
         Creates a new ``SQLDataModel`` instance from the provided LaTeX file or raw literal.
         
@@ -3508,7 +3508,7 @@ class SQLDataModel:
             ``latex_source`` (str): The LaTeX source containing one or more LaTeX tables.
                 If ``latex_source`` is a valid system filepath, source will be treated as a ``.tex`` file and parsed.
                 If ``latex_source`` is not a valid filepath, source will be parsed as raw LaTeX literal.
-            ``table_identifier`` (int, optional): The index position of the LaTeX table to extract. Default is 1.
+            ``table_identifier`` (int, optional): The zero-based index position of the LaTeX table to extract. Default is 0.
             ``encoding`` (str, optional): The file encoding to use if source is a LaTex filepath. Default is 'utf-8';.
             ``**kwargs``: Additional keyword arguments to be passed to the ``SQLDataModel`` constructor.
 
@@ -3626,12 +3626,16 @@ class SQLDataModel:
             └──────────┴──────────┘
             [2 rows x 2 columns]
         ```
+        
+        Change Log:
+            - Version 0.8.3 (2024-06-26):
+                - Modified ``table_identifier`` to use zero-based indexing to align with similar table extraction implementationss across package.
 
         Note:
             - LaTeX tables are identified based on the presence of tabular environments: ``\\begin{tabular}...\\end{tabular}``.
-            - The ``table_identifier`` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
-            - The provided ``kwargs`` are passed to the ``SQLDataModel`` constructor for additional parameters to the instance returned.           
-
+            - The ``table_identifier`` specifies which table to extract when multiple tables are present, beginning at position '0' from the top of the source.
+            - The provided ``kwargs`` are passed to the ``SQLDataModel`` constructor for additional parameters to the instance returned.  
+            - See :meth:`SQLDataModel.to_latex()` for converting an existing SQLDataModel object to a LaTeX format.
         """
         if not isinstance(latex_source, str):
             raise TypeError(
@@ -3641,9 +3645,9 @@ class SQLDataModel:
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', expected `table_identifier` to be of type 'int' representing the index position of the LaTeX table")
             ) 
-        if table_identifier < 1:
+        if table_identifier < 0:
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_identifier}', argument for `table_identifier` must be an integer index for the table beginning at index '1' ")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_identifier}', argument for `table_identifier` must be an integer index for the table beginning at index '0' ")
             )
         if os.path.exists(latex_source):
             try:
@@ -3662,7 +3666,7 @@ class SQLDataModel:
             raise IndexError(
                 SQLDataModel.ErrorFormat(f"IndexError: found '{len(tables)}' LaTeX tables in `latex_source`, however none were found at provided `table_identifier` index '{table_identifier}'")
             )
-        target_table = tables[table_identifier - 1]
+        target_table = tables[table_identifier]
         target_table = target_table.replace(r'\\','')
         table = []
         for line in target_table.split('\n'):
