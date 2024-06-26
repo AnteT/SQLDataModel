@@ -70,7 +70,7 @@ class SQLDataModel:
         from SQLDataModel import SQLDataModel
         
         # Lets grab a random table from Wikipedia
-        sdm = SQLDataModel.from_html("https://en.wikipedia.org/wiki/FIFA_World_Cup", table_identifier=6)
+        sdm = SQLDataModel.from_html("https://en.wikipedia.org/wiki/FIFA_World_Cup", table_identifier=7)
 
         # Lets see what we found
         print(sdm)
@@ -3323,11 +3323,11 @@ class SQLDataModel:
         return SQLDataModel.from_dict(data_dict, **kwargs)
 
     @classmethod
-    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=0, infer_types:bool=True, **kwargs) -> SQLDataModel:
+    def from_html(cls, html_source:str, encoding:str='utf-8', table_identifier:int|str=1, infer_types:bool=True, **kwargs) -> SQLDataModel:
         """
         Parses HTML table element from one of three possible sources: web page at url, local file at path, raw HTML string literal.
         If ``table_identifier`` is not specified, the first <table> element successfully parsed is returned, otherwise if ``table_identifier`` is a ``str``, the parser will return the corresponding 'id' or 'name' HTML attribute that matches the identifier specified. 
-        If ``table_identifier`` is an ``int``, the parser will return the table matched as a sequential index after parsing all <table> elements from the top of the page down, starting at '0'. 
+        If ``table_identifier`` is an ``int``, the parser will return the table matched as a sequential index after parsing all <table> elements from the top of the page down, starting at '1', the first table found. 
         By default, the first <table> element found is returned if ``table_identifier`` is not specified.
 
         Parameters:
@@ -3336,7 +3336,7 @@ class SQLDataModel:
                 If is a valid file path, the argument is considered a local file and the table will be parsed from its html.
                 If is not a valid url or path, the argument is considered a raw HTML string and the table will be parsed directly from the input.
             ``encoding`` (str): The encoding to use for reading HTML when ``html_source`` is considered a valid url or file path (default is 'utf-8').
-            ``table_identifier`` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source (default is 0).
+            ``table_identifier`` (int | str): An identifier to specify which table to parse if there are multiple tables in the HTML source. Default is 1, returning the first table element found.
             ``infer_types`` (bool, optional): If column data types should be inferred in the return model. Default is True, meaning column types will be inferred otherwise are returned as 'str' types.
                 If is ``int``, identifier is treated as the indexed location of the <table> element on the page from top to bottom starting from zero and will return the corresponding position when encountered.
                 If is ``str``, identifier is treated as a target HTML 'id' or 'name' attribute to search for and will return the first case-insensitive match when encountered.
@@ -3363,8 +3363,8 @@ class SQLDataModel:
             # From URL
             url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
             
-            # Lets get the 94th table from the 1998 World Cup
-            sdm = SQLDataModel.from_html(url, table_identifier=94)
+            # Lets get the 95th table from the 1998 World Cup
+            sdm = SQLDataModel.from_html(url, table_identifier=95)
 
             # View result:
             print(sdm)
@@ -3387,6 +3387,7 @@ class SQLDataModel:
             └────┴─────────────┴────┴────┴────┴────┴────┴────┴────┴─────┴──────┘
             [8 rows x 11 columns]
         ```
+
         From Local File 
         ---------------
 
@@ -3417,6 +3418,7 @@ class SQLDataModel:
             └─────────────┴────────┴──────┘
             [8 rows x 3 columns]
         ```
+
         From Raw HTML
         -------------
 
@@ -3463,12 +3465,14 @@ class SQLDataModel:
             [3 rows x 2 columns]
         ```
 
+        Change Log:
+            - Version 0.9.0 (2024-06-26):
+                - Modified ``table_identifier`` default value to 1, changing from zero-based to one-based indexing for referencing target table in source to align with similar extraction methods throughout package.
         Note:
             - ``**kwargs`` passed to method are used in ``urllib.request.urlopen`` if ``html_source`` is being considered as a web url.
             - ``**kwargs`` passed to method are used in ``open`` if ``html_source`` is being considered as a filepath.
             - The largest row size encountered will be used as the ``column_count`` for the returned ``SQLDataModel``, rows will be padded with ``None`` if less.
             - See :meth:`SQLDataModel.generate_html_table_chunks()` for initial source chunking before content fed to :mod:`SQLDataModel.HTMLParser`.
-            
         """        
         if not isinstance(html_source, str):
             raise TypeError(
@@ -3565,6 +3569,7 @@ class SQLDataModel:
             └─────────┴──────┴─────────┘
             [3 rows x 3 columns]
         ```
+
         From LaTeX file
         ---------------
 
@@ -3631,7 +3636,6 @@ class SQLDataModel:
             - LaTeX tables are identified based on the presence of tabular environments: ``\\begin{tabular}...\\end{tabular}``.
             - The ``table_identifier`` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
             - The provided ``kwargs`` are passed to the ``SQLDataModel`` constructor for additional parameters to the instance returned.           
-
         """
         if not isinstance(latex_source, str):
             raise TypeError(
@@ -3738,6 +3742,7 @@ class SQLDataModel:
             [3 rows x 3 columns]
         
         ```
+
         From Markdown File
         ------------------
 
@@ -3750,6 +3755,7 @@ class SQLDataModel:
             # Create the model using the path
             sdm = SQLDataModel.from_markdown(markdown_file_path)
         ```
+
         Specifying Table Identifier
         ---------------------------
 
@@ -3797,7 +3803,6 @@ class SQLDataModel:
             - The ``table_identifier`` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
             - Escaped pipe characters ``\\|`` within the markdown are replaced with the HTML entity reference ``&vert;`` for proper parsing.
             - The provided ``kwargs`` are passed to the ``SQLDataModel`` constructor for additional parameters to the instance returned.
-
         """
         if not isinstance(markdown_source, str):
             raise TypeError(
@@ -3912,7 +3917,6 @@ class SQLDataModel:
         Note:
             - Numpy array must have '2' dimensions, the first representing the rows, and the second the columns.
             - If no headers are provided, default headers will be generated as 'col_N' where N represents the column integer index.
-
         """
         if not _has_np:
             raise ModuleNotFoundError(
@@ -3958,7 +3962,6 @@ class SQLDataModel:
 
         Note:
             - If ``headers`` are not provided, the existing pandas columns will be used as the new ``SQLDataModel`` headers.
-
         """
         if not _has_pd:
             raise ModuleNotFoundError(
@@ -4029,7 +4032,6 @@ class SQLDataModel:
             - The pyarrow package is required to use this method as well as the :meth:`SQLDataModel.to_parquet()` method.
             - Once the file is read into pyarrow.parquet, the ``to_pydict()`` method is used to pass the data to this package's :meth:`SQLDataModel.from_dict()` method.
             - Titanic parquet data used in example available at https://www.kaggle.com/code/taruntiwarihp/titanic-dataset
-
         """
         if not _has_pa:
             raise ModuleNotFoundError(
@@ -10722,9 +10724,9 @@ class SQLDataModel:
             └─────┴─────────┴──────────┴───────────┴───────────────────┘
             [5 rows x 4 columns]        
         ```    
+
         Note:
             - See related :meth:`SQLDataModel.head()` for the opposite, grabbing the top ``n_rows`` from the current model.
-
         """
         if not isinstance(n_rows, int):
             raise TypeError(

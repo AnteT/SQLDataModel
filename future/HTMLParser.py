@@ -22,9 +22,12 @@ class HTMLParser(HTMLParser):
         ``_is_finished`` (bool): Internal flag indicating whether parsing is finished.
         ``table_counter`` (int): Counter to keep track of the number of tables encountered during parsing.
         ``target_table`` (list): List to hold the data of the target table once found.
-
+    
+    Change Log:
+        - Version 0.9.0 (2024-06-26):
+            - Modified integer indexing of table elements found to use one-based indexing instead of zero-based indexing to align with similar method usage across package.
     """    
-    def __init__(self, *, convert_charrefs: bool = True, cell_sep:str=" ", table_identifier:int|str=0) -> None:
+    def __init__(self, *, convert_charrefs: bool = True, cell_sep:str=" ", table_identifier:int|str=1) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
         if table_identifier is None:
             table_identifier = 0
@@ -42,7 +45,7 @@ class HTMLParser(HTMLParser):
         self._ignore_next = False
         self.found_target = False
         self._is_finished = False
-        self.table_counter = -1
+        self.table_counter = 0
         self.target_table = []
 
     @staticmethod
@@ -156,9 +159,9 @@ class HTMLParser(HTMLParser):
         Note:
             - :py:mod:`SQLDataModel.from_html() <SQLDataModel.SQLDataModel.SQLDataModel.from_html>` uses this class to extract valid HTML tables from either web or file content.
             - If a row is found with mismatched dimensions, it will be filled with ``None`` values to ensure tabular output.
-        """        
+        """   
         if not self.found_target:
-            if (num_tables_found := self.table_counter + 1) < 1:
+            if (num_tables_found := self.table_counter) < 1:
                 if num_tables_found < 1:
                     raise ValueError(
                         HTMLParser.ErrorFormat(f"ValueError: zero table elements found in provided source, confirm `html_source` is valid HTML or check integrity of data")
