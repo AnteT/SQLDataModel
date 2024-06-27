@@ -1,8 +1,9 @@
 from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random, urllib.request
+from urllib3.util import parse_url as _urllib3_util_parse_url
 from collections.abc import Generator, Callable, Iterator, Iterable
 from collections import namedtuple
-from typing import Literal, Any, Type
+from typing import Literal, Any, Type, NamedTuple
 from ast import literal_eval
 from io import StringIO
 
@@ -998,6 +999,213 @@ class SQLDataModel:
                     flat_dict[col].append(None)
         return flat_dict
 
+    @staticmethod
+    def _parse_connection_url(url:str) -> NamedTuple:
+        """
+        Parses database connection url into component parameters and returns the parsed components as a NamedTuple
+
+        Parameters:
+            ``url`` (str): The url connection string provided in the format of ``'scheme://user:pass@host:port/path'``
+        
+        Raises:
+            ``ValueError``: If scheme is not provided or is not one of the currently supported driver formats 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'.
+
+        Returns:
+            ``ConnectionDetails`` (NamedTuple): The parsed details as ``ConnectionDetails('scheme', 'user', 'cred', 'host', 'port', 'db')``
+        
+        Supported Formats:
+            - SQLite using ``sqlite3`` with format ``'file:///path/to/database.db'``
+            - PostgreSQL using ``psycopg2`` with format ``'postgresql://user:pass@hostname:port/db'``
+            - SQL Server ODBC using ``pyodbc`` with format ``'mssql://user:pass@hostname:port/db'``
+            - Oracle using ``cx_Oracle`` with format ``'oracle://user:pass@hostname:port/db'``
+            - Teradata using ``teradatasql`` with format ``'teradata://user:pass@hostname:port/db'``
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # SQLite connection url
+            url = 'file:///home/database/users.db'
+
+            # Parse the connection properties
+            url_props = SQLDataModel._parse_connection_url(url)
+
+            # View attributes
+            print(url_props)
+        
+        This will output the connection details for a local SQLite database file:
+
+        ```text
+            ConnectionDetails(
+                scheme='file', user=None, cred=None, host=None, port=None, db='/home/database/users.db'
+            )
+        ```
+
+        PostgreSQL connections can be parsed from a valid format:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # PostgreSQL connection url
+            url = 'postgresql://scott:tiger@12.34.56.78:5432/pgdb'
+
+            # Parse the connection properties
+            url_props = SQLDataModel._parse_connection_url(url)
+
+            # View attributes
+            print(url_props)
+        ```
+
+        This will output the connection details for a PostgreSQL connection:
+
+        ```text
+            ConnectionDetails(
+                scheme='postgresql', user='scott', cred='tiger', host='12.34.56.78', port=5432, db='pgdb'
+            )
+        ```
+
+        Note:
+            - This method is used by :meth:`SQLDataModel._create_connection()` to parse details from url and create a connection object.
+            - This method can be used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parsed connection details when connection parameter provided as string.
+        """
+        ConnectionDetails = namedtuple('ConnectionDetails', ['scheme', 'user', 'cred','host', 'port', 'db'])
+        # valid_connection_drivers: sqlite|sqlite3, mssql|pyodbc, postgresql|psycopg2, oracle|cx_oracle or teradata|teradatasql
+        url_details = _urllib3_util_parse_url(url)
+        host = url_details.hostname
+        user = url_details.auth.split(':')[0] if url_details.auth is not None else None
+        cred = url_details.auth.split(':')[-1] if url_details.auth is not None else None
+        scheme = url_details.scheme
+        if scheme is None:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: missing scheme, a valid scheme must be provided as either 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'")
+            )
+        if scheme not in ('file', 'postgresql', 'mssql', 'oracle', 'teradata'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid scheme, scheme must be one of 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'")
+            )        
+        host = url_details.host
+        port = url_details.port
+        db = url_details.path
+        db = db.lstrip('/') if (db is not None and scheme != 'file') else db
+        return ConnectionDetails(scheme=scheme, user=user, cred=cred, host=host, port=port, db=db)
+    
+    @staticmethod
+    def _create_connection(url:str) -> sqlite3.Connection|Any:
+        """Parses database connection url into component parameters and creates the specified connection.
+        
+        Parameters:
+            ``url`` (str): The url connection string provided in the format of ``'scheme://user:pass@host:port/path'``
+        
+        Raises:
+            ``ValueError``: If scheme is provided and not one of the currently supported driver formats.
+            ``ModuleNotFoundError``: If required driver for specified scheme is not installed or not found.
+
+        Returns:
+            ``Connection`` (sqlite3.Connection | Any): The driver connection object for the scheme specified.
+        
+        Supported Formats:
+            - SQLite using ``sqlite3`` with format ``'file:///path/to/database.db'``
+            - PostgreSQL using ``psycopg2`` with format ``'postgresql://user:pass@hostname:port/db'``
+            - SQL Server ODBC using ``pyodbc`` with format ``'mssql://user:pass@hostname:port/db'``
+            - Oracle using ``cx_Oracle`` with format ``'oracle://user:pass@hostname:port/db'``
+            - Teradata using ``teradatasql`` with format ``'teradata://user:pass@hostname:port/db'``
+
+        Examples:
+
+        SQLite
+        ------
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # SQLite connection url
+            url = 'file:///home/database/users.db'
+
+            # Parse and create sqlite3 connection
+            conn = SQLDataModel._create_connection(url)
+        ```
+        
+        PostgreSQL
+        ----------
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Sample url
+            url = 'postgresql://scott:tiger@12.34.56.78:5432/pgdb'
+
+            # Parse and create psycopg2 connection
+            conn = SQLDataModel._create_connection(url)
+        ```
+
+        Note:
+            - Used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parse and create connection objects from url.
+            - See :meth:`SQLDataModel._parse_connection_url()` for implementation on parsing url properties from connection string.
+        """
+        url_props = SQLDataModel._parse_connection_url(url)
+        driver = url_props.scheme
+        # Valid drivers: 'file', 'postgresql', 'mssql', 'oracle', 'teradata'
+        if driver == 'file':
+            try:
+                conn = sqlite3.connect(url_props.db)
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open sqlite3 connection")
+                ).with_traceback(e.__traceback__) from None                  
+        elif driver == 'postgresql':
+            try:
+                import psycopg2
+            except ModuleNotFoundError:
+                raise ModuleNotFoundError(
+                    SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, 'psycopg2' must be installed in order to use a PostgreSQL connection driver")
+                ) from None
+            try:
+                conn = psycopg2.connect(host=url_props.host,database=url_props.db,user=url_props.user,password=url_props.cred,port=url_props.port)
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open psycopg2 connection")
+                ).with_traceback(e.__traceback__) from None                  
+        elif driver == 'mssql':
+            try:
+                import pyodbc
+            except ModuleNotFoundError:
+                raise ModuleNotFoundError(
+                    SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, 'pyodbc' must be installed in order to use a SQL Servier connection driver")
+                ) from None
+            try:
+                conn = pyodbc.connect(driver='{ODBC Driver 17 for SQL Server}',server=f'{url_props.host},{url_props.port}',database=url_props.db,uid=url_props.user,pwd=url_props.cred)
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open pyodbc connection")
+                ).with_traceback(e.__traceback__) from None                   
+        elif driver == 'oracle':
+            try:
+                import cx_Oracle
+            except ModuleNotFoundError:
+                raise ModuleNotFoundError(
+                    SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, 'cx_Oracle' must be installed in order to use an Oracle connection driver")
+                ) from None        
+            try:    
+                conn = cx_Oracle.connect(user=url_props.user, password=url_props.cred, dsn=f"{url_props.host}:{url_props.port}/{url_props.db}")            
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open cx_Oracle connection")
+                ).with_traceback(e.__traceback__) from None                   
+        elif driver == 'teradata':
+            try:
+                import teradatasql
+            except ModuleNotFoundError:
+                raise ModuleNotFoundError(
+                    SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, 'teradatasql' must be installed in order to use an Oracle connection driver")
+                ) from None        
+            try:
+                conn = teradatasql.connect(host=url_props.host, user=url_props.user, password=url_props.cred, encryptdata='true')
+            except Exception as e:
+                raise type(e)(
+                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open teradatasql connection")
+                ).with_traceback(e.__traceback__) from None                
+        return conn
+    
 #############################################################################################################
 ######################################### columns & display params ##########################################
 #############################################################################################################
@@ -4245,15 +4453,15 @@ class SQLDataModel:
         If a single word is provided as the ``sql``, the method wraps it and executes a select all treating the text as the target table.
         
         Supported Connection APIs:
-            - SQLite using ``sqlite3``
-            - PostgreSQL using ``psycopg2``
-            - SQL Server ODBC using ``pyodbc``
-            - Oracle using ``cx_Oracle``
-            - Teradata using ``teradatasql``
+            - SQLite using ``sqlite3`` or url with format ``'file:///path/to/database.db'``
+            - PostgreSQL using ``psycopg2`` or url with format ``'postgresql://user:pass@hostname:port/db'``
+            - SQL Server ODBC using ``pyodbc`` or url with format ``'mssql://user:pass@hostname:port/db'``
+            - Oracle using ``cx_Oracle`` or url with format ``'oracle://user:pass@hostname:port/db'``
+            - Teradata using ``teradatasql`` or url with format ``'teradata://user:pass@hostname:port/db'``
 
         Parameters:
             ``sql`` (str): The SQL query to execute and use to create the SQLDataModel.
-            ``con`` (sqlite3.Connection | Any): The database connection object, supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
+            ``con`` (sqlite3.Connection | Any): The database connection object or url, supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
             ``dtypes`` (dict, optional): A dictionary of the format ``'column': 'python dtype'`` to assign to values. Default is None, mapping types from source connection.
             ``**kwargs``: Additional arguments to be passed to the SQLDataModel constructor.
 
@@ -4263,6 +4471,7 @@ class SQLDataModel:
         Raises:
             ``TypeError``: If dtypes argument is provided and is not of type ``dict`` representing python data types to assign to values.
             ``SQLProgrammingError``: If the provided SQL connection is not opened or valid, or the SQL query is invalid or malformed.
+            ``ModuleNotFoundError``: If ``con`` is provided as a connection url and the specified scheme driver module is not found.
             ``DimensionError``: If the provided SQL query returns no data.
 
         Examples:
@@ -4332,21 +4541,30 @@ class SQLDataModel:
         ```
 
         Change Log:
+            - Version 0.9.1 (2024-06-27):
+                - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
+
             - Version 0.8.2 (2024-06-24):
                 - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
 
         Note:
+            - When ``con`` is provided as a string a connection will be attempted using :meth:`SQLDataModel._create_connection()` if the path does not exist, otherwise a ``sqlite3`` local connection will be attempted.
+            - When ``con`` is provided as an object a connection is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
             - The ``dtypes``, if provided, are only applied to ``sqlite3`` connection objects as remaining supported connections implement SQL to python adapters.
             - See related :meth:`SQLDataModel.to_sql()` for writing to SQL database connections.
+            - See utility methods :meth:`SQLDataModel._parse_connection_url()` and :meth:`SQLDataModel._create_connection()` for implementation on creating database connections from urls.            
         """
         if isinstance(con, str):
-            try:
-                con = sqlite3.connect(con)
-            except Exception as e:
-                raise type(e)(
-                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
-                ).with_traceback(e.__traceback__) from None        
+            if os.path.exists(con): # Connection provided as SQLite database filepath
+                try:
+                    con = sqlite3.connect(con)
+                except Exception as e:
+                    raise type(e)(
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
+                    ).with_traceback(e.__traceback__) from None     
+            else: # Connection provided as url with format 'scheme://user:pass@host:port/path'
+                con = SQLDataModel._create_connection(con)        
         if dtypes is not None and not isinstance(dtypes, dict):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', argument for ``dtypes`` must be of type 'dict' representing 'column': 'python dtype' values to assign model")
@@ -6073,15 +6291,15 @@ class SQLDataModel:
         Insert the ``SQLDataModel`` into the specified table using the provided database connection.
         
         Supported Connection APIs:
-            - SQLite using ``sqlite3``
-            - PostgreSQL using ``psycopg2``
-            - SQL Server ODBC using ``pyodbc``
-            - Oracle using ``cx_Oracle``
-            - Teradata using ``teradatasql``
+            - SQLite using ``sqlite3`` or url with format ``'file:///path/to/database.db'``
+            - PostgreSQL using ``psycopg2`` or url with format ``'postgresql://user:pass@hostname:port/db'``
+            - SQL Server ODBC using ``pyodbc`` or url with format ``'mssql://user:pass@hostname:port/db'``
+            - Oracle using ``cx_Oracle`` or url with format ``'oracle://user:pass@hostname:port/db'``
+            - Teradata using ``teradatasql`` or url with format ``'teradata://user:pass@hostname:port/db'``
 
         Parameters:
             ``table`` (str): The name of the table where data will be inserted.
-            ``con`` (sqlite3.Connection | Any): The database connection object. Supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
+            ``con`` (sqlite3.Connection | Any): The database connection object or connection url. Supported connection APIs are ``sqlite3``, ``psycopg2``, ``pyodbc``, ``cx_Oracle``, ``teradatasql``
             ``schema`` (str, optional): The schema to use for PostgreSQL and ODBC SQL Server connections, ignored otherwise. Default is None.
             ``if_exists`` (Literal['fail', 'replace', 'append'], optional): Action to take if the table already exists. If ``fail`` an error is raised if table exists and no inserts occur. If ``replace`` any existing table is dropped prior to inserts. If ``append`` existing table is appended to by subsequent inserts.
             ``index`` (bool, optional): If the model index should be included in the target table. Default is True.
@@ -6089,6 +6307,7 @@ class SQLDataModel:
 
         Raises:
             ``SQLProgrammingError``: If an error occurs during cursor accessing, table creation or data insertion into the database.
+            ``ModuleNotFoundError``: If ``con`` is provided as a connection url and the specified scheme driver module is not found.
             ``ValueError``: If specified ``table`` already exists when using ``if_exists='fail'`` or if ``con`` is not one of the currently supported connection modules.
             ``IndexError``: If ``primary_key`` is provided as an ``int`` representing a column index but is out of range of the current model :py:attr:`SQLDataModel.column_count`.
             ``TypeError``: If ``primary_key`` argument provided is not of type 'str' or 'int' representing a valid column name or index to use as the primary key column for the target table.
@@ -6234,6 +6453,9 @@ class SQLDataModel:
         ```
 
         Change Log:
+            - Version 0.9.1 (2024-06-27):
+                - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
+
             - Version 0.8.2 (2024-06-24):
                 - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
         
@@ -6244,19 +6466,24 @@ class SQLDataModel:
         
         Note:
             - When providing a ``primary_key`` column it will be assumed unique and the model will not perform any unique-ness constraints.
-            - Any ``con`` or connection object provided is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
+            - When ``con`` is provided as a string a connection will be attempted using :meth:`SQLDataModel._create_connection()` if the path does not exist, otherwise a ``sqlite3`` local connection will be attempted.
+            - When ``con`` is provided as an object a connection is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
             - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types, be careful.
             - ValueError will be raised if ``table`` already exists, use ``if_exists = 'replace'`` or ``if_exists = 'append'`` to instead replace or append to the table.
             - See relevant module documentation for additional details or information pertaining to specific database or connection dialect being used.
             - See related :meth:`SQLDataModel.from_sql()` for creating ``SQLDataModel`` from existing SQL database connections.
+            - See utility methods :meth:`SQLDataModel._parse_connection_url()` and :meth:`SQLDataModel._create_connection()` for implementation on creating database connections from urls.
         """    
         if isinstance(con, str):
-            try:
-                con = sqlite3.connect(con)
-            except Exception as e:
-                raise type(e)(
-                    SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
-                ).with_traceback(e.__traceback__) from None     
+            if os.path.exists(con): # Connection provided as SQLite database filepath
+                try:
+                    con = sqlite3.connect(con)
+                except Exception as e:
+                    raise type(e)(
+                        SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
+                    ).with_traceback(e.__traceback__) from None     
+            else: # Connection provided as url with format 'scheme://user:pass@host:port/path'
+                con = SQLDataModel._create_connection(con)
         try:
             ext_c = con.cursor()
         except Exception as e:
