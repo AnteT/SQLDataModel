@@ -1,6 +1,6 @@
 from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random, urllib.request
-from urllib3.util import parse_url as _urllib3_util_parse_url
+from urllib.parse import urlparse
 from collections.abc import Generator, Callable, Iterator, Iterable
 from collections import namedtuple
 from typing import Literal, Any, Type, NamedTuple
@@ -1064,16 +1064,20 @@ class SQLDataModel:
             )
         ```
 
+        Change Log:
+            - Version 0.9.2 (2024-06-27):
+                - Modified to use ``urllib.parse.urlparse`` instead of added 3rd party package dependency.
+                
         Note:
             - This method is used by :meth:`SQLDataModel._create_connection()` to parse details from url and create a connection object.
             - This method can be used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parsed connection details when connection parameter provided as string.
         """
         ConnectionDetails = namedtuple('ConnectionDetails', ['scheme', 'user', 'cred','host', 'port', 'db'])
         # valid_connection_drivers: sqlite|sqlite3, mssql|pyodbc, postgresql|psycopg2, oracle|cx_oracle or teradata|teradatasql
-        url_details = _urllib3_util_parse_url(url)
+        url_details = urlparse(url)
         host = url_details.hostname
-        user = url_details.auth.split(':')[0] if url_details.auth is not None else None
-        cred = url_details.auth.split(':')[-1] if url_details.auth is not None else None
+        user = url_details.username
+        cred = url_details.password
         scheme = url_details.scheme
         if scheme is None:
             raise ValueError(
@@ -1083,7 +1087,7 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid scheme, scheme must be one of 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'")
             )        
-        host = url_details.host
+        host = url_details.hostname
         port = url_details.port
         db = url_details.path
         db = db.lstrip('/') if (db is not None and scheme != 'file') else db
