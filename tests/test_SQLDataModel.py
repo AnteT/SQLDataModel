@@ -2,7 +2,7 @@ from __future__ import annotations
 import datetime, os, tempfile, csv, sqlite3, random, string
 from typing import Literal, Iterable
 from itertools import cycle, islice
-from collections import Counter
+from collections import Counter, namedtuple
 import pytest
 import pandas as pd
 import polars as pl
@@ -1387,6 +1387,56 @@ def test_to_from_html(sample_data):
     assert input_headers == output_headers
     for i in range(len(input_data)):
         assert input_data[i] == output_data[i]
+
+@pytest.mark.core
+def test_parse_connection_url():
+    # Returned details template
+    ConnectionDetails = namedtuple('ConnectionDetails', ['scheme', 'user', 'cred', 'host', 'port', 'db'])
+
+    # Test local Linux file path for SQLite
+    url = '/home/database/users.db'
+    url_expected = ConnectionDetails(scheme='file', user=None, cred=None, host=None, port=None, db='/home/database/users.db')
+    assert SQLDataModel._parse_connection_url(url) == url_expected
+    
+    # Test local Windows file path for SQLite
+    url = 'C:\\Users\\Bob\\Desktop\\database\\users.db'
+    url_expected = ConnectionDetails(scheme='file', user=None, cred=None, host=None, port=None, db='C:/Users/Bob/Desktop/database/users.db')
+    assert SQLDataModel._parse_connection_url(url) == url_expected
+
+    # Test SQLite
+    url, alias = 'file:///home/database/users.db', 'sqlite3:///home/database/users.db'
+    url_expected = ConnectionDetails(scheme='file', user=None, cred=None, host=None, port=None, db='/home/database/users.db')
+    alias_expected = ConnectionDetails(scheme='sqlite3', user=None, cred=None, host=None, port=None, db='/home/database/users.db')
+    assert SQLDataModel._parse_connection_url(url) == url_expected
+    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+
+    # Test PostgreSQL
+    url, alias = 'postgresql://scott:tiger@12.34.56.78:5432/pgdb', 'psycopg2://scott:tiger@12.34.56.78:5432/pgdb'
+    url_expected = ConnectionDetails(scheme='postgresql', user='scott', cred='tiger', host='12.34.56.78', port=5432, db='pgdb')
+    alias_expected = ConnectionDetails(scheme='psycopg2', user='scott', cred='tiger', host='12.34.56.78', port=5432, db='pgdb')
+    assert SQLDataModel._parse_connection_url(url) == url_expected
+    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+
+    # Test SQL Server ODBC
+    url, alias = 'mssql://user:pass@hostname:1433/dbname', 'pyodbc://user:pass@hostname:1433/dbname'
+    url_expected = ConnectionDetails(scheme='mssql', user='user', cred='pass', host='hostname', port=1433, db='dbname')
+    alias_expected = ConnectionDetails(scheme='pyodbc', user='user', cred='pass', host='hostname', port=1433, db='dbname')
+    assert SQLDataModel._parse_connection_url(url) == url_expected
+    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+
+    # Test Oracle
+    url, alias = 'oracle://user:pass@hostname:1521/dbname', 'cxoracle://user:pass@hostname:1521/dbname'
+    url_expected = ConnectionDetails(scheme='oracle', user='user', cred='pass', host='hostname', port=1521, db='dbname')
+    alias_expected = ConnectionDetails(scheme='cxoracle', user='user', cred='pass', host='hostname', port=1521, db='dbname')
+    assert SQLDataModel._parse_connection_url(url) == url_expected
+    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+
+    # Test Teradata
+    url, alias = 'teradata://user:pass@hostname:1025/dbname', 'teradatasql://user:pass@hostname:1025/dbname'
+    url_expected = ConnectionDetails(scheme='teradata', user='user', cred='pass', host='hostname', port=1025, db='dbname')
+    alias_expected = ConnectionDetails(scheme='teradatasql', user='user', cred='pass', host='hostname', port=1025, db='dbname')
+    assert SQLDataModel._parse_connection_url(url) == url_expected
+    assert SQLDataModel._parse_connection_url(alias) == alias_expected
 
 @pytest.mark.core
 def test_to_from_sql_connection(sample_data):

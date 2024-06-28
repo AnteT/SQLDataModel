@@ -785,7 +785,7 @@ class SQLDataModel:
         Returns:
             ``str``: The parameter formatted for SQL type casting.
 
-        Change Log:
+        Changelog:
             - Version 0.7.6 (2024-06-16):
                 - Added support for additional date formats when ``dtype='date'`` including: ``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``.
                 - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
@@ -827,7 +827,7 @@ class SQLDataModel:
         Returns:
             ``str``: The formatted SELECT clause for SQLite.
 
-        Change Log:
+        Changelog:
             - Version 0.7.0 (2024-06-08):
                 - Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
 
@@ -937,7 +937,7 @@ class SQLDataModel:
             Unique as Unique
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.3.4 (2024-04-05):
                 - Modified to re-alias partially aliased input to prevent runaway incrementation on suffixes.
         """        
@@ -1042,7 +1042,13 @@ class SQLDataModel:
             ``url`` (str): The url connection string provided in the format of ``'scheme://user:pass@host:port/path'``
         
         Raises:
-            ``ValueError``: If scheme is not provided or is not one of the currently supported driver formats 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'.
+            ``AttributeError``: If ``url`` provided could not be parsed into expected component properties.
+            ``ValueError``: If scheme is not provided or is not one of the currently supported driver formats or module aliases below
+                SQLite: ``'file'`` or ``'sqlite3'``
+                PostgreSQL: ``'postgresql'`` or ``'psycopg2'``
+                SQL Server ODBC: ``'mssql'`` or ``'pyodbc'``
+                Oracle: ``'oracle'`` or ``'cx_oracle'``
+                Teradata: ``'teradata'`` or ``'teradatasql'``
 
         Returns:
             ``ConnectionDetails`` (NamedTuple): The parsed details as ``ConnectionDetails('scheme', 'user', 'cred', 'host', 'port', 'db')``
@@ -1098,7 +1104,11 @@ class SQLDataModel:
             )
         ```
 
-        Change Log:
+        Changelog:
+            - Version 0.9.3 (2024-06-28):
+                - Modified behavior when ``scheme`` is not provided, treating as file path when parsed in absence of auth related properties to retain prior version behavior of creating new sqlite3 database file when path is provided.
+                - Added driver module names as valid aliases for relevant connection drivers, valid schemes now include 'file', 'sqlite3', 'postgresql', 'psycopg2', 'mssql', 'pyodbc', 'oracle', 'cx_oracle', 'teradata', 'teradatasql'
+
             - Version 0.9.2 (2024-06-27):
                 - Modified to use ``urllib.parse.urlparse`` instead of added 3rd party package dependency.
                 
@@ -1106,25 +1116,26 @@ class SQLDataModel:
             - This method is used by :meth:`SQLDataModel._create_connection()` to parse details from url and create a connection object.
             - This method can be used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parsed connection details when connection parameter provided as string.
         """
-        ConnectionDetails = namedtuple('ConnectionDetails', ['scheme', 'user', 'cred','host', 'port', 'db'])
-        # valid_connection_drivers: sqlite|sqlite3, mssql|pyodbc, postgresql|psycopg2, oracle|cx_oracle or teradata|teradatasql
-        url_details = urlparse(url)
-        host = url_details.hostname
-        user = url_details.username
-        cred = url_details.password
-        scheme = url_details.scheme
-        if scheme is None:
+        ConnectionDetails = namedtuple('ConnectionDetails', ['scheme', 'user', 'cred', 'host', 'port', 'db'])
+        # valid_connection_drivers: file|sqlite3, mssql|pyodbc, postgresql|psycopg2, oracle|cx_oracle or teradata|teradatasql
+        url = url.replace("cx_oracle", "cxoracle", 1) # Handle cx_oracle being interpreted as relative filepath
+        is_windows = re.match(r"^[a-zA-Z]:\\", url) # Handle Windows paths by detecting them using a regex
+        if is_windows:
+            url = f"file:///{url.replace('\\', '/')}"
+        try:
+            url_details = urlparse(url)
+        except Exception as e:
+            raise type(e)(
+                SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse connection url: '{url}'")
+            ).with_traceback(e.__traceback__) from None         
+        user, cred, host = url_details.username, url_details.password, url_details.hostname
+        port, db = url_details.port, url_details.path
+        scheme = url_details.scheme.lower() if url_details.scheme else 'file'
+        if scheme not in ('file','sqlite3','postgresql','psycopg2','mssql','pyodbc','oracle','cxoracle','teradata','teradatasql'):
             raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: missing scheme, a valid scheme must be provided as either 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'")
-            )
-        if scheme not in ('file', 'postgresql', 'mssql', 'oracle', 'teradata'):
-            raise ValueError(
-                SQLDataModel.ErrorFormat(f"ValueError: invalid scheme, scheme must be one of 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'")
+                SQLDataModel.ErrorFormat(f"ValueError: invalid scheme '{scheme}', scheme must be one of 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'")
             )        
-        host = url_details.hostname
-        port = url_details.port
-        db = url_details.path
-        db = db.lstrip('/') if (db is not None and scheme != 'file') else db
+        db = db.lstrip('/') if ((db is not None and scheme not in ('file','sqlite3')) or (scheme in ('file','sqlite3') and is_windows)) else db
         return ConnectionDetails(scheme=scheme, user=user, cred=cred, host=host, port=port, db=db)
     
     @staticmethod
@@ -1182,15 +1193,15 @@ class SQLDataModel:
         """
         url_props = SQLDataModel._parse_connection_url(url)
         driver = url_props.scheme
-        # Valid drivers: 'file', 'postgresql', 'mssql', 'oracle', 'teradata'
-        if driver == 'file':
+        # Valid drivers: ('file','sqlite3') or ('postgresql','psycopg2') or ('mssql','pyodbc') or ('oracle','cxoracle') or ('teradata','teradatasql')
+        if driver in ('file', 'sqlite3'):
             try:
                 conn = sqlite3.connect(url_props.db)
             except Exception as e:
                 raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open sqlite3 connection")
                 ).with_traceback(e.__traceback__) from None                  
-        elif driver == 'postgresql':
+        elif driver in ('postgresql', 'psycopg2'):
             try:
                 import psycopg2
             except ModuleNotFoundError:
@@ -1203,7 +1214,7 @@ class SQLDataModel:
                 raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open psycopg2 connection")
                 ).with_traceback(e.__traceback__) from None                  
-        elif driver == 'mssql':
+        elif driver in ('mssql', 'pyodbc'):
             try:
                 import pyodbc
             except ModuleNotFoundError:
@@ -1216,7 +1227,7 @@ class SQLDataModel:
                 raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open pyodbc connection")
                 ).with_traceback(e.__traceback__) from None                   
-        elif driver == 'oracle':
+        elif driver in ('oracle', 'cxoracle'):
             try:
                 import cx_Oracle
             except ModuleNotFoundError:
@@ -1229,7 +1240,7 @@ class SQLDataModel:
                 raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open cx_Oracle connection")
                 ).with_traceback(e.__traceback__) from None                   
-        elif driver == 'teradata':
+        elif driver in ('teradata', 'teradatasql'):
             try:
                 import teradatasql
             except ModuleNotFoundError:
@@ -2100,7 +2111,7 @@ class SQLDataModel:
             [3 rows x 3 columns] <-- shape is also visible here
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.3.6 (2024-04-09):
                 - Returns the new :py:attr:`SQLDataModel.shape` directly, making this method redundant.
 
@@ -2358,7 +2369,7 @@ class SQLDataModel:
             [12 rows x 4 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.6.3 (2024-05-16):
                 - Modified model to output values as string data types and set columns to right-aligned if arguments are not present in ``kwargs`` to retain metric resolution while having numeric alignment.
         
@@ -2674,7 +2685,7 @@ class SQLDataModel:
             [6 rows x 6 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.5.2 (2024-05-13):
                 - Added ``shape`` parameter in lieu of separate ``n_rows`` and ``n_cols`` arguments.
                 - Added ``fill`` parameter to populate resulting SQLDataModel with values to override type-specific initialization defaults.
@@ -2796,7 +2807,7 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.4.0 (2024-04-23):
                 - Modifed to only parse CSV files and removed all delimiter sniffing with introduction of new method :meth:`SQLDataModel.from_delimited()` to handle other delimiters.
                 - Renamed ``delimiters`` parameter to ``delimiter`` with ``,`` set as new default to reflect revised focus on CSV files only.
@@ -3194,7 +3205,7 @@ class SQLDataModel:
             [4 rows x 2 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.6.3 (2024-05-16):
                 - Modified to try parsing input data as JSON if initial inspection does not signify row or column orientation.
 
@@ -3711,7 +3722,7 @@ class SQLDataModel:
             [3 rows x 2 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.9.0 (2024-06-26):
                 - Modified ``table_identifier`` default value to 1, changing from zero-based to one-based indexing for referencing target table in source to align with similar extraction methods throughout package.
         Note:
@@ -4578,7 +4589,7 @@ class SQLDataModel:
             sdm_table = SQLDataModel.from_sql("my_table", con)
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.9.1 (2024-06-27):
                 - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
 
@@ -4848,7 +4859,7 @@ class SQLDataModel:
             [('John',), ('Alice',), ('Travis',)]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.5.0 (2024-05-09):
                 - Added ``strict_2d`` parameter to allow predictable return type regardless of data dimension.
 
@@ -4954,7 +4965,7 @@ class SQLDataModel:
             2,Travis,35,185.8
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.6.4 (2024-05-17):
                 - Added ``encoding`` parameter to pass to file handler when writing contents as CSV file and set default to ``utf-8`` to align with expected SQLite codec.
 
@@ -5076,7 +5087,7 @@ class SQLDataModel:
             {'Col A': 'A,2', 'Col B': 'B,2', 'Col C': 'C,2'}
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -5155,7 +5166,7 @@ class SQLDataModel:
             [ Sheet1 ]
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.8.1 (2024-06-23):
                 - Added ``if_exists`` parameter to provide the options to replace or append to existing file, as well as to fail if already exists.
 
@@ -5280,7 +5291,7 @@ class SQLDataModel:
             </style>
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -5407,7 +5418,7 @@ class SQLDataModel:
             }]
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.2 (2024-04-02):
                 - Changed return object to JSON string literal when ``filename=None`` to convert to valid literal object.
 
@@ -5555,7 +5566,7 @@ class SQLDataModel:
             \\end{document}
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -5722,7 +5733,7 @@ class SQLDataModel:
             [0, 'Beth', 27, 172.4]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.5.0 (2024-05-09):
                 - Modified behavior to output 1-dimensional list when possible and a list of lists when not possible.
                 - Changed default to ``index = False`` to increase surface for 1-dimensional flattening.
@@ -5843,7 +5854,7 @@ class SQLDataModel:
             | Michael |   35 |  185.80 |
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -5983,7 +5994,7 @@ class SQLDataModel:
              ['2' 'Travis' '35' '185.8']]
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -6046,7 +6057,7 @@ class SQLDataModel:
             2  Travis   35   185.8
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -6117,7 +6128,7 @@ class SQLDataModel:
             [3 rows x 3 columns]        
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.8.2 (2024-06-24):
                 - Added ``index`` parameter to toggle inclusion of SQLDataModel ``index`` column for greater flexibility and package consistency to similar methods.
 
@@ -6305,7 +6316,7 @@ class SQLDataModel:
             Grade: [[3.8,3.9,3.2]]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -6490,7 +6501,7 @@ class SQLDataModel:
             [5 rows x 8 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.9.1 (2024-06-27):
                 - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
 
@@ -6710,7 +6721,7 @@ class SQLDataModel:
         Important:
             Unlike output from ``print(sdm)`` or other calls to :meth:`SQLDataModel.__repr__()`, the output from this method includes the full ``SQLDataModel`` and is not restricted by current terminal size or the value set at :py:attr:`SQLDataModel.display_max_rows`. As such, horizontal truncation only occurs on cell values as determined by ``max_column_width`` and no other horizontal or vertical table-wide truncation is performed.
 
-        Change Log:
+        Changelog:
             - Version 0.3.10 (2024-04-16):
                 - Added ``table_style`` parameter and updated output to reflect new formatting styles introduced in version 0.3.9.
                 - Added ``display_dimensions`` parameter to allow toggling display of table dimensions in output.
@@ -6865,7 +6876,7 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.5.2 (2024-05-13):
                 - Renamed ``db`` parameter to ``filename`` for package consistency and to avoid confusion between similarily named database objects.
                 - Changed ``filename`` from keyword to positional argument making it a required parameter to avoid accidental overwriting.
@@ -8623,7 +8634,7 @@ class SQLDataModel:
             # Retrieve a single column by name
             subset_model = sdm["first_name"]
         
-        Change Log:
+        Changelog:
             - Version 0.5.0 (2024-05-09):
                 - Modified index retention behavior to pass through row indicies and avoid resetting view order.
 
@@ -8780,7 +8791,7 @@ class SQLDataModel:
             [5 rows x 4 columns]            
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.7.5 (2024-06-14):
                 - Added row indicies masking to allow selective updating when ``update_values`` is also an instance of ``SQLDataModel`` using ``target_indicies`` as mask.
 
@@ -9034,7 +9045,7 @@ class SQLDataModel:
             David |  32 |  179.75 | 1992-12-28
         ```
         
-        Change Log:
+        Changelog:
             - Version 0.3.11 (2024-04-18):
                 - Removed ``'thick'`` style and added ``'list'`` style for greater variety of available formats.
 
@@ -9160,7 +9171,7 @@ class SQLDataModel:
             [4 rows x 3 columns]        
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.7.0 (2024-06-08):
                 - Modified horizontal truncation behavior to alternate column selection between table start and table end instead of sequential left to right ordering.
 
@@ -9317,7 +9328,7 @@ class SQLDataModel:
             [2 rows x 2 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.6.0 (2024-05-14):
                 - New method, mirrors previous behavior of :meth:`SQLDataModel.insert_row()` for versions <= 0.5.2.
 
@@ -9626,7 +9637,7 @@ class SQLDataModel:
             [3 rows x 5 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.3.2 (2024-04-02):
                 - Renamed method from ``counts`` to ``count_unique`` for more precise definition.
 
@@ -9835,7 +9846,7 @@ class SQLDataModel:
             sdm.group_by(["country", "state", "city"])
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.8.0 (2024-06-21):
                 - Modified to allow ``columns`` to be referenced by their integer index as well as directly to allow broader inputs and reflect similar access patterns across package.
 
@@ -10063,7 +10074,7 @@ class SQLDataModel:
             [4 rows x 3 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.6.0 (2024-05-14):
                 - Backward incompatible changes made to arguments and behavior, added ``index`` and ``on_conflict`` parameters for greater specificity and to align with broader conventions surrounding insert methods.
 
@@ -10130,7 +10141,7 @@ class SQLDataModel:
             for row in sdm.iter_rows(min_row=2, max_row=4):
                 pass # Do stuff
         
-        Change Log:
+        Changelog:
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
         """
@@ -10717,7 +10728,7 @@ class SQLDataModel:
             # Set color using rgb value
             sdm.set_display_color((166, 215, 232))
 
-        Change Log:
+        Changelog:
             - Version 0.7.0 (2024-06-08):
                 - Removed warning message and modified to raise exception on failure to create display color pen.
 
@@ -10805,7 +10816,7 @@ class SQLDataModel:
             [5 rows x 5 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.8.0 (2024-06-21):
                 - Modified to allow mixed integer and value indexing for columns sort order in ``by`` argument to reflect similar flexibility for column input across package.
 
@@ -11349,7 +11360,7 @@ class SQLDataModel:
             [3 rows x 6 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.7.6 (2024-06-16):
                 - Modified to allow ``Callable`` or ``Type`` to be provided directly for ``dtype`` argument to map to data and return as new model for broader type conversion.
         
@@ -11548,7 +11559,7 @@ class SQLDataModel:
             service: REAL
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.8.0 (2024-06-21):
                 - Modified to allow ``columns`` argument to be provided as an any valid reference including integer indexes or an iterable sequence of indexes to reflect similar flexibility surrounding column referencing across package.
 
@@ -11616,7 +11627,7 @@ class SQLDataModel:
             Age dtype: int -> float
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.7.9 (2024-06-20):
                 - Modified to allow ``column`` argument to be provided as a dictionary mapping column names to dtypes to reflect current structure at :py:attr:`SQLDataModel.dtypes`.
 
@@ -11753,7 +11764,7 @@ class SQLDataModel:
         Important:
             - The default table name is ``'sdm'``, you can use :meth:`SQLDataModel.set_model_name()` to modify the name used by ``SQLDataModel``.
         
-        Change Log:
+        Changelog:
             - Version 0.6.2 (2024-05-15):
                 - Inclusion of :py:attr:`SQLDataModel.table_style` argument in returned ``SQLDataModel`` to inherit all display properties in result.
 
@@ -11811,7 +11822,7 @@ class SQLDataModel:
             # Execute a parameterized with statement by providing values
             sdm.execute_statement('DELETE FROM table WHERE idx = ? or name = ?', (7,'Bob'))
 
-        Change Log:
+        Changelog:
             - Version 0.8.0 (2024-06-21):
                 - Added ``update_row_meta`` parameter to speed up transactions that are guaranteed to have no effect on the current model :py:attr:`SQLDataModel.indicies` metadata. 
                   A shallower and computationally cheaper check will still occur to ensure :py:attr:`SQLDataModel.header_master` remains in sync.
@@ -11863,7 +11874,7 @@ class SQLDataModel:
             # Execute the script
             sdm.execute_transaction(transaction_script)
 
-        Change Log:
+        Changelog:
             - Version 0.8.0 (2024-06-21):
                 - Added ``update_row_meta`` parameter to speed up transactions that are guaranteed to have no effect on the current model :py:attr:`SQLDataModel.indicies` metadata. 
                   A shallower and computationally cheaper check will still occur to ensure :py:attr:`SQLDataModel.header_master` remains in sync.
@@ -12195,7 +12206,7 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.8.0 (2024-06-21):
                 - Modified to allow ``row_index`` and ``column_index`` arguments the same input type flexibility found across package, allowing both to be referenced directly or by their integer index.
 
@@ -12331,7 +12342,7 @@ class SQLDataModel:
         Returns:
             ``str``: The generated SQL statement.   
         
-        Change Log:
+        Changelog:
             - Version 0.5.1 (2024-05-10):
                 - Modified to allow ``rows`` argument to be provided directly as a string predicate to bypass numeric range-based selections.
 
@@ -12377,7 +12388,7 @@ class SQLDataModel:
         Returns:
             ``tuple[tuple[str]]``: A 4-tuple containing the characters required for top, middle, row and lower table sections.
 
-        Change Log:
+        Changelog:
             - Version 0.3.10 (2024-04-16):
                 - Added ``style`` parameter to allow use by :meth:`SQLDataModel.to_text()` to generate new formatting styles introduced in version 0.3.9.
                     
@@ -12474,7 +12485,7 @@ class SQLDataModel:
         Returns:
             ``None``
 
-        Change Log:
+        Changelog:
             - Version 0.6.0 (2024-05-14):
                 - New method, improves performance for updating row indicies when update is deterministic.
             
@@ -12678,7 +12689,7 @@ class SQLDataModel:
         Dtype Property:
             - :py:attr:`SQLDataModel.dtypes`: A dictionary mapping the current model's columns to their corresponding Python data type.
         
-        Change Log:
+        Changelog:
             - Version 0.6.2 (2024-05-15):
                 - Added ``include_dtypes`` parameter for use by methods such as :meth:`SQLDataModel.min()` and :meth:`SQLDataModel.max()` for operations that require returning the results of SQL fetch statements.
         """
@@ -12942,7 +12953,7 @@ class SQLDataModel:
             (slice(-6, -1, 2), slice(0, 3, None)) --> ((4, 6, 8), ['A', 'B', 'C'])
         ```
 
-        Change Log:
+        Changelog:
             - Version 0.8.1 (2024-06-23):
                 - Modified implementation to leverage new utility methods :meth:`SQLDataModel._validate_row()` and :meth:`SQLDataModel._validate_column()` to improve performance.
 
