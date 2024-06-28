@@ -286,7 +286,8 @@ class SQLDataModel:
             ``display_index`` (bool): Whether to display row indices. Default is True.
             ``display_float_precision`` (int): The number of decimal places to display for float values. Default is 2.
             ``infer_types`` (bool): Whether to infer the data types based on a randomly selected sample. Default is False, using first row to derive the corresponding type.
-            ``table_style`` (str): The styling to use when representing the table, must be 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'. Default is 'default'.
+            ``table_style`` (str): The styling to use when representing the table in textual formats. 
+                Must be 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'. Default is 'default'.
 
         Raises:
             ``ValueError``: If ``data`` and ``headers`` are not provided, or if ``data`` is of insufficient length.
@@ -320,11 +321,42 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
 
+        A ``SQLDataModel`` can be initialized from dozens of data formats, including python dictionaries:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+            
+            # Dictionary with sample data
+            data = {
+                'Name': ['Ali', 'Bob', 'Chris'],
+                'Role': ['Judge', 'Pilot', 'Nurse'],
+                'Height': [174.2, 180.9, 173.4],
+            }
+
+            # Create the model and set a new style
+            sdm = SQLDataModel(data, table_style='list')
+
+            # View it
+            print(sdm)
+        ```
+
+        This will output the SQLDataModel using the 'list' styling:
+
+        ```text
+            Name   Role    Height
+            -----  -----  -------
+            Ali    Judge   174.20
+            Bob    Pilot   180.90
+            Chris  Nurse   173.40
+        ```
+
         Note:
             - If ``data`` is not provided, an empty model is created with headers, at least one of ``data``, ``headers`` or ``dtypes`` are required to instantiate the model.
             - If ``headers`` are not provided, default headers will be generated using the the format ``'0', '1', ..., N`` where ``N`` is the column count.
             - If ``dtypes`` is provided, it must be a dictionary with column names as keys and Python data types as string values, e.g., `{'first_name': 'str', 'weight': 'float'}`
             - If ``infer_types = True`` and ``dtypes`` are provided, the order will be resolved by first inferring the types, then overriding the inferred types for each ``{col:type}`` provided in the ``dtypes`` argument. If one is not provided, then the inferred type will be used as a fallback.
+            - For creating ``SQLDataModel`` from file formats like CSV, Markdown, LaTeX, Excel, Parquet or Text files, see :meth:`SQLDataModel.from_data()` or go to format specific constructor.
+            - For creating ``SQLDataModel`` from object formats like Pyarrow, JSON, HTML, Pandas, Numpy or Polars, see format specific constructor like :meth:`SQLDataModel.from_pandas()` or :meth:`SQLDataModel.from_numpy()`.
         """
         if data is None:
             if headers is None:
