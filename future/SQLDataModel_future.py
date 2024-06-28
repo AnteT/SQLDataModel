@@ -1222,7 +1222,7 @@ class SQLDataModel:
                     SQLDataModel.ErrorFormat(f"ModuleNotFoundError: required package not found, 'pyodbc' must be installed in order to use a SQL Servier connection driver")
                 ) from None
             try:
-                conn = pyodbc.connect(driver='{ODBC Driver 17 for SQL Server}',server=f'{url_props.host},{url_props.port}',database=url_props.db,uid=url_props.user,pwd=url_props.cred)
+                conn = pyodbc.connect(driver='{ODBC Driver 17 for SQL Server}',server=f'{url_props.host},{url_props.port}' if url_props.port else f'{url_props.host}' ,database=url_props.db,uid=url_props.user,pwd=url_props.cred)
             except Exception as e:
                 raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open pyodbc connection")
