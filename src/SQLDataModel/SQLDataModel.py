@@ -306,7 +306,9 @@ class SQLDataModel:
             
             # Display the model
             print(model)
-
+        
+        This will output the SQLDataModel formatted to fit within the current terminal:
+        
         ```shell
             ┌────────┬──────┬──────┐
             │ Name   │  Age │ Sex  │
