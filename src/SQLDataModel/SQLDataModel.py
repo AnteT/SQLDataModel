@@ -3738,6 +3738,10 @@ class SQLDataModel:
         if html_source.startswith("http"):
             try:
                 html_source = urllib.request.urlopen(html_source, **kwargs).read().decode(encoding)
+            except urllib.error.HTTPError as e:
+                raise urllib.error.HTTPError(
+                    e.url, e.code, SQLDataModel.ErrorFormat(f"HTTPError: HTTP Error {e.code}: {e.reason}, was encountered when trying to access url '{e.url}'"), e.headers, e.fp
+                ) from None                
             except Exception as e:
                 raise type(e)(
                     SQLDataModel.ErrorFormat(f"{type(e).__name__}: encountered '{e}' when trying to request from provided `html_source`, check url parameters")
