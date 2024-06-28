@@ -1123,7 +1123,7 @@ class SQLDataModel:
         url = url.replace("cx_oracle", "cxoracle", 1) # Handle cx_oracle being interpreted as relative filepath
         is_windows = re.match(r"^[a-zA-Z]:\\", url) # Handle Windows paths by detecting them using a regex
         if is_windows:
-            url = f"file:///{url.replace('\\', '/')}"
+            url = "".join(("file:///", url.replace('\\', '/')))
         try:
             url_details = urlparse(url)
         except Exception as e:
