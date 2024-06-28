@@ -999,6 +999,8 @@ class SQLDataModel:
             # Format of result
             flattened_data = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
 
+        Note:
+            - Used by :meth:`SQLDataModel.from_dict()` to flatten deeply nested JSON objects into 2 dimensions when encountered.
         """
         if isinstance(json_source, dict):
             json_source = [json_source]

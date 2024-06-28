@@ -56,7 +56,7 @@ A `SQLDataModel` can be created from any number of [sources](#data-formats), as 
 >>> 
 >>> url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
 >>> 
->>> sdm = SQLDataModel.from_html(url, table_identifier=94)   
+>>> sdm = SQLDataModel.from_html(url, table_identifier=95)   
 >>> 
 >>> sdm[:4, ['R', 'Team', 'W', 'Pts.']]
 ┌──────┬─────────────┬──────┬──────┐

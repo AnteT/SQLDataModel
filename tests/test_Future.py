@@ -1258,6 +1258,60 @@ def test_from_shape(sample_data):
         assert output_data == expected_output
 
 @pytest.mark.core
+def test_flatten_json():
+    # Test case 1: Simple JSON list
+    json_source = [{"alpha": "A", "value": 1}, {"alpha": "B", "value": 2}, {"alpha": "C", "value": 3}]
+    expected = {"alpha": ["A", "B", "C"], "value": [1, 2, 3]}
+    output = SQLDataModel.flatten_json(json_source, flatten_rows=True)
+    assert output == expected
+    # Test case 2: Simple JSON list without row flattening
+    output = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
+    output = SQLDataModel.flatten_json(json_source, flatten_rows=False, key_prefix='row_')
+    assert output == output
+    # Test case 3: JSON with nested structure
+    json_source_nested = {"user": {"name": "Alice", "address": {"city": "Wonderland", "zip": "12345"}}}
+    expected = {"user_name": ["Alice"], "user_address_city": ["Wonderland"], "user_address_zip": ["12345"]}
+    output = SQLDataModel.flatten_json(json_source_nested, flatten_rows=True)
+    assert output == expected
+    # Test case 4: JSON with nested list
+    json_source_nested_list = {"users": [{"name": "Alice"}, {"name": "Bob"}]}
+    expected = {"users_0_name": ["Alice"], "users_1_name": ["Bob"]}
+    output = SQLDataModel.flatten_json(json_source_nested_list, flatten_rows=True)
+    assert output == expected
+    # Test case 5: JSON with key prefix
+    expected = {'prefix_0_user_name': 'Alice', 'prefix_0_user_address_city': 'Wonderland', 'prefix_0_user_address_zip': '12345'}
+    output = SQLDataModel.flatten_json(json_source_nested, flatten_rows=False, key_prefix='prefix_')
+    assert output == expected
+    # Test case 6: Single dictionary source
+    json_source_single_dict = {"alpha": "A", "value": 1}
+    expected = {"alpha": ["A"], "value": [1]}
+    output = SQLDataModel.flatten_json(json_source_single_dict, flatten_rows=True)
+    assert output == expected
+    # Test case 7: Empty JSON source
+    json_source_empty = []
+    expected = {}
+    output = SQLDataModel.flatten_json(json_source_empty, flatten_rows=True)
+    assert output == expected
+    # Test case 8: Mixed types in list
+    json_source_mixed = [{"alpha": "A", "value": 1}, {"alpha": "B", "value": None}, {"alpha": "C", "value": 3}]
+    expected = {"alpha": ["A", "B", "C"], "value": [1, None, 3]}
+    output = SQLDataModel.flatten_json(json_source_mixed, flatten_rows=True)
+    assert output == expected
+    # Test case 9: Complex nested structure with lists and dictionaries
+    json_source_complex = {
+        "team": {"name": "TeamA", "members": [{"name": "Alice", "role": "leader"}, {"name": "Bob", "role": "member"}]}
+    }
+    expected = {
+        "team_name": ["TeamA"],
+        "team_members_0_name": ["Alice"],
+        "team_members_0_role": ["leader"],
+        "team_members_1_name": ["Bob"],
+        "team_members_1_role": ["member"]
+    }
+    output = SQLDataModel.flatten_json(json_source_complex, flatten_rows=True)
+    assert output == expected
+    
+@pytest.mark.core
 def test_to_from_dict():
     input_dict = {0: ('hTpigTHKcfoK', 285, -497.17176, 0, datetime.date(1914, 6, 27), b'zPx3Bp', None, datetime.datetime(1985, 11, 10, 14, 20, 59)), 1: ('mNHnKXaXQv', -673, 106.451792, 1, datetime.date(2003, 5, 8), b'vKo', None, datetime.datetime(1996, 2, 1, 14, 39, 36)), 2: ('nVgx', 622, 884.861723, 1, datetime.date(1907, 4, 19), b'aRdeb', None, datetime.datetime(1912, 2, 18, 6, 32, 16)), 3: ('0LXSG8x', 393, 360.566821, 0, datetime.date(2021, 2, 3), b'eoPni5I', None, datetime.datetime(1916, 6, 3, 7, 23, 18)), 4: ('sM2wmeOV90', -136, -770.896514, 1, datetime.date(1993, 8, 27), b'pCzfOwz1d', None, datetime.datetime(1920, 8, 27, 17, 45, 19)), 5: ('xBZ', 221, 769.5769, 1, datetime.date(1908, 9, 25), b'9gzv1plB_rp5', None, datetime.datetime(1978, 11, 17, 0, 42, 52)), 6: ('xnq6', -870, 501.755599, 0, datetime.date(1916, 3, 22), b'X0gOHafUo', None, datetime.datetime(1970, 5, 22, 3, 56, 8)), 7: ('eNGpCr5QnuVd', -212, 537.197465, 1, datetime.date(1960, 9, 6), b'Dnzdx9qW', None, datetime.datetime(1933, 2, 4, 23, 35, 9)), 8: ('Xz', -219, -319.649054, 1, datetime.date(1933, 9, 28), b'rQTWODlnd', None, datetime.datetime(1934, 5, 20, 6, 45, 21)), 9: ('n62', 220, -412.999743, 0, datetime.date(1977, 7, 7), b'dtdD4GdE0e', None, datetime.datetime(1926, 11, 21, 8, 32, 31)), 10: ('nE2NjiT', -42, -683.684491, 0, datetime.date(2018, 9, 25), b'Poh', None, datetime.datetime(1932, 1, 3, 20, 27, 53)), 11: ('qJ3zn9Ffcg', 83, -993.509368, 1, datetime.date(1993, 12, 7), b'pKM_JF5mSpy', None, datetime.datetime(1935, 1, 1, 10, 49, 8))}
     output_dict = SQLDataModel.from_dict(input_dict).to_dict()
