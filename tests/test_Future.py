@@ -272,6 +272,37 @@ def index_generator(index_pairs:int, shape:tuple[int, int], column_names:list[st
         test_pairs = [(rand_row_index(), rand_column_index()) for _ in range(index_pairs)] 
         return [[(row_idx, col_idx), generate_independent_validation(row_idx=row_idx, col_idx=col_idx, validation_row_indicies=tuple(range(row_count)), validation_headers=column_names)] for row_idx, col_idx in test_pairs]
 
+def grid_generator(start_idx:int=95, stop_idx:int=105, index_column:str='idx', headers:list[str]=['1','2','3']) -> tuple[list[tuple], list[str]]:
+    """Generates a grid like 2 dimensional structure with a first index column that starts at specified index range.
+    
+    Parameters:
+        ``start_idx`` (int): The starting index of the grid representing the first row as the inclusive lower bound. Default is 95.
+        ``stop_idx`` (int): The ending index of the grid representing the last row as ``stop_idx - 1`` as the exclusive upper bound. Default is 105.
+        ``index_column`` (str): The index column name to use. Default is 'sdm' reflecting the current default for SQLDataModel index column.
+        ``headers`` (list[str]): The headers to use for determining j dimension and to which the ``index_column`` will be prepended to.
+
+    Returns:
+        ``data, headers`` (tuple[list[tuple], list[str]]): A tuple of the generated grid data as the first item, and [index, *headers] as the second.
+    
+    Example::
+
+        >>> data, headers = grid_generator(5, 8)
+        >>> headers
+        ['idx', '0', '1', '2']
+        >>> for row in data:
+        ...     print(row)
+        ...
+        (5, '5,0', '5,1', '5,2')
+        (6, '6,0', '6,1', '6,2')
+        (7, '7,0', '7,1', '7,2')
+
+    Note:
+        - Primary purpose of this function is to provide non-standard index column values to test index retention across methods.
+    """
+    data = [tuple([i,*[f"{i},{j}" for j in range(len(headers))]]) for i in range(start_idx, stop_idx)]
+    headers = [index_column, *headers]
+    return data, headers
+
 @pytest.fixture
 def sample_data() -> tuple[list[list], list[str]]:
     """Returns sample data in format `(data, headers)` to use for testing."""
@@ -776,6 +807,25 @@ def test_py_sql_dtypes():
     output_row = sdm[0,:].data()
     for i in range(len(input_row)):
         assert type(input_row[i]) == type(output_row[i])
+
+@pytest.mark.core
+def test_iter():
+    # No index offset
+    start_idx, stop_idx = 0, 10
+    data, headers = grid_generator(start_idx=start_idx, stop_idx=stop_idx)
+    sdm = SQLDataModel(data, headers)
+    expected = (x for x in data)
+    output = sdm.__iter__()
+    for i in range(stop_idx - start_idx):
+        assert next(output) == next(expected)    
+    # With index offset
+    start_idx, stop_idx = 95, 105
+    data, headers = grid_generator(start_idx=start_idx, stop_idx=stop_idx)
+    sdm = SQLDataModel(data, headers)
+    expected = (x for x in data)
+    output = sdm.__iter__()
+    for i in range(stop_idx - start_idx):
+        assert next(output) == next(expected)
 
 @pytest.mark.core
 def test_set_display_properties(sample_data):
