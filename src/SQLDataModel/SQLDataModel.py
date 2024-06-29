@@ -12469,9 +12469,6 @@ class SQLDataModel:
         Note:
             - Used internally for methods selecting all the current rows and columns
             - See :meth:`SQLDataModel._generate_sql_stmt()` for generating statements for specified rows and columns only.
-            
-        .. versionadded:: 0.9.5
-            Added for faster resolution of methods with deterministic requirement for SQL statements selecting all model data such as :meth:`SQLDataModel.data()`.
         """
         columns = [self.sql_idx,*self.headers] if index else self.headers
         headers_selection_str = ",".join((f'"{col}" AS "{col}"' for col in columns))
