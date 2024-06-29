@@ -828,6 +828,49 @@ def test_iter():
         assert next(output) == next(expected)
 
 @pytest.mark.core
+def test_iter_rows():
+    # No row index offset
+    start_idx, stop_idx = 0, 50
+    data, headers = grid_generator(start_idx=start_idx, stop_idx=stop_idx)
+    sdm = SQLDataModel(data, headers)
+    expected = (x for x in data)
+    output = sdm.iter_rows()
+    for i in range(stop_idx - start_idx):
+        assert next(output) == next(expected)    
+    # With index offset
+    start_idx, stop_idx = 75, 125
+    data, headers = grid_generator(start_idx=start_idx, stop_idx=stop_idx)
+    sdm = SQLDataModel(data, headers)
+    # Offsets
+    min_row, max_row = 20, 40
+    expected = (x for x in data[min_row:max_row])
+    output = sdm.iter_rows(min_row=min_row, max_row=max_row)
+    for i in range(max_row - min_row):
+        assert next(output) == next(expected)
+
+@pytest.mark.core
+def test_iter_tuples():
+    # No index offset
+    headers = ['a', 'b', 'c']
+    start_idx, stop_idx = 0, 10
+    data, headers = grid_generator(start_idx=start_idx, stop_idx=stop_idx, headers=headers)
+    Row = namedtuple('Row', headers)
+    sdm = SQLDataModel(data, headers)
+    expected = (Row(*x) for x in data)
+    output = sdm.iter_tuples(index=True)
+    for i in range(stop_idx - start_idx):
+        assert next(output) == next(expected)    
+    # With index offset
+    headers = ['a', 'b', 'c']
+    start_idx, stop_idx = 95, 105
+    data, headers = grid_generator(start_idx=start_idx, stop_idx=stop_idx, headers=headers)
+    sdm = SQLDataModel(data, headers)
+    expected = (Row(*x) for x in data)
+    output = sdm.iter_tuples(index=True)
+    for i in range(stop_idx - start_idx):
+        assert next(output) == next(expected)
+            
+@pytest.mark.core
 def test_set_display_properties(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     sdm = SQLDataModel(data=input_data, headers=input_headers)
