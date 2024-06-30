@@ -10401,7 +10401,7 @@ class SQLDataModel:
         fetch_stmt = " ".join(("select",",".join([f"""max("{col}") as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
         return self.execute_fetch(fetch_stmt)     
 
-    def merge(self, merge_with:SQLDataModel=None, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None, include_join_column:bool=False) -> SQLDataModel:
+    def merge(self, merge_with:SQLDataModel, how:Literal["left","right","inner","full outer","cross"]="left", left_on:str=None, right_on:str=None, include_join_column:bool=False) -> SQLDataModel:
         """
         Merges two ``SQLDataModel`` instances based on specified columns and merge type, ``how``, returning the result as a new instance. 
         If the join column shares the same name in both models, ``left_on`` and ``right_on`` column arguments are not required and will be inferred. Otherwise, explicit arguments for both are required.
@@ -10605,6 +10605,9 @@ class SQLDataModel:
         ```
         
         Changelog:
+            - Version 0.10.2 (2024-06-30):
+                - Changed ``merge_with`` from keyword argument to positional argument to reflect argument is required and not optional.
+                
             - Version 0.10.1 (2024-06-29):
                 - Modified to raise ``SQLProgrammingError`` if available sqlite3 version < 3.39.0 and join type is one of 'right' or 'full outer', which was not supported by older versions.
 
@@ -10770,15 +10773,16 @@ class SQLDataModel:
         self._update_model_metadata(update_row_meta=True)        
         return
 
-    def set_display_color(self, color:str|tuple):
+    def set_display_color(self, color:str|tuple=None) -> None:
         """
-        Sets the table string representation color when ``SQLDataModel`` is displayed in the terminal.
+        Sets the table string representation color when ``SQLDataModel`` is displayed in the terminal, selecting a random color if ``color`` is not provided.
 
         Parameters:
             ``color`` (str or tuple): Color to set. Accepts hex value (e.g., ``'#A6D7E8'``) or tuple of RGB values (e.g., ``(166, 215, 232)``).
+                When not provided or ``color = None``, a random color from a preselected pool will be used through :mod:`ANSIColor.ANSIColor.rand_color()`
 
         Returns:
-            ``None``
+            ``None``: The color value is set at :py:attr:`SQLDataModel.display_color` and nothing is returned.
 
         Example::
 
@@ -10793,13 +10797,33 @@ class SQLDataModel:
             # Set color using rgb value
             sdm.set_display_color((166, 215, 232))
 
+        If you're unsure of which color to use, have one selected for you:
+
+        ```python
+            # Surprise me! Use a random color
+            sdm.set_display_color()
+
+            # View the value set
+            print(sdm.display_color)
+        ```
+
+        In this case we got a nice 'plum' color:
+
+        ```text
+            ANSIColor('#F6A8CC')
+        ```
+
         Changelog:
+            - Version 0.10.2 (2024-06-30):
+                - Modified to randomly select a color from :mod:`ANSIColor.ANSIColor.Colors` when ``color = None`` for demonstration purposes.
+
             - Version 0.7.0 (2024-06-08):
                 - Removed warning message and modified to raise exception on failure to create display color pen.
 
         Note:
             - By default, no color styling is applied and the native terminal color is used.
             - To use rgb values, ensure a single tuple is provided as an argument.
+            - When ``color = None`` the random color is selected from a preexisting pool, see :mod:`ANSIColor.ANSIColor.rand_color()` for more details.
         """
         self.display_color = ANSIColor(color)
 
