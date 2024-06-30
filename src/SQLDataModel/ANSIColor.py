@@ -38,6 +38,7 @@ class ANSIColor:
             - Added dictionary of color values at :py:attr:`ANSIColor.Colors` to use as selection pool.
             - Modified :meth:`ANSIColor.__repr__()` to always return hex value as a string for consistency regardless of original input format.
     """
+
     Colors = {
         'gray-100': '#FAFBFD'
         ,'purple-300': '#B86BA2'
@@ -165,8 +166,11 @@ class ANSIColor:
                     ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', string argument for `text_color` must be a valid hexadecimal value between `#000000` and `#ffffff`")
                 ) from None
             self.text_color_str = text_color
+            """``str``: The input color used to create the pen in the originally provided format."""
             self.text_color_hex = text_color.upper()
+            """``str``: The hex value of color uppercased and prepended with '#' to reflect hexadecimal format ranging from ``'#000000'`` to ``'#FFFFFF'``."""
             self.text_color_rgb = (fg_r, fg_g, fg_b)
+            """``tuple[int, int, int]``: The RGB value of the color as a tuple of integers reflecting the (red, green, blue) values satisfying ``0 <= value <= 255``."""
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
                     raise ValueError(
@@ -180,8 +184,11 @@ class ANSIColor:
                     ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', tuple argument for `text_color` must be a valid rgb tuple `(r, g, b)` with values between `0` and `255`")
                 ) from None  
             self.text_color_str = str(text_color)
+            """``str``: The input color used to create the pen in the originally provided format."""
             self.text_color_hex = f"#{fg_r:02X}{fg_g:02X}{fg_b:02X}"
+            """``str``: The hex value of color uppercased and prepended with '#' to reflect hexadecimal format ranging from ``'#000000'`` to ``'#FFFFFF'``."""
             self.text_color_rgb = (fg_r, fg_g, fg_b)
+            """``tuple[int, int, int]``: The RGB value of the color as a tuple of integers reflecting the (red, green, blue) values satisfying ``0 <= value <= 255``."""
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
                     raise ValueError(
