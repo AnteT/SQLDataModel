@@ -10415,6 +10415,7 @@ class SQLDataModel:
         
         Raises:
             ``TypeError``: If ``merge_with`` is not of type ``SQLDataModel``.
+            ``SQLProgrammingError``: If sqlite3 version < 3.39.0 and join type is one of 'right' or 'full outer' which were unsupported.
             ``DimensionError``: If no shared column exists, and explicit ``left_on`` and ``right_on`` arguments are not provided.
             ``ValueError``: If the specified ``left_on`` or ``right_on`` column is not found in the respective models.
 
@@ -10602,12 +10603,23 @@ class SQLDataModel:
             └─────────┴──────┴──────┴─────────┘
             [16 rows x 4 columns]
         ```
+        
+        Changelog:
+            - Version 0.10.1 (2024-06-29):
+                - Modified to raise ``SQLProgrammingError`` if available sqlite3 version < 3.39.0 and join type is one of 'right' or 'full outer', which was not supported by older versions.
 
         Note:
             - If ``include_join_column=False`` then only the ``left_on`` join column is included in the result, with the ``right_on`` column removed to avoid redundant shared key values.
             - If ``include_join_column=True`` then all the columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates()` for details.
             - The resulting ``SQLDataModel`` is created based on the ``sqlite3`` join definition and specified columns and merge type, for details see ``sqlite3`` documentation.
-        """        
+            - See :meth:`SQLDataModel.hstack()` for horizontally stacking SQLDataModel using shared row dimensions.
+            - See :meth:`SQLDataModel.vstack()` for vertically stacking SQLDataModel using shared column dimensions.
+        """
+        # Add check for prior sqlite3 versions without support for right and full outer joins
+        if (sqlite3.sqlite_version_info < (3,39,0)) and how in ("right", "full outer"):
+            raise SQLProgrammingError(
+                SQLDataModel.ErrorFormat(f"SQLProgrammingError: incompatible sqlite3 version, available version '{sqlite3.sqlite_version}' < 3.39.0 which does not support right or full outer joins")
+            )
         if not isinstance(merge_with, SQLDataModel):
             raise TypeError(
                 SQLDataModel.ErrorFormat(f"TypeError: invalid merge type '{type(merge_with).__name__}', argument `merge_with` must be another instance of type ``SQLDataModel``")
