@@ -962,7 +962,7 @@ class SQLDataModel:
         Parameters:
             ``json_source`` (dict | list): The raw JSON data to be parsed.
             ``flatten_rows`` (bool): If True, the data will be normalized into columns and rows. If False,
-            columns will be concatenated from each row using the specified `key_prefix`.
+                columns will be concatenated from each row using the specified `key_prefix`.
             ``level_sep`` (str): Separates nested levels from other levels and used to concatenate prefix to column.
             ``key_prefix`` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
 
@@ -1053,7 +1053,7 @@ class SQLDataModel:
                 Teradata: ``'teradata'`` or ``'teradatasql'``
 
         Returns:
-            ``ConnectionDetails`` (NamedTuple): The parsed details as ``ConnectionDetails('scheme', 'user', 'cred', 'host', 'port', 'db')``
+            ``ConnectionDetails``: The parsed details as ``ConnectionDetails('scheme', 'user', 'cred', 'host', 'port', 'db')``
         
         Supported Formats:
             - SQLite using ``sqlite3`` with format ``'file:///path/to/database.db'``
@@ -1820,10 +1820,6 @@ class SQLDataModel:
         Returns:
             ``None``: Sets the ``min_column_width`` property.
 
-        Note:
-            - If ``min_column_width`` is set to a value below the current ``max_column_width`` property, the maximum width will override the minimum width.
-            - The minimum required width is ``2``, when ``min_column_width < 2``, ``2`` will be used regardless of the ``width`` provided.
-
         Example::
 
             from SQLDataModel import SQLDataModel
@@ -1835,8 +1831,12 @@ class SQLDataModel:
             sdm.set_min_column_width(8)
 
             # Check updated value
-            print(sdm.get_min_column_width) # 8
+            print(sdm.min_column_width) # 8
         
+        Note:
+            - If ``min_column_width`` is set to a value below the current ``max_column_width`` property, the maximum width will override the minimum width.
+            - The minimum required width is ``2``, when ``min_column_width < 2``, ``2`` will be used regardless of the ``width`` provided.
+            - See :meth:`SQLDataModel.set_max_column_width()` to set maximum column width for table representations.
         """
         self.min_column_width = width if width >= 2 else 2
 
@@ -1873,10 +1873,6 @@ class SQLDataModel:
         Returns:
             ``None``: Sets the ``max_column_width`` property.
 
-        Note:
-            - If ``max_column_width`` is set to a value below the current ``min_column_width`` property, the maximum width will override the minimum width.
-            - The minimum required width is ``2``, when ``max_column_width < 2``, ``2`` will be used regardless of the ``width`` provided.
-
         Example::
 
             from SQLDataModel import SQLDataModel
@@ -1887,6 +1883,10 @@ class SQLDataModel:
             # Change the max column width for the table representation
             sdm.set_max_column_width(20)
         
+        Note:
+            - If ``max_column_width`` is set to a value below the current ``min_column_width`` property, the maximum width will override the minimum width.
+            - The minimum required width is ``2``, when ``max_column_width < 2``, ``2`` will be used regardless of the ``width`` provided.        
+            - See :meth:`SQLDataModel.set_min_column_width()` to set minimum column width for table representations.        
         """
         self.max_column_width = width if width >= 2 else 2
 
@@ -4866,7 +4866,7 @@ class SQLDataModel:
         ```
 
         Changelog:
-            - Version 0.9.5 (2024-06-29):
+            - Version 0.10.0 (2024-06-29):
                 - Modified to use :meth:`SQLDataModel._generate_sql_stmt_fetchall()` to leverage deterministic behavior of method.    
 
             - Version 0.5.0 (2024-05-09):
@@ -10222,7 +10222,7 @@ class SQLDataModel:
                 pass # Do stuff with namedtuples
         
         Changelog:
-            - Version 0.9.5 (2024-06-29):
+            - Version 0.10.0 (2024-06-29):
                 - Renamed ``include_idx_col`` parameter to ``index`` for package consistency.
                 - Modified to use :meth:`SQLDataModel._generate_sql_stmt_fetchall()` to leverage deterministic behavior of method.        
 
@@ -12523,10 +12523,10 @@ class SQLDataModel:
                     ,('',    '  ','')
                     ,('',' ','  ',''))        
         if style == 'markdown': 
-            return  (('','','','')
-                    ,('|-','-','-|-','-|')
-                    ,('| ',    ' | ',' |')
-                    ,('','','',''))
+            return  (('',    '',   '',  '')
+                    ,('|-' ,'-','-|-','-|')
+                    ,('| ' ,    ' | ',' |')
+                    ,('','', '',        ''))
         if style == 'outline':
             return  (('┌─','─','──','─┐')
                     ,('├─','─','──','─┤')
@@ -12535,7 +12535,7 @@ class SQLDataModel:
         if style == 'pandas':
             return  (('','','','')
                     ,('','','','')
-                    ,('',    '  ','')
+                    ,('', '  ','')
                     ,('','','',''))
         if style == 'polars':
             return  (('┌─','─','─┬─','─┐')
@@ -12543,10 +12543,10 @@ class SQLDataModel:
                     ,('│ ',    ' ┆ ',' │')
                     ,('└─','─','─┴─','─┘'))
         if style == 'postgresql':
-            return  (('','','','')
-                    ,('','-','-+-','')
-                    ,('',    ' | ','')
-                    ,('','','',''))
+            return  (('', '',     '','')
+                    ,('','-',  '-+-','')
+                    ,('',      ' | ','')
+                    ,('', '',     '',''))
         if style == 'round':
             return  (('╭─','─','─┬─','─╮')
                     ,('├─','─','─┼─','─┤')
