@@ -10607,7 +10607,7 @@ class SQLDataModel:
         Changelog:
             - Version 0.10.2 (2024-06-30):
                 - Changed ``merge_with`` from keyword argument to positional argument to reflect argument is required and not optional.
-                
+
             - Version 0.10.1 (2024-06-29):
                 - Modified to raise ``SQLProgrammingError`` if available sqlite3 version < 3.39.0 and join type is one of 'right' or 'full outer', which was not supported by older versions.
 
@@ -10779,7 +10779,7 @@ class SQLDataModel:
 
         Parameters:
             ``color`` (str or tuple): Color to set. Accepts hex value (e.g., ``'#A6D7E8'``) or tuple of RGB values (e.g., ``(166, 215, 232)``).
-                When not provided or ``color = None``, a random color from a preselected pool will be used through :mod:`ANSIColor.ANSIColor.rand_color()`
+                When not provided or ``color = None``, a random color from a preselected pool will be used through :mod:`SQLDataModel.ANSIColor.rand_color()`
 
         Returns:
             ``None``: The color value is set at :py:attr:`SQLDataModel.display_color` and nothing is returned.
@@ -10815,7 +10815,7 @@ class SQLDataModel:
 
         Changelog:
             - Version 0.10.2 (2024-06-30):
-                - Modified to randomly select a color from :mod:`ANSIColor.ANSIColor.Colors` when ``color = None`` for demonstration purposes.
+                - Modified to randomly select a color from :mod:`SQLDataModel.ANSIColor.Colors` when ``color = None`` for demonstration purposes.
 
             - Version 0.7.0 (2024-06-08):
                 - Removed warning message and modified to raise exception on failure to create display color pen.
@@ -10823,7 +10823,7 @@ class SQLDataModel:
         Note:
             - By default, no color styling is applied and the native terminal color is used.
             - To use rgb values, ensure a single tuple is provided as an argument.
-            - When ``color = None`` the random color is selected from a preexisting pool, see :mod:`ANSIColor.ANSIColor.rand_color()` for more details.
+            - When ``color = None`` the random color is selected from a preexisting pool, see :mod:`SQLDataModel.ANSIColor.rand_color()` for more details.
         """
         self.display_color = ANSIColor(color)
 

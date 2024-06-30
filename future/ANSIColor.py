@@ -119,7 +119,11 @@ class ANSIColor:
         ,'blue-225': '#90D5EA'
         ,'violet-150': '#ADA6E8'
     }
-    """``dict[str, str]``: A dictionary of preselected colors with format ``{'label': 'hexcode'}`` to use as selection pool for :meth:`ANSIColor.rand_color()` for SQLDataModel. :meta private:"""
+    """
+    ``dict[str, str]``: A dictionary of preselected colors with format ``{'label': 'hexcode'}`` to use as selection pool for :meth:`ANSIColor.rand_color()`.
+    
+    :meta private:
+    """
     
     def __init__(self, text_color:str|tuple=None, text_bold:bool=False) -> None:
         """
