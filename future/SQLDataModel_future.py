@@ -10653,6 +10653,128 @@ class SQLDataModel:
         fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b {join_stmt}"""))
         return self.execute_fetch(fetch_stmt)
       
+    def pivot(self, pivot_column:str, category_column:str, amount_column:str|list[str]=None, fill_value:Any=None, agg_func:Literal['sum','avg','min','max']='sum') -> SQLDataModel:
+        """
+        Create a pivot table using the columns specified and return the result as a new SQLDataModel.
+        
+        The pivot method transforms the data in the SQLDataModel into a pivot table format summarizing the values of one column ``amount_column`` 
+        based on unique values from two other columns, the ``pivot_column`` and the ``category_column``
+        
+        Parameters:
+            ``pivot_column`` (str): Column to pivot on. The unique values in this column will form the rows of the pivot table.
+            ``category_column`` (str): Column to categorize the data. The unique values in this column will form the columns of the pivot table.
+            ``amount_column`` (str, list, optional): Column(s) to aggregate. Accepts either a single string or a list of strings. Defaults to all numeric columns if not provided.
+            ``fill_value`` (Any, optional): Value to fill when there is no data for a particular category. Defaults to None.
+            ``agg_func`` (Literal['sum', 'avg', 'min', 'max'], optional): Aggregate function to use. Defaults to 'sum'.
+
+        Raises:
+            ``TypeError``: If arguments for columns are of type 'str', 'int' or list, representing column name or integer index.
+            ``ValueError``: If there are insufficient numeric columns for aggregation, invalid aggregate function, or insufficient distinct values in the category column.
+
+        Returns:
+            ``SQLDataModel``: A new SQLDataModel instance containing the result of the pivot operation.
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Product', 'Units', 'Qtr','Sales']
+            data = [
+                ('Chainsaw', 75, 'Q1', 1500),
+                ('Chainsaw', 80, 'Q2', 1600),
+                ('Chainsaw', 78, 'Q3', 1550),
+                ('Chainsaw', 79, 'Q4', 1580),
+                ('Hammer', 40, 'Q1', 800),
+                ('Hammer', 42, 'Q2', 850),
+                ('Hammer', 41, 'Q3', 820),
+                ('Hammer', 42, 'Q4', 830),
+                ('Drill', 50, 'Q1', 1000),
+                ('Drill', 55, 'Q2', 1100),
+                ('Drill', 52, 'Q3', 1050),
+                ('Drill', 54, 'Q4', 1080)
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Pivot 'Product' by quarterly sales
+            quarterly_sales = sdm.pivot('Product', 'Qtr', 'Sales')
+
+            # View result
+            print(quarterly_sales)
+        
+        This will output a wide pivot table summing up 'Sales' by 'Qtr' for each 'Product':
+
+        ```text
+            ┌───┬──────────┬──────┬──────┬──────┬──────┐
+            │   │ Product  │   Q1 │   Q2 │   Q3 │   Q4 │
+            ├───┼──────────┼──────┼──────┼──────┼──────┤
+            │ 0 │ Chainsaw │ 4810 │ 7800 │ 1550 │ 1580 │
+            │ 1 │ Drill    │ 1000 │ 1100 │ 1050 │ 1080 │
+            │ 2 │ Hammer   │  800 │  850 │  820 │  830 │
+            └───┴──────────┴──────┴──────┴──────┴──────┘
+            [3 rows x 5 columns]
+        ```  
+
+        Multiple columns can be aggregated to produce a wider pivot
+
+        ```python
+            # This time pivot by 'Sales' and 'Units'
+            quarterly_metrics = sdm.pivot('Product', 'Qtr', ['Units','Sales'])
+
+            # View new pivot
+            print(quarterly_metrics)
+        ```
+
+        When multiple aggregates are used, columns are labeled '<category_column> <amount_column>':
+
+        ```text
+            ┌───┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+            │   │ Product  │ Q1 Units │ Q1 Sales │ Q2 Units │ Q2 Sales │ Q3 Units │ Q3 Sales │ Q4 Units │ Q4 Sales │
+            ├───┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
+            │ 0 │ Chainsaw │      225 │     4810 │      210 │     7800 │       78 │     1550 │       79 │     1580 │
+            │ 1 │ Drill    │       50 │     1000 │       55 │     1100 │       52 │     1050 │       54 │     1080 │
+            │ 2 │ Hammer   │       40 │      800 │       42 │      850 │       41 │      820 │       42 │      830 │
+            └───┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+            [3 rows x 9 columns]
+        ```
+        
+        Note:
+            - When no ``amount_column`` is provided, all numeric column types will be used.
+            - All column arguments can also be specified by their integer index as well as their value.
+            - Use ``fill_value`` to provide a default value when there is no data for a particular category.
+            - The aggregate function specified in ``agg_func`` must be one of 'sum', 'avg', 'min', or 'max', with sum used by default.
+            - See :meth:`SQLDataModel.transpose()` for transposing rows and columns directly.
+            - See :meth:`SQLDataModel.group_by()` for regular aggregation.
+
+        .. versionadded:: 0.10.3
+        """
+        if amount_column:
+            amount_column = [amount_column] if isinstance(amount_column, (str,int)) else amount_column
+        else: # Use all numeric columns if amount column is not provided
+            amount_column = [col for col, dtype in self.dtypes.items() if dtype in ('int','float')]
+        if (num_cols := len(amount_column)) < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: insufficient numeric columns '{num_cols}', at least 1 numeric column is required for aggregating a pivot result")
+            )
+        if agg_func.lower() not in ('sum','avg','min','max'):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid aggregate function '{agg_func}', argument for `agg_func` must be one of 'sum', 'avg', 'min' or 'max'")
+            )
+        pivot_column, category_column, *amount_column = self._validate_column([pivot_column,category_column,*[col for col in amount_column]], unmodified=False)
+        unique_category_values = [r[0] for r in self.sql_db_conn.execute(f"""SELECT DISTINCT "{category_column}" FROM "{self.sql_model}" """).fetchall()]
+        if (num_category := len(unique_category_values)) < 1:
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: insufficient distinct values '{num_category}', category column '{category_column}' requires at least 1 unique value for aggregating a pivot result")
+            )
+        if len(amount_column) == 1:
+            agg_stmt = ','.join(f'''IFNULL({agg_func}(CASE WHEN "{category_column}" = '{category_val}' THEN {amount_column[0]} END),{f'{fill_value}' if fill_value else 'NULL'}) AS "{category_val}"''' for category_val in unique_category_values)
+        else:
+            agg_stmt = ','.join(f'''IFNULL({agg_func}(CASE WHEN "{category_column}" = '{category_val}' THEN {amt} END),{f'{fill_value}' if fill_value else 'NULL'}) AS "{category_val} {amt}"''' for category_val in unique_category_values for amt in amount_column)
+        pivot_stmt = f"""SELECT "{pivot_column}", {agg_stmt} FROM "{self.sql_model}" GROUP BY "{pivot_column}" ORDER BY "{pivot_column}";"""
+        return self.execute_fetch(pivot_stmt)
+
     def reset_index(self, start_index:int=0) -> None:
         """
         Resets the index of the ``SQLDataModel`` instance inplace to zero-based sequential autoincrement, or to specified ``start_index`` base with sequential incrementation.
