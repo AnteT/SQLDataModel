@@ -1867,6 +1867,24 @@ def test_merge():
     assert joined_output == expected_output
 
 @pytest.mark.core
+def test_pivot():
+    input_headers = ['Product', 'Units', 'Qtr', 'Sales']
+    input_data = [['Chainsaw', 75, 'Q1', 1500],['Chainsaw', 80, 'Q2', 1600],['Chainsaw', 78, 'Q3', 1550],['Chainsaw', 79, 'Q4', 1580],['Hammer', 40, 'Q1', 800],['Hammer', 42, 'Q2', 850],['Hammer', 41, 'Q3', 820],['Hammer', 42, 'Q4', 830],['Drill', 50, 'Q1', 1000],['Drill', 55, 'Q2', 1100],['Drill', 52, 'Q3', 1050],['Drill', 54, 'Q4', 1080]]
+    sdm = SQLDataModel(input_data, input_headers)
+    expected = [('Chainsaw', 75, 1500, 80, 1600, 78, 1550, 79, 1580), ('Drill', 50, 1000, 55, 1100, 52, 1050, 54, 1080), ('Hammer', 40, 800, 42, 850, 41, 820, 42, 830)]
+    output = sdm.pivot('Product','Qtr', agg_func='sum').data()
+    assert output == expected
+    output = sdm.pivot('Product','Qtr','Units', agg_func='avg').data()
+    expected = [('Chainsaw', 75, 80, 78, 79), ('Drill', 50, 55, 52, 54), ('Hammer', 40, 42, 41, 42)]
+    assert output == expected
+    output = sdm.pivot('Product','Qtr',['Sales'], agg_func='max').data()
+    expected = [('Chainsaw', 1500, 1600, 1550, 1580), ('Drill', 1000, 1100, 1050, 1080), ('Hammer', 800, 850, 820, 830)]
+    assert output == expected
+    output = sdm.pivot('Product','Qtr',['Units','Sales'], agg_func='min').data()
+    expected = [('Chainsaw', 75, 1500, 80, 1600, 78, 1550, 79, 1580), ('Drill', 50, 1000, 55, 1100, 52, 1050, 54, 1080), ('Hammer', 40, 800, 42, 850, 41, 820, 42, 830)]
+    assert output == expected
+
+@pytest.mark.core
 def test_sort(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     none_col_skip_idx = 6 # skip nonetype column for sort test
