@@ -8881,6 +8881,9 @@ class SQLDataModel:
         Note:
             - The ``slc`` parameter can be an integer, a tuple of disconnected row indices, a slice representing a range of rows, a string or list of strings representing column names, or a tuple combining row and column indices.
             - The returned SQLDataModel instance will contain the specified subset of rows and columns, retaining the row indicies of the original view.
+
+        .. versionchanged:: 0.5.0
+            Modified index retention behavior to pass through row indicies and avoid resetting view order.
         """         
         validated_rows, validated_columns = self._validate_indicies(target_indicies)
         sql_stmt_generated = self._generate_sql_stmt(rows=validated_rows,columns=validated_columns,index=True) # NOTE: toggle to retain prior indicies after getitem slicing, changed in version 0.5.0 to True
@@ -9464,6 +9467,9 @@ class SQLDataModel:
             - Use :meth:`SQLDataModel.set_column_alignment()` to modify column alignment, available options are dynamic alignment based on dtype, left, center or right alignment.
             - Use :meth:`SQLDataModel.set_display_color()` to modify the table color, by default no color is applied with characters drawn using platform specific settings.
             - Use :meth:`SQLDataModel.set_table_style()` to modify the table style format and box characters used to draw the table.
+
+        .. versionchanged:: 0.7.0
+            Modified horizontal truncation behavior to alternate column selection between table start and table end instead of sequential left to right ordering.
         """
         table_format = self._generate_table_style()
         top_lh, top_hbar, top_sep, top_rh = table_format[0]
