@@ -828,7 +828,7 @@ class SQLDataModel:
             return '''NULLIF(NULLIF(?,'None'),'')''' if as_binding else f'''NULLIF(NULLIF("{param}",'None'),'') {param_alias}'''
         
     @staticmethod
-    def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None) -> str:
+    def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None, escape_newline:bool=False) -> str:
         """
         Formats SQLite SELECT clauses based on column parameters to provide preformatted fetches, providing most of the formatting for ``repr`` output.
 
@@ -838,11 +838,14 @@ class SQLDataModel:
             ``max_pad_width`` (int): The maximum width to pad the output.
             ``float_precision`` (int, optional): The precision for floating-point numbers (default is 4).
             ``alignment`` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
+            ``escape_newline`` (bool, optional): If newline characters should be escaped when ``dtype = 'str'``. Default is False.
 
         Returns:
             ``str``: The formatted SELECT clause for SQLite.
 
         Changelog:
+            - Version 0.10.4 (2024-07-03):
+                - Added ``escape_newline`` keyword argument to escape newline characters to prevent wrapping lines when called by :meth:`SQLDataModel.__repr__()`
             - Version 0.7.0 (2024-06-08):
                 - Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
 
@@ -851,6 +854,10 @@ class SQLDataModel:
             - The output preformats SELECT result to fit ``repr`` method for tabular output.
             - The return ``str`` is not valid SQL by itself, representing only the single column select portion.
 
+        .. versionchanged:: 0.10.4
+            Added ``escape_newline`` keyword argument to escape newline characters to prevent wrapping lines when called by :meth:`SQLDataModel.__repr__()`
+        .. versionchanged:: 0.7.0
+            Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
         .. versionadded:: 0.1.9
         """
         if dtype == 'custom':
@@ -865,7 +872,8 @@ class SQLDataModel:
             elif dtype == 'index':
                 select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
             else:
-                select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
+                column = f'"{column}"' if not escape_newline else  "".join((f'REPLACE("{column}",',"'\n','\\n')"))
+                select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN length({column}) <= ({max_pad_width}) THEN {column} ELSE substr({column},1,({max_pad_width})-2)||'⠤⠄' END) """
             return select_item_fmt
         else: # left, right aligned
             if alignment in ("<", ">"):
@@ -877,7 +885,8 @@ class SQLDataModel:
                 elif dtype == 'index':
                     select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
                 else:
-                    select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-2)||'⠤⠄' END) """
+                    column = f'"{column}"' if not escape_newline else  "".join((f'REPLACE("{column}",',"'\n','\\n')"))
+                    select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN length({column}) <= ({max_pad_width}) THEN {column} ELSE substr({column},1,({max_pad_width})-2)||'⠤⠄' END) """
                 return select_item_fmt            
             else: # center aligned
                 if dtype == 'index':
@@ -895,7 +904,10 @@ class SQLDataModel:
                     elif dtype == 'bytes':
                         col_discriminator = f"""(CASE WHEN LENGTH("{column}")+3 <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_BYTES} /* [Favor left (-) or right (+) on uneven split] */ - (length("{column}")+3))/2),('b'''||"{column}"||'''')) ELSE SUBSTR('b'''||"{column}"||'''',1,{max_pad_width}-2)||'⠤⠄' END)"""
                     else:
-                        col_discriminator = f"""(CASE WHEN LENGTH("{column}") <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_REMAINING} /* [Favor left (-) or right (+) on uneven split] */ - length("{column}"))/2),"{column}") ELSE SUBSTR(printf('%!s',"{column}"),1,{max_pad_width}-2)||'⠤⠄' END)"""
+                        column = f'"{column}"' if not escape_newline else  "".join((f'REPLACE("{column}",',"'\n','\\n')"))
+                        col_discriminator = f"""(CASE WHEN LENGTH({column}) <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_REMAINING} /* [Favor left (-) or right (+) on uneven split] */ - length({column}))/2),{column}) ELSE SUBSTR(printf('%!s',{column}),1,{max_pad_width}-2)||'⠤⠄' END)"""
+                        string_only_select_item_fmt = f"""CASE WHEN {column} IS NULL THEN printf('%{max_pad_width}s',"") ELSE printf('%!-{max_pad_width}.{max_pad_width}s',{col_discriminator}) END"""
+                        return string_only_select_item_fmt
                     select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s',"") ELSE printf('%!-{max_pad_width}.{max_pad_width}s',{col_discriminator}) END"""
         return select_item_fmt
 
@@ -5711,6 +5723,9 @@ class SQLDataModel:
         ```
         
         Changelog:
+            - Version 0.10.4 (2024-07-03):
+                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -5718,6 +5733,8 @@ class SQLDataModel:
             - A ``\\centering`` command is included in the LaTeX output by default regardless of alignments specified.
             - LaTeX headers and rows are indented by four spaces to keep with conventional table syntax and to distinguish the table data from commands.
 
+        .. versionchanged:: 0.10.4
+            Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
         .. versionchanged:: 0.3.0
             Renamed ``include_index`` parameter to ``index`` for package consistency.            
         .. versionadded:: 0.1.9              
@@ -5756,7 +5773,8 @@ class SQLDataModel:
         display_headers = [self.sql_idx,*self.headers] if index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}'))
+        # Required to escape newline characters when calculating min and max column widths
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] != 'str' else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ ))) for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -5781,7 +5799,7 @@ class SQLDataModel:
         latex_end_tabular = """\\end{tabular}"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if index else ""
         # NOTE: LaTeX table output set to dynamic alignment on this line regardless of column_alignment argument passed, this provides better formatted output and the alignment is changed when rendered by LaTeX to the values provided in the tabular declaration, which are influenced by the column_alignment argument provided
-        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=None)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=None,escape_newline=True)}""" for col in display_headers if col != self.sql_idx])
         fetch_fmt_stmt = f"""select '{table_left_edge}'||{fetch_idx}{header_fmt_str}||'{table_right_edge}{table_bare_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         formatted_headers = ' & '.join([f"""{latex_bold}{{{col}}}""" if len(col) <= header_length_dict[col] else f"""{latex_bold}{{{col[:(header_length_dict[col]-2)]}⠤⠄}}""" if col != self.sql_idx else f"""{latex_bold}{{idx}}""" for col in display_headers])
@@ -6009,6 +6027,9 @@ class SQLDataModel:
         ```
         
         Changelog:
+            - Version 0.10.4 (2024-07-03):
+                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
@@ -6016,6 +6037,8 @@ class SQLDataModel:
             - All markdown output will contain the alignment characters ``':'`` as determined by the :py:attr:`SQLDataModel.column_alignment` attribute or parameter.
             - Any exception encountered during file read or writing operations is caught and reraised, see related :meth:`SQLDataModel.from_markdown`.
 
+        .. versionchanged:: 0.10.4
+            Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
         .. versionchanged:: 0.3.0
             Renamed ``include_index`` parameter to ``index`` for package consistency.            
         .. versionadded:: 0.1.9              
@@ -6056,7 +6079,8 @@ class SQLDataModel:
         display_headers = [self.sql_idx,*self.headers] if index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         header_printf_modifiers_dict = {col:(f"'% .{float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}'))
+        # Required to escape newline characters when calculating max column widths
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] != 'str' else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ ))) for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -6068,7 +6092,7 @@ class SQLDataModel:
         table_dynamic_newline = """\n"""
         vconcat_column_separator = """|| ' | ' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + vconcat_column_separator if index else ""
-        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = vconcat_column_separator.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],float_precision,alignment=column_alignment,escape_newline=True)}""" for col in display_headers if col != self.sql_idx])
         fetch_fmt_stmt = f"""select '{table_left_edge}' || {fetch_idx}{header_fmt_str}||' |{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if column_alignment is None:
@@ -6905,6 +6929,9 @@ class SQLDataModel:
             Unlike output from ``print(sdm)`` or other calls to :meth:`SQLDataModel.__repr__()`, the output from this method includes the full ``SQLDataModel`` and is not restricted by current terminal size or the value set at :py:attr:`SQLDataModel.display_max_rows`. As such, horizontal truncation only occurs on cell values as determined by ``max_column_width`` and no other horizontal or vertical table-wide truncation is performed.
 
         Changelog:
+            - Version 0.10.4 (2024-07-03):
+                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+
             - Version 0.3.10 (2024-04-16):
                 - Added ``table_style`` parameter and updated output to reflect new formatting styles introduced in version 0.3.9.
                 - Added ``display_dimensions`` parameter to allow toggling display of table dimensions in output.
@@ -6922,6 +6949,8 @@ class SQLDataModel:
             - If ``column_alignment`` is ``None``, the method uses the current value on :py:attr:`SQLDataModel.column_alignment`.
             - If ``table_style`` is ``None``, the method uses the current value on :py:attr:`SQLDataModel.table_style`.
 
+        .. versionchanged:: 0.10.4
+            Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
         .. versionchanged:: 0.9.3
             Added additional options 'rst-simple' and 'rst-grid' for ``table_style`` parameter. 
         """        
@@ -6972,7 +7001,9 @@ class SQLDataModel:
         display_max_rows = self.row_count
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
         header_printf_modifiers_dict = {col:(f"'% .{display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc'))
+        # Required to escape newlines when calculating column widths
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] != 'str' else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ ))) for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc'))
+        
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -6980,7 +7011,7 @@ class SQLDataModel:
         table_dynamic_newline = """\n"""
         row_sep_concat = f"""|| '{row_sep}' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
-        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],display_float_precision,alignment=column_alignment,escape_newline=True)}""" for col in display_headers if col != self.sql_idx])
         fetch_fmt_stmt = f"""select '{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_dynamic_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {display_max_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
         if column_alignment is None: # dynamic alignment
@@ -9458,6 +9489,9 @@ class SQLDataModel:
         ```
 
         Changelog:
+            - Version 0.10.4 (2024-07-03):
+                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+
             - Version 0.7.0 (2024-06-08):
                 - Modified horizontal truncation behavior to alternate column selection between table start and table end instead of sequential left to right ordering.
 
@@ -9468,6 +9502,8 @@ class SQLDataModel:
             - Use :meth:`SQLDataModel.set_display_color()` to modify the table color, by default no color is applied with characters drawn using platform specific settings.
             - Use :meth:`SQLDataModel.set_table_style()` to modify the table style format and box characters used to draw the table.
 
+        .. versionchanged:: 0.10.4
+            Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
         .. versionchanged:: 0.7.0
             Modified horizontal truncation behavior to alternate column selection between table start and table end instead of sequential left to right ordering.
         """
@@ -9498,10 +9534,12 @@ class SQLDataModel:
         column_alignment = None if self.column_alignment == 'dynamic' else '<' if self.column_alignment == 'left' else '^' if self.column_alignment == 'center' else '>' if self.column_alignment == 'right' else None
         display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
         header_py_dtype_dict = {col:cmeta[1] for col, cmeta in self.header_master.items()}
-        # header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'% d'" if dtype == 'int' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
         header_printf_modifiers_dict = {col:(f"'% .{self.display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
-        # headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" where ("{self.sql_idx}" < {check_width_top} or "{self.sql_idx}" >= {check_width_bottom}) order by "{self.sql_idx}" asc limit {max_display_rows})'))
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" {check_width_scope} order by "{self.sql_idx}" asc limit {max_display_rows})'))
+        # headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" {check_width_scope} order by "{self.sql_idx}" asc limit {max_display_rows})'))
+        # Revised to handle escaping newlines when calculating min and max viewable column widths
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",
+                                ",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] != 'str' else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ )))
+                                            for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" where "{self.sql_idx}" in (select "{self.sql_idx}" from "{self.sql_model}" {check_width_scope} order by "{self.sql_idx}" asc limit {max_display_rows})'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{self.min_column_width}),{self.max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -9529,7 +9567,7 @@ class SQLDataModel:
             display_headers = [*lh_headers,horizontal_sep_marker,*rh_headers[::-1]]
         row_sep_concat = f"""|| '{row_sep}' ||"""
         fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
-        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment)}""" if col != horizontal_sep_marker else f"""{SQLDataModel.sqlite_printf_format(table_truncated_ellipses,'custom',table_truncated_ellipses_width,self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment,escape_newline=True)}""" if col != horizontal_sep_marker else f"""{SQLDataModel.sqlite_printf_format(table_truncated_ellipses,'custom',table_truncated_ellipses_width,self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
         if vertical_truncation_required:
             vertical_sep_chars = '⠒⠂'
             vertical_sep_fmt_str = f'''{row_lh}{row_sep.join([f"""{vertical_sep_chars:^{max(0,header_length_dict[col]+1)}}"""[:header_length_dict[col]] for col in display_headers])}{row_rh}{table_bare_newline}'''
