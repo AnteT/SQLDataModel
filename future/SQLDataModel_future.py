@@ -271,7 +271,7 @@ class SQLDataModel:
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies','dtypes','shape','table_style')
     
-    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False, table_style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']='default'):
+    def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False, table_style:Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']='default'):
         """
         Initializes a new instance of ``SQLDataModel``.
 
@@ -6832,7 +6832,7 @@ class SQLDataModel:
             ) from None   
         return
 
-    def to_text(self, filename:str=None, index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None, table_style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']=None, display_dimensions:bool=False) -> str|None:
+    def to_text(self, filename:str=None, index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None, table_style:Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']=None, display_dimensions:bool=False) -> str|None:
         """
         Returns a textual representation of the current ``SQLDataModel`` as a string literal or by writing to file if a ``filename`` is provided.
 
@@ -6843,7 +6843,7 @@ class SQLDataModel:
             ``max_column_width`` (int, optional): The maximum column width for table cells. Default is value set on :py:attr:`SQLDataModel.max_column_width`.
             ``float_precision`` (int, optional): The precision for floating-point values. Default is value set on :py:attr:`SQLDataModel.display_float_precision`.
             ``column_alignment`` (Literal['dynamic', 'left', 'center', 'right'], optional): The alignment for table columns. Default is value set on :py:attr:`SQLDataModel.column_alignment`. Use ``'dynamic'`` dynamically aligns column content, right for numeric types and left for remaining types. Use ``'left'`` left-aligns all column content. Use ``'center'`` center-aligns all column content. Use ``'right'`` right-aligns all column content.
-            ``table_style`` (Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'], optional): The table styling to use. Default is value set on :py:attr:`SQLDataModel.table_style`.
+            ``table_style`` (Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'], optional): The table styling to use. Default is value set on :py:attr:`SQLDataModel.table_style`.
             ``display_dimensions`` (bool, optional): Whether to include the model dimensions ``[N rows x N cols]`` in the text output. Default is False.
 
         Raises:
@@ -6978,7 +6978,7 @@ class SQLDataModel:
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of 'dynamic', 'left', 'center', 'right' representing column alignment for text output")
             )
-        if (table_style is not None) and (table_style not in ('ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple')):
+        if (table_style is not None) and (table_style not in ('ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple')):
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_style}', argument for `table_style` must be one of 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'")
             )
@@ -7003,7 +7003,6 @@ class SQLDataModel:
         header_printf_modifiers_dict = {col:(f"'% .{display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
         # Required to escape newlines when calculating column widths
         headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] != 'str' else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ ))) for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" order by "{self.sql_idx}" asc'))
-        
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""ifnull("{col}",1)""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
@@ -9144,16 +9143,16 @@ class SQLDataModel:
         """        
         return self.row_count
 
-    def set_table_style(self, style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']='default') -> None:
+    def set_table_style(self, style:Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']='default') -> None:
         """
         Sets the table style used for string representations of ``SQLDataModel``.
         
         Parameters:
-            ``style`` (Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']): The table styling to set. 
+            ``style`` (Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']): The table styling to set. 
                 Setting to ``'default'`` style will return the style representation to the original format.
 
         Raises:
-            ``ValueError``: If ``style`` provided is not one of the currently supported options 'ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql' or 'round'.
+            ``ValueError``: If ``style`` provided is not one of the currently supported options 'ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql' or 'round'.
         
         Returns:
             ``None``
@@ -9352,9 +9351,27 @@ class SQLDataModel:
             =====  ===  =======  ==========
         ```
 
+        Set ``style = 'latex'`` to format ``SQLDataModel`` in the style of a LaTeX table:
+
+        ```text
+            \\hline
+                Name  & Age &  Height & Birthday   \\\\
+            \\hline
+                Alice &  28 &  162.08 & 1996-11-20 \\\\
+                Bobby &  30 &  175.36 & 1994-06-15 \\\\
+                Craig &  37 &  185.82 & 1987-01-07 \\\\
+                David &  32 &  179.75 & 1992-12-28 \\\\
+            \\hline
+        ```
+
+        However, :meth:`SQLDataModel.to_latex()` should be used to format complete table elements for LaTeX files.
+
         Changelog:
+            - Version 0.10.5 (2024-06-28):
+                - Added style ``'latex'`` to generate LaTeX style tables.
+
             - Version 0.9.3 (2024-06-28):
-                - Added styles ``'rst-grid'`` and ``'rst-simple'`` to allow ``SQLDataModel`` to generate table formats used by Sphinx and reStructured Text
+                - Added styles ``'rst-grid'`` and ``'rst-simple'`` to allow ``SQLDataModel`` to generate table formats used by Sphinx and reStructured Text.
 
             - Version 0.3.11 (2024-04-18):
                 - Removed ``'thick'`` style and added ``'list'`` style for greater variety of available formats.
@@ -9364,13 +9381,15 @@ class SQLDataModel:
             - Legacy character sets on older terminals may not support all the character encodings required for some styles.
             - See :meth:`SQLDataModel._generate_table_style()` for implementation details related to each format.
 
-        .. versionadded:: 0.9.3
+        .. versionchanged:: 0.10.5
+            Added style ``'latex'`` to list of available format styles.
+        .. versionchanged:: 0.9.3
             Added styles ``'rst-grid'`` and ``'rst-simple'`` to allow ``SQLDataModel`` to generate table formats used by Sphinx and reStructured Text
-        .. versionadded:: 0.3.11
+        .. versionchanged:: 0.3.11
             Removed ``'thick'`` style and added ``'list'`` style for greater variety of available formats.
         .. versionadded:: 0.3.8            
         """
-        if style not in ('ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'):
+        if style not in ('ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'):
             raise ValueError(
                 SQLDataModel.ErrorFormat(f"ValueError: invalid value '{style}', argument for `style` must be one of 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql', 'rst-grid', 'rst-simple' or 'round'")
             )
@@ -9585,10 +9604,20 @@ class SQLDataModel:
         else:
             fetch_fmt_stmt = f"""select '{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_bare_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {max_display_rows}"""
         formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
+        
+        index_rep = ' ' # Using until to_tabular can be integrated and used by repr
         if column_alignment is None: # dynamic alignment
-            formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col not in (self.sql_idx, horizontal_sep_marker) else f"""{' ':>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
+            if self.table_style == 'latex':
+                # LaTeX only
+                formatted_headers = [f"""{(f'{{{col}}}' if len(col) <= header_length_dict[col] else f"{f'{{{col}}}'[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col not in (self.sql_idx, horizontal_sep_marker) else f"""{f'{{{index_rep}}}':>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
+            else: # Regular
+                formatted_headers = [f"""{(col if len(col) <= header_length_dict[col] else f"{col[:(header_length_dict[col]-2)]}⠤⠄"):{'>' if header_py_dtype_dict[col] in ('int','float') else '<'}{header_length_dict[col]}}""" if col not in (self.sql_idx, horizontal_sep_marker) else f"""{index_rep:>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
         else: # left, center, right alignment
-            formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col not in (self.sql_idx, horizontal_sep_marker) else f"""{' ':>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
+            if self.table_style == 'latex':
+                # LaTeX only
+                formatted_headers = [(f"""{f'{{{col}}}':{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{f'{{{col}}}'[:(header_length_dict[col]-2)]}⠤⠄""") if col not in (self.sql_idx, horizontal_sep_marker) else f"""{f'{{{index_rep}}}':>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
+            else: # Regular
+                formatted_headers = [(f"""{col:{column_alignment}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}⠤⠄""") if col not in (self.sql_idx, horizontal_sep_marker) else f"""{index_rep:>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
         # table_top_bar = "".join([top_lh, top_sep.join([top_hbar * header_length_dict[col] for col in display_headers]), top_rh, table_bare_newline])
         col_lengths = [header_length_dict[col] for col in display_headers]
         table_top_bar = "".join([top_lh, top_sep.join([top_hbar * length for length in col_lengths]), top_rh, table_bare_newline])
@@ -13053,12 +13082,12 @@ class SQLDataModel:
         headers_selection_str = ",".join((f'"{col}" AS "{col}"' for col in columns))
         return " ".join(("SELECT",headers_selection_str,f'FROM "{self.sql_model}" ORDER BY "{self.sql_idx}"'))
 
-    def _generate_table_style(self, style:Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']=None) -> tuple[tuple[str]]:
+    def _generate_table_style(self, style:Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']=None) -> tuple[tuple[str]]:
         """
         Generates the character sets required for formatting ``SQLDataModel`` according to the value currently set at :py:attr:`SQLDataModel.table_style`.
         
         Parameters:
-            ``style`` (Literal['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'], optional): The table style to return. Default is value set on :py:attr:`SQLDataModel.table_style`.
+            ``style`` (Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'], optional): The table style to return. Default is value set on :py:attr:`SQLDataModel.table_style`.
 
         Returns:
             ``tuple[tuple[str]]``: A 4-tuple containing the characters required for top, middle, row and lower table sections.
@@ -13070,6 +13099,10 @@ class SQLDataModel:
         Note:
             - This method is called by :meth:`SQLDataModel.__repr__()` to parse the characters necessary for constructing the tabular representation of the ``SQLDataModel``, any modifications or changes to this method may result in unexpected behavior.
 
+        .. versionchanged:: 0.10.5
+            Added 'latex' style format.
+        .. versionchanged:: 0.9.3
+            Added 'rst-simple' and 'rst-grid' style formats.
         .. versionchanged:: 0.3.10
             Added ``style`` parameter to allow use by :meth:`SQLDataModel.to_text()` to generate new formatting styles introduced in version 0.3.9.        
         .. versionadded:: 0.3.8            
@@ -13100,6 +13133,11 @@ class SQLDataModel:
                     ,('╠═','═','═╬═','═╣') 
                     ,('║ ',    ' ║ ',' ║') 
                     ,('╚═','═','═╩═','═╝'))
+        if style == 'latex':     
+            return  (('\\hline','','','') 
+                    ,('\\hline','','','')
+                    ,('    ',   ' & ',  ' \\\\') 
+                    ,('\\hline','','',''))
         if style == 'list':     
             return  (('',' ','  ','')
                     ,('','-','  ','')
@@ -14186,3 +14224,278 @@ class SQLDataModel:
         """
         self_data = self.data(strict_2d=True)
         return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0])))) 
+
+    def _calculate_col_widths(self, index:bool=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, split_row:int=None, index_rep:str=None) -> dict[str, int]:
+        """
+        Calculate the maximum column widths for each header column based on the provided conditions to assist with representation methods.
+        
+        Parameters:
+            ``index`` (bool, optional): Indicates whether to include the index column in the calculations. Default is None, using :py:attr:`SQLDataModel.display_index` value.
+            ``min_column_width`` (int, optional): Minimum width for columns. Default is None, using :py:attr:`SQLDataModel.minimum_column_width` value.
+            ``max_column_width`` (int, optional): Maximum width for columns. Default is None, using :py:attr:`SQLDataModel.maximum_column_width` value.
+            ``float_precision`` (int, optional): Precision for displaying float values. Default is None, using :py:attr:`SQLDataModel.display_float_precision` value.
+            ``split_row`` (int, optional): Row index to determine vertical truncation. If None, no vertical truncation is applied.
+            ``index_rep`` (str, optional): String representation for the index. If None, uses a single whitespace character ``' '`` to represent the index column.
+
+        Returns:
+            ``dict[str, int]``: Dictionary mapping each header column to its maximum calculated width as ``{'column': width}``.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['User', 'Key', 'Value', 'Active']
+            data = [
+                ('Allison', 130, 237.03, True),
+                ('Bobby', -400, 723.41, False),
+                ('Connor', 698, 154.70, False),
+                ('Dimitry', 287, 409.14, True)
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Calculate the max column widths
+            col_widths = sdm._calculate_col_widths()
+
+            # View result
+            print(col_widths)
+
+        This will output the maximum widths for each column calculated by the column name and the corresponding values:
+
+        ```text
+            {'idx': 1, 'User': 7, 'Key': 4, 'Value': 7, 'Active': 6}        
+        ```
+
+        Note:
+            - When ``index_rep`` is provided, the length of the index representation will be used when calculating the maximum column width.
+            - When ``split_row`` is provided, width calculation checks are restricted to only the top and bottom N number of rows specified.
+            - Used by :meth:`SQLDataModel.to_tabular()` to determine appropriate column representation widths.
+
+        .. versionadded:: 0.10.5
+        """
+        display_index = self.display_index if index is None else index
+        min_column_width = self.min_column_width  if min_column_width is None else min_column_width
+        max_column_width = self.max_column_width if max_column_width is None else max_column_width
+        max_column_width = max_column_width if max_column_width >= 2 else 2 # minimum required width
+        display_float_precision = self.display_float_precision if float_precision is None else float_precision
+        display_headers = [self.sql_idx,*self.headers] if display_index else self.headers
+        if split_row:
+            check_width_top, check_width_bottom = self.indicies[split_row], self.indicies[-split_row]
+            check_width_scope = f'where ("{self.sql_idx}" < {check_width_top} or "{self.sql_idx}" >= {check_width_bottom})'
+        else:
+            check_width_scope = ''   
+        header_py_dtype_dict = self.dtypes
+        header_printf_modifiers_dict = {col:(f"'% .{display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
+        # Required to escape newlines when calculating column widths
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] != 'str' else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ ))) for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" {check_width_scope} order by "{self.sql_idx}" asc'))
+        headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""max(ifnull("{col}",1),{0 if not index_rep else len(index_rep)})""" for col in display_headers]),"from"))
+        headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
+        length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
+        header_length_dict = dict(zip(display_headers,length_meta))
+        return header_length_dict
+
+    def to_tabular(self, index:bool=None, display_max_rows:int=None, display_max_width:int=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, vertical_ellipses:str='⠒⠂', horizontal_ellipses:str='⠤⠄',  display_dimensions:bool=False, index_rep:str=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None, table_style:Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']=None) -> str:
+        """
+        Generate a tabular representation of the model based on custom parameters and bounds.
+        
+        Parameters:
+            ``index`` (bool, optional): Whether to include the index column in the output. Default is None, using :py:attr:`SQLDataModel.display_index` value.
+            ``display_max_rows`` (int, optional): Maximum number of rows to display. Default is None, using :py:attr:`SQLDataModel.display_max_rows` value.
+            ``display_max_width`` (int, optional): Maximum character width of the output table before horizontal truncation occurs. 
+                Default is None, generating a full width representation.
+            ``min_column_width`` (int, optional): Minimum width of columns. Default is None, using :py:attr:`SQLDataModel.min_column_width` value.
+            ``max_column_width`` (int, optional): Maximum width of columns. Default is None, using :py:attr:`SQLDataModel.max_column_width` value with a floor value of 2.
+            ``float_precision`` (int, optional): Precision for displaying float values. Default is None, using :py:attr:`SQLDataModel.display_float_precision` value.
+            ``vertical_ellipses`` (str, optional): Characters to represent row truncation when vertical truncation is required. Default is ``'⠒⠂'``.
+            ``horizontal_ellipses`` (str, optional): Characters to represent column truncation when horizontal truncation is required. Default is ``'⠤⠄'``.
+            ``display_dimensions`` (bool, optional): Whether to display the dimensions of the table. Defaults to False.
+            ``index_rep`` (str, optional): String representation for the index. Default is None, using a single whitespace character to represent the index column.
+                Only used when generating index column, otherwise ignored when ``index = False``.
+            ``column_alignment`` (Literal['dynamic', 'left', 'center', 'right'], optional): Alignment for columns. Default is None, using :py:attr:`SQLDataModel.column_alignment` value.
+            ``table_style`` (Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'], optional): Table style. Default is None, using :py:attr:`SQLDataModel.table_style` value.
+        
+        Returns:
+            ``str``: A string representing the tabular output of the model with the restrictions and styling applied.
+        
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Gender', 'City']
+            data = [
+                ('Alice', 38, 'Female', 'Milwaukee'),
+                ('Sarah', None, 'Female', 'Houston'),
+                ('Michael', 42, 'Male', 'Atlanta'),
+                ('John', None, 'Male', 'Boston'),
+                ('Bobby', 25, 'Male', 'Chicago'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Generate a Markdown style representation using 'ID' to represent the index
+            markdown_repr = sdm.to_tabular(table_style='markdown', index_rep='ID')
+
+        This will generate a 'Markdown' styled representation:
+
+        ```text
+            | ID | Name    | Age | Gender | City      |
+            |----|---------|-----|--------|-----------|
+            |  0 | Alice   |  38 | Female | Milwaukee |
+            |  1 | Sarah   |     | Female | Houston   |
+            |  2 | Michael |  42 | Male   | Atlanta   |
+            |  3 | John    |     | Male   | Boston    |
+            |  4 | Bobby   |  25 | Male   | Chicago   |
+        ```
+
+        Vertical and horizontal limits can also be applied:
+
+        ```python
+            # Set vertical and horizontal limits with custom styling
+            truncated_repr = sdm.to_tabular(
+                table_style='polars', 
+                display_max_rows=4, 
+                display_max_width=36,
+                horizontal_ellipses='..',
+                vertical_ellipses='...',
+                index=False
+            )
+
+            # View output
+            print(truncated_repr)
+        ```
+
+        This will output a vertically and horizontally truncated representation that fits within the bounds provided:
+
+        ```text
+            ┌───────┬─────┬────┬───────────┐
+            │ Name  ┆ Age ┆ .. ┆ City      │
+            ╞═══════╪═════╪════╪═══════════╡
+            │ Alice ┆  38 ┆ .. ┆ Milwaukee │
+            │ Sarah ┆     ┆ .. ┆ Houston   │
+            │  ...  ┆ ... ┆ .. ┆    ...    │
+            │ John  ┆     ┆ .. ┆ Boston    │
+            │ Bobby ┆  25 ┆ .. ┆ Chicago   │
+            └───────┴─────┴────┴───────────┘
+        ```
+
+        Note:
+            - Vertical and horizontal truncation characters are only applied at row and column level respectively, cell level truncation is unaffected by arguments set.
+
+        .. versionadded:: 0.10.5
+        """
+        if (column_alignment is not None) and (column_alignment not in ('dynamic', 'left', 'center', 'right')):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{column_alignment}', argument for `column_alignment` must be one of 'dynamic', 'left', 'center', 'right' representing column alignment for text output")
+            )
+        if (table_style is not None) and (table_style not in ('ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple')):
+            raise ValueError(
+                SQLDataModel.ErrorFormat(f"ValueError: invalid value '{table_style}', argument for `table_style` must be one of 'ascii', 'bare', 'dash', 'default', 'double', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'")
+            )
+        display_index = self.display_index if index is None else index
+        display_max_rows = display_max_rows if display_max_rows else self.display_max_rows if self.display_max_rows else self.row_count
+        min_column_width = self.min_column_width  if min_column_width is None else min_column_width
+        max_column_width = self.max_column_width if max_column_width is None else max_column_width
+        max_column_width = max_column_width if max_column_width >= 2 else 2 # minimum required width
+        display_float_precision = self.display_float_precision if float_precision is None else float_precision
+        column_alignment = column_alignment if column_alignment else self.column_alignment
+        column_alignment = None if column_alignment == 'dynamic' else '<' if column_alignment == 'left' else '^' if column_alignment == 'center' else '>'
+        index_rep = index_rep if index_rep else ' ' # Default index representation
+
+        vertical_truncation_required = True if display_max_rows < self.row_count else False
+        split_row = display_max_rows // 2 if vertical_truncation_required else None
+
+        header_py_dtype_dict = self.dtypes
+        header_length_dict = self._calculate_col_widths(
+            index=display_index, 
+            min_column_width=min_column_width, 
+            max_column_width=max_column_width, 
+            float_precision=display_float_precision,
+            split_row=split_row,
+            index_rep=index_rep
+        )
+        display_headers = list(header_length_dict.keys())
+        header_align_dict = {col:column_alignment for col in display_headers} if column_alignment is not None else {col:self.header_master[col][-1] for col in display_headers}
+
+        table_style = self.table_style if table_style is None else table_style
+        table_format = self._generate_table_style(style=table_style)
+        top_lh, top_hbar, top_sep, top_rh = table_format[0]
+        mid_lh, mid_hbar, mid_sep, mid_rh = table_format[1]
+        row_lh, row_sep, row_rh = table_format[2]
+        low_lh, low_hbar, low_sep, low_rh = table_format[3]
+        row_lh_width = len(row_lh)
+        row_rh_width = len(row_rh)
+        row_sep_width = len(row_sep)
+        table_truncated_ellipses = horizontal_ellipses
+        horizontal_sep_marker = """__horiz_sep__""" # never displayed
+        table_truncated_ellipses_width = len(table_truncated_ellipses) # added extra space after truncation mark before ellipses, looks better       
+
+        total_required_width = row_lh_width + sum((row_sep_width + length) for length in header_length_dict.values()) + row_rh_width - row_sep_width
+        horizontal_truncation_required = False if not display_max_width or (display_max_width > total_required_width) else True        
+
+        # Horizontal truncation required, expect to really only be used by repr method itself
+        if horizontal_truncation_required:
+            display_max_width -= table_truncated_ellipses_width
+            horiz_max_width = row_lh_width + row_rh_width
+            lh_headers, rh_headers = [], []
+            header_length_dict.update({horizontal_sep_marker:(table_truncated_ellipses_width)}) # required to backport element and width for ensuing string formatting
+            for i in range(len(display_headers) // 2):
+                lh_header, rh_header = display_headers[i], display_headers[-(i + 1)]
+                lh_width, rh_width = (header_length_dict[lh_header] + 3), (header_length_dict[rh_header] + 3)
+                if horiz_max_width < display_max_width:                
+                    horiz_max_width += lh_width
+                    if horiz_max_width > display_max_width:
+                        break
+                    lh_headers.append(lh_header)
+                    horiz_max_width += rh_width
+                    if horiz_max_width > display_max_width:
+                        break                    
+                    rh_headers.append(rh_header)
+            display_headers = [*lh_headers,horizontal_sep_marker,*rh_headers[::-1]]        
+        table_repr = """""" # big things...
+        table_bare_newline = """\n"""
+        row_sep_concat = f"""|| '{row_sep}' ||"""
+        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
+        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment,escape_newline=True)}""" if col != horizontal_sep_marker else f"""{SQLDataModel.sqlite_printf_format(table_truncated_ellipses,'custom',table_truncated_ellipses_width,self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        if vertical_truncation_required:
+            vertical_sep_chars = vertical_ellipses
+            vertical_sep_fmt_str = f'''{row_lh}{row_sep.join([f"""{vertical_sep_chars:^{max(0,header_length_dict[col]+1)}}"""[:header_length_dict[col]] for col in display_headers])}{row_rh}{table_bare_newline}'''
+            fetch_fmt_stmt = f"""
+            with "_repr" as (
+                select "{self.sql_idx}" as "_row" from "{self.sql_model}" where "{self.sql_idx}" in 
+                    (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {split_row}+1)
+                        or "{self.sql_idx}" in
+                    (select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" desc limit {split_row})
+                order by "{self.sql_idx}" asc limit {display_max_rows}+1)
+                ,"_trigger" as (select "{self.sql_idx}" as "_sep" from "{self.sql_model}" order by "{self.sql_idx}" asc limit 1 offset {split_row})
+            select CASE WHEN "{self.sql_idx}" <> (select "_sep" from "_trigger") THEN "_full_row" 
+            ELSE '{vertical_sep_fmt_str}' 
+            END from (select "{self.sql_idx}",'{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_bare_newline}' as "_full_row" from "{self.sql_model}" where "{self.sql_idx}" in (select "_row" from "_repr") order by "{self.sql_idx}" asc)"""
+        else:
+            fetch_fmt_stmt = f"""select '{row_lh}' || {fetch_idx}{header_fmt_str}||'{row_rh}{table_bare_newline}' as "_full_row" from "{self.sql_model}" order by "{self.sql_idx}" asc limit {display_max_rows}"""
+
+        formatted_response = self.sql_db_conn.execute(fetch_fmt_stmt)
+        if table_style == 'latex':
+            # Exception for LaTeX style to wrap headers in curly braces: {header}
+            formatted_headers = [(f"""{f'{{{col}}}':{header_align_dict[col]}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{f'{{{col}}}'[:(header_length_dict[col]-2)]}{horizontal_ellipses}""") if col not in (self.sql_idx, horizontal_sep_marker) else f"""{f'{{{index_rep}}}':>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
+        else:
+            formatted_headers = [(f"""{col:{header_align_dict[col]}{header_length_dict[col]}}""" if len(col) <= header_length_dict[col] else f"""{col[:(header_length_dict[col]-2)]}{horizontal_ellipses}""") if col not in (self.sql_idx, horizontal_sep_marker) else f"""{index_rep:>{header_length_dict[col]}}""" if col != horizontal_sep_marker else f"""{table_truncated_ellipses:>{table_truncated_ellipses_width}}""" for col in display_headers]
+
+        col_lengths = [header_length_dict[col] for col in display_headers]
+        table_top_bar = "".join([top_lh, top_sep.join([top_hbar * length for length in col_lengths]), top_rh, table_bare_newline])
+        table_top_bar = table_top_bar if len(table_top_bar.strip()) >=1 else """"""
+        table_repr = "".join([table_repr, table_top_bar])
+        table_repr = "".join([table_repr, row_lh, row_sep.join(formatted_headers), row_rh, table_bare_newline])
+        table_mid_bar = "".join([mid_lh, mid_sep.join([mid_hbar * length for length in col_lengths]), mid_rh, table_bare_newline])
+        table_mid_bar = table_mid_bar if len(table_mid_bar.strip()) >=1 else """"""
+        table_repr = "".join([table_repr, table_mid_bar])
+        table_repr = "".join([table_repr,*[row[0] for row in formatted_response]])
+        table_low_bar = "".join([low_lh, low_sep.join([low_hbar * length for length in col_lengths]), low_rh, table_bare_newline])
+        table_low_bar = table_low_bar if len(table_low_bar.strip()) >=1 else """"""
+        table_repr = "".join([table_repr, table_low_bar])
+        table_caption = f"""[{self.row_count} rows x {self.column_count} columns]""" if display_dimensions else """"""
+        table_repr = "".join([table_repr, table_caption]).rstrip()
+        return table_repr         
