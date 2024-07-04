@@ -2437,6 +2437,56 @@ def test_table_styles():
         assert output_repr == expected_repr
 
 @pytest.mark.core
+def test_newline_escape():
+    data = [('X', 'X', 'X', 'X', 'first\nsecond\nthird\n'), ('X', 'X', 'X', 'X', 'first\nsecond\nthird\n'), ('X', 'X', 'X', 'X', 'first\nsecond\nthird\n'), ('X', 'X', 'X', 'X', 'first\nsecond\nthird\n')]
+    sdm = SQLDataModel(data, headers=['0','1','2','3','newline'],display_index=True, table_style='default', min_column_width=3, max_column_width=38)
+    output = sdm.to_text(display_dimensions=True)
+    expected = """
+    ┌───┬─────┬─────┬─────┬─────┬────────────────────────┐
+    │   │ 0   │ 1   │ 2   │ 3   │ newline                │
+    ├───┼─────┼─────┼─────┼─────┼────────────────────────┤
+    │ 0 │ X   │ X   │ X   │ X   │ first\\nsecond\\nthird\\n │
+    │ 1 │ X   │ X   │ X   │ X   │ first\\nsecond\\nthird\\n │
+    │ 2 │ X   │ X   │ X   │ X   │ first\\nsecond\\nthird\\n │
+    │ 3 │ X   │ X   │ X   │ X   │ first\\nsecond\\nthird\\n │
+    └───┴─────┴─────┴─────┴─────┴────────────────────────┘
+    [4 rows x 5 columns]
+    """
+    expected = "\n".join((x.strip() for x in expected.split('\n'))).strip('\n')
+    assert output == expected   
+
+    expected = """
+    | 0   | 1   | 2   | 3   | newline                |
+    |:----|:----|:----|:----|:-----------------------|
+    | X   | X   | X   | X   | first\\nsecond\\nthird\\n |
+    | X   | X   | X   | X   | first\\nsecond\\nthird\\n |
+    | X   | X   | X   | X   | first\\nsecond\\nthird\\n |
+    | X   | X   | X   | X   | first\\nsecond\\nthird\\n |
+    """
+    output = sdm.to_markdown()
+    expected = "\n".join((x.strip() for x in expected.split('\n'))).lstrip('\n')
+    assert output == expected
+
+    expected = """
+\\begin{table}[h]
+\\centering
+\\begin{tabular}{|l|l|l|l|l|}
+\\hline
+    {0} & {1} & {2} & {3} & {newline} \\\\
+\\hline
+    X   & X   & X   & X   & first\\nsecond\\nthird\\n \\\\
+    X   & X   & X   & X   & first\\nsecond\\nthird\\n \\\\
+    X   & X   & X   & X   & first\\nsecond\\nthird\\n \\\\
+    X   & X   & X   & X   & first\\nsecond\\nthird\\n \\\\
+\\hline
+\\end{tabular}
+\\end{table}
+"""
+    output = sdm.to_latex()
+    expected = expected.strip('\n')
+    assert output == expected
+
+@pytest.mark.core
 def test_rename_column():
     headers = ['A', 'B', 'C', 'D', 'E', 'F'] # Expect: ['1', '2', '3', '4', '5', '6']
     n_rows, n_cols = 12, len(headers)
