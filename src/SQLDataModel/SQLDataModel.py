@@ -9364,9 +9364,9 @@ class SQLDataModel:
             - Legacy character sets on older terminals may not support all the character encodings required for some styles.
             - See :meth:`SQLDataModel._generate_table_style()` for implementation details related to each format.
 
-        .. versionadded:: 0.9.3
+        .. versionchanged:: 0.9.3
             Added styles ``'rst-grid'`` and ``'rst-simple'`` to allow ``SQLDataModel`` to generate table formats used by Sphinx and reStructured Text
-        .. versionadded:: 0.3.11
+        .. versionchanged:: 0.3.11
             Removed ``'thick'`` style and added ``'list'`` style for greater variety of available formats.
         .. versionadded:: 0.3.8            
         """
