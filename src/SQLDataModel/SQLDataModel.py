@@ -9129,7 +9129,7 @@ class SQLDataModel:
                 Setting to ``'default'`` style will return the style representation to the original format.
 
         Raises:
-            ``ValueError``: If ``style`` provided is not one of the currently supported options 'ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql' or 'round'.
+            ``ValueError``: If ``style`` provided is not one of the currently supported options 'ascii', 'bare', 'dash', 'default', 'double', 'latex', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql' or 'round'.
         
         Returns:
             ``None``
