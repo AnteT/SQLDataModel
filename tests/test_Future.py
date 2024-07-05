@@ -2331,6 +2331,17 @@ def test_table_styles():
 ╚═══╩════════╩═════╩═══════╩════════════╝
 [4 rows x 4 columns]
 """,
+'latex':"""
+\\hline
+    { } & {string} & {int} & {float} & {date}     \\\\
+\\hline
+    0 & text 1 &   1 &  1.10 & 2001-01-11 \\\\
+    1 & text 2 &   2 &  2.20 & 2002-02-12 \\\\
+    2 & text 3 &   3 &  3.30 & 2003-03-13 \\\\
+    3 & text 4 &   4 &  4.40 & 2004-04-14 \\\\
+\\hline
+[4 rows x 4 columns]
+""",
 'list':"""
    string  int  float  date      
 -  ------  ---  -----  ----------
@@ -2342,7 +2353,7 @@ def test_table_styles():
 """,
 'markdown':"""
 |   | string | int | float | date       |
-|---|--------|-----|-------|------------|
+|--:|:-------|----:|------:|:-----------|
 | 0 | text 1 |   1 |  1.10 | 2001-01-11 |
 | 1 | text 2 |   2 |  2.20 | 2002-02-12 |
 | 2 | text 3 |   3 |  3.30 | 2003-03-13 |
@@ -2429,7 +2440,7 @@ def test_table_styles():
         ,('text 4', 4, 4.4, datetime.date(2004, 4, 14))
     ]
     sdm = SQLDataModel(data,headers, min_column_width=3, max_column_width=38, display_index=True, display_float_precision=2)
-    repr_styles = ['ascii','bare','dash','default','double','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']   
+    repr_styles = ['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']   
     for style in repr_styles:
         sdm.set_table_style(style=style)
         expected_repr = style_output_dict[style].strip('\n')
@@ -2464,7 +2475,7 @@ def test_newline_escape():
     | X   | X   | X   | X   | first\\nsecond\\nthird\\n |
     """
     output = sdm.to_markdown()
-    expected = "\n".join((x.strip() for x in expected.split('\n'))).lstrip('\n')
+    expected = "\n".join((x.strip() for x in expected.split('\n'))).strip('\n')
     assert output == expected
 
     expected = """
@@ -2472,7 +2483,7 @@ def test_newline_escape():
 \\centering
 \\begin{tabular}{|l|l|l|l|l|}
 \\hline
-    {0} & {1} & {2} & {3} & {newline} \\\\
+    {0} & {1} & {2} & {3} & {newline}              \\\\
 \\hline
     X   & X   & X   & X   & first\\nsecond\\nthird\\n \\\\
     X   & X   & X   & X   & first\\nsecond\\nthird\\n \\\\
@@ -2486,6 +2497,146 @@ def test_newline_escape():
     expected = expected.strip('\n')
     assert output == expected
 
+@pytest.mark.core
+def test_to_string():
+    expected_dict = {'ascii':'''
++---+--------+-----+-------+------------+
+|   | string | int | float | date       |
++---+--------+-----+-------+------------+
+| 0 | text 1 |   1 |  1.10 | 2001-01-11 |
+| 1 | text 2 |   2 |  2.20 | 2002-02-12 |
+| 2 | text 3 |   3 |  3.30 | 2003-03-13 |
+| 3 | text 4 |   4 |  4.40 | 2004-04-14 |
++---+--------+-----+-------+------------+''',
+'bare':'''
+   string  int  float  date      
+---------------------------------
+0  text 1    1   1.10  2001-01-11
+1  text 2    2   2.20  2002-02-12
+2  text 3    3   3.30  2003-03-13
+3  text 4    4   4.40  2004-04-14''',
+'dash':'''
+┌───┬────────┬─────┬───────┬────────────┐
+│   ╎ string ╎ int ╎ float ╎ date       │
+├╴╴╴┼╴╴╴╴╴╴╴╴┼╴╴╴╴╴┼╴╴╴╴╴╴╴┼╴╴╴╴╴╴╴╴╴╴╴╴┤
+│ 0 ╎ text 1 ╎   1 ╎  1.10 ╎ 2001-01-11 │
+│ 1 ╎ text 2 ╎   2 ╎  2.20 ╎ 2002-02-12 │
+│ 2 ╎ text 3 ╎   3 ╎  3.30 ╎ 2003-03-13 │
+│ 3 ╎ text 4 ╎   4 ╎  4.40 ╎ 2004-04-14 │
+└───┴────────┴─────┴───────┴────────────┘''',
+'default':'''
+┌───┬────────┬─────┬───────┬────────────┐
+│   │ string │ int │ float │ date       │
+├───┼────────┼─────┼───────┼────────────┤
+│ 0 │ text 1 │   1 │  1.10 │ 2001-01-11 │
+│ 1 │ text 2 │   2 │  2.20 │ 2002-02-12 │
+│ 2 │ text 3 │   3 │  3.30 │ 2003-03-13 │
+│ 3 │ text 4 │   4 │  4.40 │ 2004-04-14 │
+└───┴────────┴─────┴───────┴────────────┘''',
+'double':'''
+╔═══╦════════╦═════╦═══════╦════════════╗
+║   ║ string ║ int ║ float ║ date       ║
+╠═══╬════════╬═════╬═══════╬════════════╣
+║ 0 ║ text 1 ║   1 ║  1.10 ║ 2001-01-11 ║
+║ 1 ║ text 2 ║   2 ║  2.20 ║ 2002-02-12 ║
+║ 2 ║ text 3 ║   3 ║  3.30 ║ 2003-03-13 ║
+║ 3 ║ text 4 ║   4 ║  4.40 ║ 2004-04-14 ║
+╚═══╩════════╩═════╩═══════╩════════════╝''',
+'latex':'''
+\\hline
+    { } & {string} & {int} & {float} & {date}     \\\\
+\\hline
+    0 & text 1 &   1 &  1.10 & 2001-01-11 \\\\
+    1 & text 2 &   2 &  2.20 & 2002-02-12 \\\\
+    2 & text 3 &   3 &  3.30 & 2003-03-13 \\\\
+    3 & text 4 &   4 &  4.40 & 2004-04-14 \\\\
+\\hline''',
+'list':'''
+   string  int  float  date      
+-  ------  ---  -----  ----------
+0  text 1    1   1.10  2001-01-11
+1  text 2    2   2.20  2002-02-12
+2  text 3    3   3.30  2003-03-13
+3  text 4    4   4.40  2004-04-14''',
+'markdown':'''
+|   | string | int | float | date       |
+|--:|:-------|----:|------:|:-----------|
+| 0 | text 1 |   1 |  1.10 | 2001-01-11 |
+| 1 | text 2 |   2 |  2.20 | 2002-02-12 |
+| 2 | text 3 |   3 |  3.30 | 2003-03-13 |
+| 3 | text 4 |   4 |  4.40 | 2004-04-14 |''',
+'outline':'''
+┌───────────────────────────────────┐
+│    string  int  float  date       │
+├───────────────────────────────────┤
+│ 0  text 1    1   1.10  2001-01-11 │
+│ 1  text 2    2   2.20  2002-02-12 │
+│ 2  text 3    3   3.30  2003-03-13 │
+│ 3  text 4    4   4.40  2004-04-14 │
+└───────────────────────────────────┘''',
+'pandas':'''
+   string  int  float  date      
+0  text 1    1   1.10  2001-01-11
+1  text 2    2   2.20  2002-02-12
+2  text 3    3   3.30  2003-03-13
+3  text 4    4   4.40  2004-04-14''',
+'polars':'''
+┌───┬────────┬─────┬───────┬────────────┐
+│   ┆ string ┆ int ┆ float ┆ date       │
+╞═══╪════════╪═════╪═══════╪════════════╡
+│ 0 ┆ text 1 ┆   1 ┆  1.10 ┆ 2001-01-11 │
+│ 1 ┆ text 2 ┆   2 ┆  2.20 ┆ 2002-02-12 │
+│ 2 ┆ text 3 ┆   3 ┆  3.30 ┆ 2003-03-13 │
+│ 3 ┆ text 4 ┆   4 ┆  4.40 ┆ 2004-04-14 │
+└───┴────────┴─────┴───────┴────────────┘''',
+'postgresql':'''
+  | string | int | float | date      
+--+--------+-----+-------+-----------
+0 | text 1 |   1 |  1.10 | 2001-01-11
+1 | text 2 |   2 |  2.20 | 2002-02-12
+2 | text 3 |   3 |  3.30 | 2003-03-13
+3 | text 4 |   4 |  4.40 | 2004-04-14''',
+'round':'''
+╭───┬────────┬─────┬───────┬────────────╮
+│   │ string │ int │ float │ date       │
+├───┼────────┼─────┼───────┼────────────┤
+│ 0 │ text 1 │   1 │  1.10 │ 2001-01-11 │
+│ 1 │ text 2 │   2 │  2.20 │ 2002-02-12 │
+│ 2 │ text 3 │   3 │  3.30 │ 2003-03-13 │
+│ 3 │ text 4 │   4 │  4.40 │ 2004-04-14 │
+╰───┴────────┴─────┴───────┴────────────╯''',
+'rst-grid':'''
++---+--------+-----+-------+------------+
+|   | string | int | float | date       |
++===+========+=====+=======+============+
+| 0 | text 1 |   1 |  1.10 | 2001-01-11 |
+| 1 | text 2 |   2 |  2.20 | 2002-02-12 |
+| 2 | text 3 |   3 |  3.30 | 2003-03-13 |
+| 3 | text 4 |   4 |  4.40 | 2004-04-14 |
++---+--------+-----+-------+------------+''',
+'rst-simple':'''
+=  ======  ===  =====  ==========
+   string  int  float  date      
+=  ======  ===  =====  ==========
+0  text 1    1   1.10  2001-01-11
+1  text 2    2   2.20  2002-02-12
+2  text 3    3   3.30  2003-03-13
+3  text 4    4   4.40  2004-04-14
+=  ======  ===  =====  =========='''}
+    headers = ['string', 'int', 'float', 'date']
+    data = [
+         ('text 1',  1, 1.1, datetime.date(2001, 1, 11))
+        ,('text 2', 2, 2.2, datetime.date(2002, 2, 12))
+        ,('text 3', 3, 3.3, datetime.date(2003, 3, 13))
+        ,('text 4', 4, 4.4, datetime.date(2004, 4, 14))
+    ]    
+    table_styles = ['ascii', 'bare', 'dash', 'default', 'double', 'latex', 'list', 'markdown', 'outline', 'pandas', 'polars', 'postgresql', 'round', 'rst-grid', 'rst-simple']
+    sdm = SQLDataModel(data, headers)
+    for style in table_styles:
+        output = sdm.to_string(index=True, min_column_width=3, max_column_width=38, float_precision=2, index_rep=' ', table_style=style)
+        expected = expected_dict[style].lstrip('\n')
+        assert output == expected
+            
 @pytest.mark.core
 def test_rename_column():
     headers = ['A', 'B', 'C', 'D', 'E', 'F'] # Expect: ['1', '2', '3', '4', '5', '6']

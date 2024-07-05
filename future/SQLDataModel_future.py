@@ -845,7 +845,7 @@ class SQLDataModel:
             ``str``: The formatted SELECT clause for SQLite.
 
         Changelog:
-            - Version 0.10.5 (2024-07-05):
+            - Version 0.11.0 (2024-07-05):
                 - Added ``truncation_chars`` keyword argument to allow custom truncation characters when column value exceeds maximum width.
             - Version 0.10.4 (2024-07-03):
                 - Added ``escape_newline`` keyword argument to escape newline characters to prevent wrapping lines when called by :meth:`SQLDataModel.__repr__()`
@@ -857,7 +857,7 @@ class SQLDataModel:
             - The output preformats SELECT result to fit ``repr`` method for tabular output.
             - The return ``str`` is not valid SQL by itself, representing only the single column select portion.
 
-        .. versionchanged:: 0.10.5
+        .. versionchanged:: 0.11.0
             Added ``truncation_chars`` keyword argument to allow custom truncation characters when column value exceeds maximum width.
         .. versionchanged:: 0.10.4
             Added ``escape_newline`` keyword argument to escape newline characters to prevent wrapping lines when called by :meth:`SQLDataModel.__repr__()`.
@@ -5733,7 +5733,7 @@ class SQLDataModel:
         ```
         
         Changelog:
-            - Version 0.10.5 (2024-07-05):
+            - Version 0.11.0 (2024-07-05):
                 - Added ``float_precision`` parameter to align with similar format specific methods and provide additional formatting options.
                 - Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
                 - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
@@ -6039,7 +6039,7 @@ class SQLDataModel:
         ```
         
         Changelog:
-            - Version 0.10.5 (2024-07-05):
+            - Version 0.11.0 (2024-07-05):
                 - Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
                 - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
                 - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
@@ -6930,7 +6930,7 @@ class SQLDataModel:
             Unlike output from ``print(sdm)`` or other calls to :meth:`SQLDataModel.__repr__()`, the output from this method includes the full ``SQLDataModel`` and is not restricted by current terminal size or the value set at :py:attr:`SQLDataModel.display_max_rows`. As such, horizontal truncation only occurs on cell values as determined by ``max_column_width`` and no other horizontal or vertical table-wide truncation is performed.
 
         Changelog:
-            - Version 0.10.5 (2024-07-05):
+            - Version 0.11.0 (2024-07-05):
                 - Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
                 - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
                 - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
@@ -6956,7 +6956,7 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.set_table_style()` for modifying table format and available styles.
             - See :meth:`SQLDataModel.to_string()` for greater flexibility and control over generated string representations.
 
-        .. versionchanged:: 0.10.5
+        .. versionchanged:: 0.11.0
             Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
             Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
             Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
@@ -9344,7 +9344,7 @@ class SQLDataModel:
         However, :meth:`SQLDataModel.to_latex()` should be used to format complete table elements for LaTeX files.
 
         Changelog:
-            - Version 0.10.5 (2024-06-28):
+            - Version 0.11.0 (2024-07-05):
                 - Added style ``'latex'`` to generate LaTeX style tables.
 
             - Version 0.9.3 (2024-06-28):
@@ -9358,7 +9358,7 @@ class SQLDataModel:
             - Legacy character sets on older terminals may not support all the character encodings required for some styles.
             - See :meth:`SQLDataModel._generate_table_style()` for implementation details related to each format.
 
-        .. versionchanged:: 0.10.5
+        .. versionchanged:: 0.11.0
             Added style ``'latex'`` to list of available format styles.
         .. versionchanged:: 0.9.3
             Added styles ``'rst-grid'`` and ``'rst-simple'`` to allow ``SQLDataModel`` to generate table formats used by Sphinx and reStructured Text
@@ -12984,7 +12984,7 @@ class SQLDataModel:
         Note:
             - This method is called by :meth:`SQLDataModel.__repr__()` to parse the characters necessary for constructing the tabular representation of the ``SQLDataModel``, any modifications or changes to this method may result in unexpected behavior.
 
-        .. versionchanged:: 0.10.5
+        .. versionchanged:: 0.11.0
             Added 'latex' style format.
         .. versionchanged:: 0.9.3
             Added 'rst-simple' and 'rst-grid' style formats.
@@ -14158,7 +14158,7 @@ class SQLDataModel:
             - When ``split_row`` is provided, width calculation checks are restricted to only the top and bottom N number of rows specified.
             - Used by :meth:`SQLDataModel.to_string()` to determine appropriate column representation widths.
 
-        .. versionadded:: 0.10.5
+        .. versionadded:: 0.11.0
         """
         display_index = self.display_index if index is None else index
         min_column_width = self.min_column_width  if min_column_width is None else min_column_width
@@ -14274,7 +14274,7 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.to_text()` for writing textual representation directly to '.txt' files.
             - See :meth:`SQLDataModel.set_table_style()` for available style options and output examples.
 
-        .. versionadded:: 0.10.5
+        .. versionadded:: 0.11.0
         """
         if (column_alignment is not None) and (column_alignment not in ('dynamic', 'left', 'center', 'right')):
             raise ValueError(
