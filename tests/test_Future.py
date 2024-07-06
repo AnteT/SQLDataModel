@@ -924,6 +924,26 @@ def test_strip():
     assert output_data == expected_output    
 
 @pytest.mark.core
+def test_calculate_col_widths():
+    n_rows, n_cols = 100, 10
+    data_top = [[('r' * i) + ('c' * j) for j in range(n_cols)] for i in range(n_rows)]
+    data_bottom = [row for row in data_top[::-1]]
+    data = data_top + data_bottom
+    headers = [str(j) for j in range(n_cols)]
+    sdm = SQLDataModel(data, headers=headers,display_max_rows=None)
+    min_width, max_width = 1, 100 # Use row count to restrict scope of width calculation
+    split_row_pts = [1,2, 3, 5, 7, 9, 12, 16, 22, 30, 42, 50]
+    index_val_column = [len(str(idx)) for idx in range(len(data))]
+    for is_index in (True, False): 
+        for split_row_pt in split_row_pts:
+            validation_scope = data[:split_row_pt] + data[-split_row_pt:]
+            expected_widths = {col: max(max(len(row[cid]),min_width) for row in validation_scope) for cid, col in enumerate(headers)}
+            if is_index:
+                expected_widths['idx'] = max((index_val_column[:split_row_pt]+index_val_column[-split_row_pt:]))
+            output_widths = sdm._calculate_col_widths(index=is_index,min_column_width=min_width, max_column_width=max_width, split_row=split_row_pt)
+            assert output_widths == expected_widths
+
+@pytest.mark.core
 def test_repr():
     ### test data type appearance ###
     input_headers = ['string', 'integer', 'float', 'bool', 'datetime']
