@@ -40,8 +40,6 @@ napoleon_use_param = True
 napoleon_use_keyword = True
 napoleon_use_rtype = True
 
-# napoleon_custom_sections = [('Metrics', 'params_style')]
-
 templates_path = ['_templates']
 # modindex_common_prefix = ['SQLDataModel'] # doesnt seem to do anything
 add_modules_names = False # doesnt seem to make a difference
