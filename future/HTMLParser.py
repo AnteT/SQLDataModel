@@ -1,5 +1,6 @@
 from __future__ import annotations
 from html.parser import HTMLParser
+from .exceptions import ErrorFormat
 
 class HTMLParser(HTMLParser):
     """
@@ -33,7 +34,7 @@ class HTMLParser(HTMLParser):
             table_identifier = 0
         if not isinstance(table_identifier, (str,int)):
             raise TypeError(
-                HTMLParser.ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', argument for `table_identifier` must be one of 'int' or 'str' representing table index location or HTML 'name' or 'id' attribute")
+                ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', argument for `table_identifier` must be one of 'int' or 'str' representing table index location or HTML 'name' or 'id' attribute")
             )
         self.table_identifier = table_identifier
         self._cell_sep = cell_sep
@@ -47,31 +48,6 @@ class HTMLParser(HTMLParser):
         self._is_finished = False
         self.table_counter = 0
         self.target_table = []
-
-    @staticmethod
-    def ErrorFormat(error:str) -> str:
-        """
-        Formats an error message with ANSI color coding.
-
-        Parameters:
-            ``error`` (str): The error message to be formatted.
-
-        Returns:
-            ``str``: A string with ANSI color coding, highlighting the error type in bold red.
-        
-        Example::
-            
-            import HTMLParser
-
-            # Error message to format
-            formatted_error = HTMLParser.ErrorFormat("ValueError: Invalid value provided.")
-            
-            # Display alongside error or exception when raised
-            print(formatted_error)
-
-        """        
-        error_type, error_description = error.split(':',1)
-        return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""
     
     def handle_starttag(self, tag: str, attrs: list[str]) -> None:
         """
@@ -164,20 +140,20 @@ class HTMLParser(HTMLParser):
             if (num_tables_found := self.table_counter) < 1:
                 if num_tables_found < 1:
                     raise ValueError(
-                        HTMLParser.ErrorFormat(f"ValueError: zero table elements found in provided source, confirm `html_source` is valid HTML or check integrity of data")
+                        ErrorFormat(f"ValueError: zero table elements found in provided source, confirm `html_source` is valid HTML or check integrity of data")
                     )
             else:
                 if isinstance(self.table_identifier, int):
                     raise ValueError(
-                        HTMLParser.ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found at provided index '{self.table_identifier}'")
+                        ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found at provided index '{self.table_identifier}'")
                     )
                 else:
                     raise ValueError(
-                        HTMLParser.ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found with 'id' or 'name' attribute matching provided indentifier '{self.table_identifier}'")
+                        ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found with 'id' or 'name' attribute matching provided indentifier '{self.table_identifier}'")
                     )
         if len(self.target_table) < 1:
             raise ValueError(
-                HTMLParser.ErrorFormat(f"ValueError: found potential match for table identifier '{self.table_identifier}' but failed to parse table from data, check integrity of source")
+                ErrorFormat(f"ValueError: found potential match for table identifier '{self.table_identifier}' but failed to parse table from data, check integrity of source")
             )
         if len(self.target_table) == 1:
             return self.target_table, None
