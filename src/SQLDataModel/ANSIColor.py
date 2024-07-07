@@ -1,5 +1,6 @@
 from __future__ import annotations
 import random
+from .exceptions import ErrorFormat
 
 class ANSIColor:
     """
@@ -15,7 +16,7 @@ class ANSIColor:
 
     Example::
 
-        import ANSIColor
+        from ANSIColor import ANSIColor
 
         # Create a pen by specifying a color in hex or rgb:
         green_bold = ANSIColor("#00ff00", text_bold=True)
@@ -135,7 +136,7 @@ class ANSIColor:
 
         Example::
 
-            import ANSIColor
+            from ANSIColor import ANSIColor
 
             # Initialize from hex value with normal weight
             color = ANSIColor("#00ff00")
@@ -159,7 +160,7 @@ class ANSIColor:
         text_color = ANSIColor.Colors[random.choice(list(ANSIColor.Colors.keys()))] if text_color is None else text_color # Use random color if None
         if not isinstance(text_color, (tuple,list,str)):
             raise TypeError(
-                ANSIColor.ErrorFormat(f"TypeError: invalid `text_color` type '{type(text_color).__name__}' received, expected value of type 'tuple' or 'str'")
+                ErrorFormat(f"TypeError: invalid `text_color` type '{type(text_color).__name__}' received, expected value of type 'tuple' or 'str'")
             )
         self.text_bold = "\033[1m" if text_bold else ""
         if isinstance(text_color, str): # assume hex
@@ -167,7 +168,7 @@ class ANSIColor:
                 fg_r, fg_g, fg_b = tuple(int(text_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
             except:
                 raise ValueError(
-                    ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', string argument for `text_color` must be a valid hexadecimal value between `#000000` and `#ffffff`")
+                    ErrorFormat(f"ValueError: invalid value '{text_color}', string argument for `text_color` must be a valid hexadecimal value between `#000000` and `#ffffff`")
                 ) from None
             self.text_color_str = text_color
             """``str``: The input color used to create the pen in the originally provided format."""
@@ -178,14 +179,14 @@ class ANSIColor:
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
                     raise ValueError(
-                        ANSIColor.ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
+                        ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
                     )
         if isinstance(text_color, (tuple, list)): # assume rgb
             try:
                 fg_r, fg_g, fg_b = text_color
             except:
                 raise ValueError(
-                    ANSIColor.ErrorFormat(f"ValueError: invalid value '{text_color}', tuple argument for `text_color` must be a valid rgb tuple `(r, g, b)` with values between `0` and `255`")
+                    ErrorFormat(f"ValueError: invalid value '{text_color}', tuple argument for `text_color` must be a valid rgb tuple `(r, g, b)` with values between `0` and `255`")
                 ) from None  
             self.text_color_str = str(text_color)
             """``str``: The input color used to create the pen in the originally provided format."""
@@ -196,35 +197,10 @@ class ANSIColor:
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
                     raise ValueError(
-                        ANSIColor.ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
+                        ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
                     )            
         self._ansi_start = f"""{self.text_bold}\033[38;2;{fg_r};{fg_g};{fg_b}m"""
         self._ansi_stop = "\033[0m\033[39m\033[49m"
-
-    @staticmethod
-    def ErrorFormat(error:str) -> str:
-        """
-        Formats an error message with ANSI color coding.
-
-        Parameters:
-            ``error`` (str): The error message to be formatted.
-
-        Returns:
-            ``str``: A string with ANSI color coding, highlighting the error type in bold red.
-        
-        Example::
-            
-            import ANSIColor
-
-            # Error message to format
-            formatted_error = ANSIColor.ErrorFormat("ValueError: Invalid value provided.")
-            
-            # Display alongside error or exception when raised
-            print(formatted_error)
-
-        """
-        error_type, error_description = error.split(':',1)
-        return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""    
 
     @classmethod
     def rand_color(cls) -> ANSIColor:
@@ -236,7 +212,7 @@ class ANSIColor:
 
         Example::
 
-            import ANSIColor
+            from ANSIColor import ANSIColor
 
             # Surprise me!
             rand_color = ANSIColor.rand_color()
@@ -270,7 +246,7 @@ class ANSIColor:
 
         Example::
 
-            import ANSIColor
+            from ANSIColor import ANSIColor
 
             # Create the pen from a hex value
             color = ANSIColor('#EFAC65') 
@@ -315,7 +291,7 @@ class ANSIColor:
 
         Example::
         
-            import ANSIColor
+            from ANSIColor import ANSIColor
 
             # Create the color
             color = ANSIColor("#00ff00")
@@ -338,7 +314,7 @@ class ANSIColor:
 
         Example::
         
-            import ANSIColor
+            from ANSIColor import ANSIColor
 
             # Create the color
             blue_color = ANSIColor("#0000ff")
