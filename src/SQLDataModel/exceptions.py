@@ -35,7 +35,7 @@ class DimensionError(Exception):
             print(e)
     
     Note:
-        - An argument could be made for using ``ValueError`` instead, but there's enough difference to justify a new error.
+        - An argument could be made for using `ValueError` instead, but there's enough difference to justify a new error.
     """
 
 class SQLProgrammingError(Exception):
@@ -75,5 +75,59 @@ class SQLProgrammingError(Exception):
             print(e)    
 
     Note:
-        - This exception is used to wrap any ``sqlite3.ProgrammingError`` encountered during SQL related operations.  
+        - This exception is used to wrap any ``sqlite3.ProgrammingError`` encountered during SQL related operations.
     """
+
+def WarnFormat(warn:str) -> str:
+    """
+    Formats a warning message with ANSI color coding.
+
+    Parameters:
+        ``warn``: The warning message to be formatted.
+
+    Returns:
+        ``str``: The modified string with ANSI color coding, highlighting the class name in bold yellow.
+
+    Example::
+    
+        # Warning to format
+        formatted_warning = WarnFormat("DeprecationWarning: This method is deprecated.")
+        
+        # Styled message to pass with error or exception
+        print(formatted_warning)
+    
+    Changelog:
+        - Version 0.12.1 (2024-07-07):
+            - Moved into exceptions module to avoid redefinition in each module.
+        - Version 0.1.9 (2024-03-19):
+            - New method.
+    """
+    warned_by, warning_description = warn.split(':',1)
+    return f"""\r\033[1m\033[38;2;246;221;109m{warned_by}:\033[0m\033[39m\033[49m{warning_description}"""
+    
+def ErrorFormat(error:str) -> str:
+    """
+    Formats an error message with ANSI color coding.
+
+    Parameters:
+        ``error``: The error message to be formatted.
+
+    Returns:
+        ``str``: The modified string with ANSI color coding, highlighting the error type in bold red.
+
+    Example::
+        
+        # Format the error message
+        formatted_error = SQLDataModel.ErrorFormat("ValueError: Invalid value provided.")
+        
+        # Should display a colored string to display along with error or exception
+        print(formatted_error)
+
+    Changelog:        
+        - Version 0.12.1 (2024-07-07):
+            - Moved into exceptions module to avoid redefinition in each module.
+        - Version 0.1.9 (2024-03-19):
+            - New method.
+    """
+    error_type, error_description = error.split(':',1)
+    return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""
