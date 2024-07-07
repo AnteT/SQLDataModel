@@ -364,12 +364,13 @@ class SQLDataModel:
             - Use :meth:`SQLDataModel.set_display_color()` to modify the terminal color used to style the model. 
             - Use :meth:`SQLDataModel.set_display_max_rows()` to modify the number of rows output in the representations.
         
-        .. versionchanged:: 0.12.0
-            Modified the default minimum number of displayed rows from 1 to 4 when :py:attr:`SQLDataModel.display_max_rows` is None.
-        .. versionchanged:: 0.11.0
-            Added additional option 'latex' for ``table_style`` parameter.            
-        .. versionchanged:: 0.9.3
-            Added additional options 'rst-simple' and 'rst-grid' for ``table_style`` parameter.            
+        Changelog:
+            - Version 0.12.0 (2024-07-06):
+                - Modified the default minimum number of displayed rows from 1 to 4 when :py:attr:`SQLDataModel.display_max_rows` is None.
+            - Version 0.11.0 (2024-07-05):
+                - Added additional option 'latex' for ``table_style`` parameter.            
+            - Version 0.9.3 (2024-06-28):
+                - Added additional options 'rst-simple' and 'rst-grid' for ``table_style`` parameter.            
         """
         if data is None:
             if headers is None:
@@ -579,8 +580,10 @@ class SQLDataModel:
             
             # Should display a colored string to display along with error or exception
             print(formatted_error)
-        
-        .. versionadded:: 0.1.9            
+
+        Changelog:        
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         error_type, error_description = error.split(':',1)
         return f"""\r\033[1m\033[38;2;247;141;160m{error_type}:\033[0m\033[39m\033[49m{error_description}"""
@@ -604,34 +607,12 @@ class SQLDataModel:
             # Styled message to pass with error or exception
             print(formatted_warning)
         
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         warned_by, warning_description = warn.split(':',1)
         return f"""\r\033[1m\033[38;2;246;221;109m{warned_by}:\033[0m\033[39m\033[49m{warning_description}"""
-
-    @staticmethod
-    def SuccessFormat(success:str) -> str:
-        """
-        Formats a success message with ANSI color coding.
-
-        Parameters:
-            ``success``: The success message to be formatted.
-
-        Returns:
-            ``str``: The modified string with ANSI color coding, highlighting the success source in bold green.
-
-        Example::
-        
-            # Message to format
-            formatted_success = SuccessFormat("FileCreated: The operation was successful with new file created.")
-            
-            # Styled message to pass with error or exception            
-            print(formatted_success)
-
-        .. versionadded:: 0.1.9            
-        """ 
-        success_by, success_description = success.split(':',1)
-        return f"""\r\033[1m\033[38;2;108;211;118m{success_by}:\033[0m\033[39m\033[49m{success_description}"""
     
     @staticmethod
     def generate_html_table_chunks(html_source:str) -> Generator[str, None, None]:
@@ -677,7 +658,9 @@ class SQLDataModel:
             - HTML content before the first ``<table>`` element and after the last ``</table>`` element is ignored and not yielded.
             - See :meth:`SQLDataModel.from_html()` for full implementation and how this function is used for HTML parsing.
 
-        .. versionadded:: 0.2.1
+        Changelog:
+            - Version 0.2.1 (2024-03-24):
+                - New method.
         """
         start_index, table_found = 0, False
         while True:
@@ -720,8 +703,10 @@ class SQLDataModel:
             - This method attempts to infer the data type of the input object by evaluating its content.
             - If the input object is a string, it is parsed to determine whether it represents a date, datetime, integer, or float.
             - If the input object is not a string or cannot be parsed, its type is determined based on its Python type (bool, int, float, bytes, or None).
-
-        .. versionadded:: 0.1.9            
+        
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         if obj is None or obj == '' or not isinstance(obj, str):
             return type(obj).__name__ if obj is not None else 'None'
@@ -766,7 +751,9 @@ class SQLDataModel:
             - If a column contains only ``str`` instances or multiple types with no clear choice, the type remains as ``str``.
             - See :meth:`SQLDataModel.infer_str_type()` for type determination process.
         
-        .. versionadded:: 0.1.9
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         n_rows, n_cols = len(input_data), len(input_data[0])
         rand_dtypes = [list(set([SQLDataModel.infer_str_type(input_data[i][j], date_format=date_format, datetime_format=datetime_format) for i in range(n_rows)])) for j in range(n_cols)]
@@ -804,19 +791,16 @@ class SQLDataModel:
         Returns:
             ``str``: The parameter formatted for SQL type casting.
 
-        Changelog:
-            - Version 0.7.6 (2024-06-16):
-                - Added support for additional date formats when ``dtype='date'`` including: ``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``.
-                - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
-
         Note:
             - This function provides consistent formatting for casting parameters into specific data types for SQLite, changing it will lead to unexpected behaviors.
             - Used by :meth:`SQLDataModel.__init__()` with ``as_binding=True`` to allow parameterized inserts to cast to appropriate data type.
 
-        .. versionchanged:: 0.7.6
-            Added support for additional date formats when ``dtype='date'`` including: ``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``.
-            Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.            
-        .. versionadded:: 0.3.3
+        Changelog:
+            - Version 0.7.6 (2024-06-16):
+                - Added support for additional date formats when ``dtype='date'`` including: ``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``.
+                - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
+            - Version 0.3.3 (2024-04-03):
+                - New method.
         """
         param_alias =  f'''as "{param}"''' if as_alias else ''''''
         if dtype in ('str','None','NoneType'):
@@ -853,6 +837,11 @@ class SQLDataModel:
         Returns:
             ``str``: The formatted SELECT clause for SQLite.
 
+        Note:
+            - This function generates SQLite SELECT clauses for single column only.
+            - The output preformats SELECT result to fit ``repr`` method for tabular output.
+            - The return ``str`` is not valid SQL by itself, representing only the single column select portion.
+
         Changelog:
             - Version 0.11.0 (2024-07-05):
                 - Added ``truncation_chars`` keyword argument to allow custom truncation characters when column value exceeds maximum width.
@@ -860,19 +849,8 @@ class SQLDataModel:
                 - Added ``escape_newline`` keyword argument to escape newline characters to prevent wrapping lines when called by :meth:`SQLDataModel.__repr__()`
             - Version 0.7.0 (2024-06-08):
                 - Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
-
-        Note:
-            - This function generates SQLite SELECT clauses for single column only.
-            - The output preformats SELECT result to fit ``repr`` method for tabular output.
-            - The return ``str`` is not valid SQL by itself, representing only the single column select portion.
-
-        .. versionchanged:: 0.11.0
-            Added ``truncation_chars`` keyword argument to allow custom truncation characters when column value exceeds maximum width.
-        .. versionchanged:: 0.10.4
-            Added ``escape_newline`` keyword argument to escape newline characters to prevent wrapping lines when called by :meth:`SQLDataModel.__repr__()`.
-        .. versionchanged:: 0.7.0
-            Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if dtype == 'custom':
             return f"""printf('%{max_pad_width}s', '{column}') """ # treats column as literal argument for string format substitution
@@ -980,16 +958,14 @@ class SQLDataModel:
             Unique as Unique
         ```
 
-        Changelog:
-            - Version 0.3.4 (2024-04-05):
-                - Modified to re-alias partially aliased input to prevent runaway incrementation on suffixes.
-        
         Note:
             - Used by :meth:`SQLDataModel.execute_fetch()` when column selection is unknown and may require duplicate aliasing.
 
-        .. versionchanged:: 0.3.4
-            Modified to re-alias partially aliased input to prevent runaway incrementation on suffixes.
-        .. versionadded:: 0.1.9                
+        Changelog:
+            - Version 0.3.4 (2024-04-05):
+                - Modified to re-alias partially aliased input to prevent runaway incrementation on suffixes.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         dupes = {}
         for col in headers:
@@ -1052,7 +1028,9 @@ class SQLDataModel:
         Note:
             - Used by :meth:`SQLDataModel.from_dict()` to flatten deeply nested JSON objects into 2 dimensions when encountered.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if isinstance(json_source, dict):
             json_source = [json_source]
@@ -1158,19 +1136,18 @@ class SQLDataModel:
             )
         ```
 
-        Changelog:
-            - Version 0.9.3 (2024-06-28):
-                - Modified behavior when ``scheme`` is not provided, treating as file path when parsed in absence of auth related properties to retain prior version behavior of creating new sqlite3 database file when path is provided.
-                - Added driver module names as valid aliases for relevant connection drivers, valid schemes now include 'file', 'sqlite3', 'postgresql', 'psycopg2', 'mssql', 'pyodbc', 'oracle', 'cx_oracle', 'teradata', 'teradatasql'
-
-            - Version 0.9.2 (2024-06-27):
-                - Modified to use ``urllib.parse.urlparse`` instead of added 3rd party package dependency.
-                
         Note:
             - This method is used by :meth:`SQLDataModel._create_connection()` to parse details from url and create a connection object.
             - This method can be used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parsed connection details when connection parameter provided as string.
 
-        .. versionadded:: 0.9.2
+        Changelog:
+            - Version 0.9.3 (2024-06-28):
+                - Modified behavior when ``scheme`` is not provided, treating as file path when parsed in absence of auth related properties to retain prior version behavior of creating new sqlite3 database file when path is provided.
+                - Added driver module names as valid aliases for relevant connection drivers, valid schemes now include 'file', 'sqlite3', 'postgresql', 'psycopg2', 'mssql', 'pyodbc', 'oracle', 'cx_oracle', 'teradata', 'teradatasql'
+            - Version 0.9.2 (2024-06-27):
+                - Modified to use ``urllib.parse.urlparse`` instead of added 3rd party package dependency.
+            - Version 0.9.1 (2024-06-27):
+                - New method.
         """
         ConnectionDetails = namedtuple('ConnectionDetails', ['scheme', 'user', 'cred', 'host', 'port', 'db'])
         # valid_connection_drivers: file|sqlite3, mssql|pyodbc, postgresql|psycopg2, oracle|cx_oracle or teradata|teradatasql
@@ -1247,7 +1224,9 @@ class SQLDataModel:
             - Used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parse and create connection objects from url.
             - See :meth:`SQLDataModel._parse_connection_url()` for implementation on parsing url properties from connection string.
 
-        .. versionadded:: 0.9.2
+        Changelog:
+            - Version 0.9.2 (2024-06-27):
+                - New method.
         """
         url_props = SQLDataModel._parse_connection_url(url)
         driver = url_props.scheme
@@ -1425,7 +1404,9 @@ class SQLDataModel:
             - Arguments for ``column`` can be a single ``str`` or ``int`` or ``list[str]`` containing ``str`` or ``list[int]`` containing ``int`` representing column names or column indicies, respectively, but they cannot be combined and provided together. For example, passing ``columns = ['First Name', 3]`` will raise a ``TypeError`` exception.
             - The equivalent of this method can also be achieved by simply indexing the required rows and columns using ``sdm[rows, column]`` notation, see :meth:`SQLDataModel.__getitem__()` for additional details.
 
-        .. versionadded:: 0.2.3            
+        Changelog:
+            - Version 0.2.3 (2024-03-28):
+                - New method.            
         """
         column = self._validate_column(column, unmodified=False) # +VALCOL
         if inplace:
@@ -1543,7 +1524,9 @@ class SQLDataModel:
             - Row indicies are retained after being deleted by default, provide ``ignore_index=True`` to reset row indicies if required.
             - The equivalent of this method can also be achieved by simply indexing the required rows and columns using ``sdm[rows, column]`` notation, see :meth:`SQLDataModel.__getitem__()` for additional details.
 
-        .. versionadded:: 0.7.4
+        Changelog:
+            - Version 0.7.4 (2024-06-13):
+                - New method.
         """
         row = self._validate_row(row, unmodified=False) # +VALROW
         row = row if len(row) != 1 else (row[0], row[0])
@@ -1601,7 +1584,9 @@ class SQLDataModel:
             - Handles negative indices by adjusting them relative to the end of the column range.
             - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
 
-        .. versionadded:: 0.1.9
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         column = self._validate_column(column, unmodified=False)[0] # +VALCOL
         rename_stmts = f"""alter table "{self.sql_model}" rename column "{column}" to "{new_column_name}" """
@@ -1669,7 +1654,14 @@ class SQLDataModel:
             [4 rows x 4 columns] 
         ```
         
-        .. versionadded:: 0.1.9        
+        Note:
+            - See :meth:`SQLDataModel.contains()` for identifying substring presence.
+            - See :meth:`SQLDataModel.endswith()` for checking end of value for substring.
+            - See :meth:`SQLDataModel.startswith()` for checking beggining of value for substring.
+
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(pattern, str):
             raise TypeError(
@@ -1707,7 +1699,9 @@ class SQLDataModel:
             # Display values
             print(headers) # outputs: ['First Name', 'Last Name', 'Salary']
 
-        .. versionadded:: 0.1.5        
+        Changelog:
+            - Version 0.1.5 (2023-11-24):
+                - New method.        
         """
         return self.headers
     
@@ -1737,7 +1731,9 @@ class SQLDataModel:
             # Set new headers
             sdm.set_headers(['First_Name', 'Last_Name', 'Payment'])
         
-        .. versionadded:: 0.1.5                
+        Changelog:
+            - Version 0.1.5 (2023-11-24):
+                - New method.                
         """
         if not isinstance(new_headers, Iterable) or isinstance(new_headers, str):
             raise TypeError(
@@ -1781,7 +1777,9 @@ class SQLDataModel:
             # Get renamed headers again
             sdm.get_headers() # now outputs ['FIRST_NAME', 'LAST_NAME', 'SALARY']
         
-        .. versionadded:: 0.1.5            
+        Changelog:
+            - Version 0.1.5 (2023-11-24):
+                - New method.            
         """
         if apply_function is None:
             apply_function = lambda x: "_".join(x.strip() for x in re.sub('[^0-9a-z_]+', '', x.lower().replace(" ","_")).split('_') if x !='')
@@ -1812,7 +1810,9 @@ class SQLDataModel:
             - This does not affect the actual number of rows in the model, only the maximum **displayed**.
             - Use :meth:`SQLDataModel.set_display_max_rows()` to explicitly set a max row limit instead of using terminal height.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         return self.display_max_rows
     
@@ -1846,7 +1846,9 @@ class SQLDataModel:
         Note:
             - Modifying :py:attr:`SQLDataModel.display_max_rows` does not affect the actual number of rows in the model, only the maximum rows **displayed**.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(rows, (int,type(None))):
             raise TypeError(
@@ -2060,8 +2062,9 @@ class SQLDataModel:
             - Use 'dynamic' to return to default column alignment, which is right-aligned for numeric types and left-aligned for others.
             - See :meth:`SQLDataModel.set_table_style()` for modifying table format and available styles.
 
-        .. versionchanged:: 0.1.80
-            Changed expected values for ``alignment`` parameter from f-string modifiers to more descriptive values 'dynamic', 'left', 'center' or 'right'.
+        Changelog:
+            - Version 0.1.80 (2024-02-24):
+                - Changed expected values for ``alignment`` parameter from f-string modifiers to more descriptive values 'dynamic', 'left', 'center' or 'right'.
         """
         if not isinstance(alignment, str):
             raise TypeError(
@@ -2097,7 +2100,9 @@ class SQLDataModel:
         Note:
             - Use :meth:`SQLDataModel.set_display_index()` to modify this property and toggle index display visibility.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         return self.display_index
 
@@ -2128,7 +2133,9 @@ class SQLDataModel:
         Note:
             - Use :meth:`SQLDataModel.set_table_style()` to more broadly modify the appearance and formatting style of ``SQLDataModel`` string representations.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(display_index, bool):
             raise TypeError(
@@ -2191,13 +2198,13 @@ class SQLDataModel:
             [3 rows x 3 columns] <-- shape is also visible here
         ```
 
-        Changelog:
-            - Version 0.3.6 (2024-04-09):
-                - Returns the new :py:attr:`SQLDataModel.shape` directly, making this method redundant.
-
         Note:
             - If an empty model is initialized, the :py:attr:`SQLDataModel.row_count` will be 0 until the first row is inserted.
             - Using the :meth:`SQLDataModel.__getitem__()` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
+
+        Changelog:
+            - Version 0.3.6 (2024-04-09):
+                - Returns the new :py:attr:`SQLDataModel.shape` directly, making this method redundant.
         """
         return self.shape
     
@@ -2214,7 +2221,9 @@ class SQLDataModel:
             - This value is utilized in the ``repr`` method to control the precision of real number values.
             - The method does not affect the actual value of float dtypes in the underlying ``SQLDataModel``
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         return self.display_float_precision
     
@@ -2282,7 +2291,9 @@ class SQLDataModel:
             - The ``display_float_precision`` attribute only affects the precision for displaying real or floating point values.
             - The actual precision of the stored value in the model is unaffected by the value set.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(float_precision, int):
             raise TypeError(
@@ -2452,10 +2463,6 @@ class SQLDataModel:
             └────────┴───────────────┴────────┴─────────────────────┘
             [12 rows x 4 columns]
         ```
-
-        Changelog:
-            - Version 0.6.3 (2024-05-16):
-                - Modified model to output values as string data types and set columns to right-aligned if arguments are not present in ``kwargs`` to retain metric resolution while having numeric alignment.
         
         Important:
             - Generally, do not rely on ``SQLDataModel`` to do statistics, use ``NumPy`` or a real scientific computing library instead.
@@ -2464,9 +2471,11 @@ class SQLDataModel:
             - Use :meth:`SQLDataModel.infer_dtypes()` to cast columns to their apparent data type, or set it manually with :meth:`SQLDataModel.set_column_dtypes()` to convert columns to different data types.
             - Statistics for ``date`` and ``datetime`` can be unpredictable if formatting used is inconsistent with conversion to Julian days or if column data type is incorrect.
 
-        .. versionchanged:: 0.6.3
-            Modified model to output values as string data types and set columns to right-aligned if arguments are not present in ``kwargs`` to retain metric resolution while having numeric alignment.
-        .. versionadded:: 0.1.9
+        Changelog:
+            - Version 0.6.3 (2024-05-16):
+                - Modified model to output values as string data types and set columns to right-aligned if arguments are not present in ``kwargs`` to retain metric resolution while having numeric alignment.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if exclude_columns is None:
             exclude_columns = []
@@ -2548,7 +2557,9 @@ class SQLDataModel:
         Note:
             - If the current model's :py:attr:`SQLDataModel.row_count` value is less than the sample size, the current row count will be used instead.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(n_samples, (float,int)):
             raise TypeError(
@@ -2658,9 +2669,11 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.infer_str_type()` for type determination process.
             - See :meth:`SQLDataModel.infer_types_from_data()` for type voting scheme used for inference.
 
-        .. versionchanged:: 0.2.0
-            Increased sampling size for inference from ``n_samples=10`` to ``n_samples=16`` for better resolution.
-        .. versionadded:: 0.1.9
+        Changelog:
+            - Version 0.2.0 (2024-03-19):
+                - Increased sampling size for inference from ``n_samples=10`` to ``n_samples=16`` for better resolution.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(n_samples, int):
             raise TypeError(
@@ -2777,24 +2790,19 @@ class SQLDataModel:
             [6 rows x 6 columns]
         ```
 
+        Note:
+            - If both ``fill`` and ``dtype`` are provided, the data type will be derived from ``type(fill)`` overriding or ignoring the specified ``dtype``.
+            - If only ``dtype`` is provided, sensible default initialization fill values will be used to populate the model such as 0 or 0.0 for numeric and empty string or null for others.
+            - For those data types not natively implemented by ``sqlite3`` such as ``date`` and ``datetime``, today's date and now's datetime will be used respectively for initialization values.
+
         Changelog:
             - Version 0.5.2 (2024-05-13):
                 - Added ``shape`` parameter in lieu of separate ``n_rows`` and ``n_cols`` arguments.
                 - Added ``fill`` parameter to populate resulting SQLDataModel with values to override type-specific initialization defaults.
                 - Added ``headers`` parameter to explicitly set column names when creating the SQLDataModel.
                 - Added ``**kwargs`` parameter to align more closely with usage patterns of other model initializing constructor methods.
-
-        Note:
-            - If both ``fill`` and ``dtype`` are provided, the data type will be derived from ``type(fill)`` overriding or ignoring the specified ``dtype``.
-            - If only ``dtype`` is provided, sensible default initialization fill values will be used to populate the model such as 0 or 0.0 for numeric and empty string or null for others.
-            - For those data types not natively implemented by ``sqlite3`` such as ``date`` and ``datetime``, today's date and now's datetime will be used respectively for initialization values.
-
-        .. versionchanged:: 0.5.2
-            Added ``shape`` parameter in lieu of separate ``n_rows`` and ``n_cols`` arguments.
-            Added ``fill`` parameter to populate resulting SQLDataModel with values to override type-specific initialization defaults.
-            Added ``headers`` parameter to explicitly set column names when creating the SQLDataModel.
-            Added ``**kwargs`` parameter to align more closely with usage patterns of other model initializing constructor methods.            
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         try:
             n_rows, n_cols = shape
@@ -2906,11 +2914,6 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
 
-        Changelog:
-            - Version 0.4.0 (2024-04-23):
-                - Modifed to only parse CSV files and removed all delimiter sniffing with introduction of new method :meth:`SQLDataModel.from_delimited()` to handle other delimiters.
-                - Renamed ``delimiters`` parameter to ``delimiter`` with ``,`` set as new default to reflect revised focus on CSV files only.
-
         Note:
             - If ``csv_source`` is delimited by characters other than those specified, use :meth:`SQLDataModel.from_delimited()` and provide delimiter to ``delimiters``.
             - If ``headers`` are provided, the first row parsed from source will be the first row in the table and not discarded.
@@ -2919,8 +2922,10 @@ class SQLDataModel:
               - When ``infer_types = True``, a random subset of the data will be used to infer the correct type and cast values accordingly
               - When ``infer_types = False``, values from the first row only will be used to assign types, almost always 'str' when reading from CSV.
 
-        .. versionchanged:: 0.4.0
-            Changed default delimiter to ``','`` with :meth:`SQLDataModel.from_delimited()` now handling non-comma delimited values.                
+        Changelog:
+            - Version 0.4.0 (2024-04-23):
+                - Modifed to only parse CSV files and removed all delimiter sniffing with introduction of new method :meth:`SQLDataModel.from_delimited()` to handle other delimiters.
+                - Renamed ``delimiters`` parameter to ``delimiter`` with ``,`` set as new default to reflect revised focus on CSV files only.
         """
         if os.path.exists(csv_source):
             try:
@@ -3031,7 +3036,6 @@ class SQLDataModel:
         Note:
             - This method attempts to infer the correct method to call based on ``data`` argument, if one cannot be inferred an exception is raised.
             - For data type specific implementation or examples, see related method for appropriate data type.
-
         """
         if not isinstance(data, (list, tuple, str, dict)) and (type(data).__name__ not in ('ndarray','DataFrame')):
             raise TypeError(
@@ -3193,7 +3197,9 @@ class SQLDataModel:
             - Use :meth:`SQLDataModel.from_text()` if data is not delimited but is a string representation such as an ASCII table or the output from another ``SQLDataModel`` instance.
             - If file is delimited by delimiters other than the default targets ``\\s``, ``\\t``, ``;``, ``|``, ``:`` or ``,`` (space, tab, semicolon, pipe, colon or comma) make sure they are provided as single character values to ``delimiters``.
 
-        .. versionadded:: 0.4.0
+        Changelog:
+            - Version 0.4.0 (2024-04-23):
+                - New method.
         """
         if os.path.exists(source):
             try:
@@ -3310,10 +3316,6 @@ class SQLDataModel:
             [4 rows x 2 columns]
         ```
 
-        Changelog:
-            - Version 0.6.3 (2024-05-16):
-                - Modified to try parsing input data as JSON if initial inspection does not signify row or column orientation.
-
         Note:
             - If data orientation suggests JSON like structure, then :meth:`SQLDataModel.from_json()` will attempt to construct the model.
             - Dictionaries in list like orientation can also be used with structures similar to JSON objects.
@@ -3321,7 +3323,11 @@ class SQLDataModel:
             - If the keys are integers, they are used as row indexes; otherwise, keys are used as headers.
             - See :meth:`SQLDataModel.to_dict()` for converting existing instances of ``SQLDataModel`` to dictionaries.
 
-        .. versionadded:: 0.1.5            
+        Changelog:
+            - Version 0.6.3 (2024-05-16):
+                - Modified to try parsing input data as JSON if initial inspection does not signify row or column orientation.
+            - Version 0.1.5 (2023-11-24):
+                - New method.            
         """
         if isinstance(data, list):
             if len(data) < 1:
@@ -3510,7 +3516,9 @@ class SQLDataModel:
             - All indicies for ``min_row``, ``max_row``, ``min_col`` and ``max_col`` are 1-based instead of 0-based, again see ``openpyxl`` for more details.
             - See related :meth:`SQLDataModel.to_excel()` for exporting an existing ``SQLDataModel`` to Excel.
 
-        .. versionadded:: 0.2.2            
+        Changelog:
+            - Version 0.2.2 (2024-03-26):
+                - New method.
         """
         if not _has_xl:
             raise ModuleNotFoundError(
@@ -3634,6 +3642,7 @@ class SQLDataModel:
             [3 rows x 2 columns]
 
         ```
+
         From JSON file
         --------------
 
@@ -3670,7 +3679,9 @@ class SQLDataModel:
             - If ``json_source`` is deeply-nested it will be flattened according to the staticmethod :meth:`SQLDataModel.flatten_json()`
             - If ``json_source`` is a JSON-like string object that is not an array, it will be wrapped according as an array.
         
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(json_source, (str,list,dict)):
             raise TypeError(
@@ -3832,19 +3843,17 @@ class SQLDataModel:
             [3 rows x 2 columns]
         ```
 
-        Changelog:
-            - Version 0.9.0 (2024-06-26):
-                - Modified ``table_identifier`` default value to 1, changing from zero-based to one-based indexing for referencing target table in source to align with similar extraction methods throughout package.
-
         Note:
             - ``**kwargs`` passed to method are used in ``urllib.request.urlopen`` if ``html_source`` is being considered as a web url.
             - ``**kwargs`` passed to method are used in ``open`` if ``html_source`` is being considered as a filepath.
             - The largest row size encountered will be used as the ``column_count`` for the returned ``SQLDataModel``, rows will be padded with ``None`` if less.
             - See :meth:`SQLDataModel.generate_html_table_chunks()` for initial source chunking before content fed to :mod:`SQLDataModel.HTMLParser`.
 
-        .. versionchanged:: 0.9.0
-            Modified ``table_identifier`` default value to 1, changing from zero-based to one-based indexing for referencing target table in source to align with similar extraction methods throughout package.
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.9.0 (2024-06-26):
+                - Modified ``table_identifier`` default value to 1, changing from zero-based to one-based indexing for referencing target table in source to align with similar extraction methods throughout package.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         if not isinstance(html_source, str):
             raise TypeError(
@@ -4014,7 +4023,9 @@ class SQLDataModel:
             - The ``table_identifier`` specifies which table to extract when multiple tables are present, beginning at position '1' from the top of the source.
             - The provided ``kwargs`` are passed to the ``SQLDataModel`` constructor for additional parameters to the instance returned.           
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(latex_source, str):
             raise TypeError(
@@ -4183,7 +4194,9 @@ class SQLDataModel:
             - Escaped pipe characters ``\\|`` within the markdown are replaced with the HTML entity reference ``&vert;`` for proper parsing.
             - The provided ``kwargs`` are passed to the ``SQLDataModel`` constructor for additional parameters to the instance returned.
 
-        .. versionadded:: 0.1.9            
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(markdown_source, str):
             raise TypeError(
@@ -4299,7 +4312,9 @@ class SQLDataModel:
             - Numpy array must have '2' dimensions, the first representing the rows, and the second the columns.
             - If no headers are provided, default headers will be generated as 'col_N' where N represents the column integer index.
 
-        .. versionadded:: 0.1.3
+        Changelog:
+            - Version 0.1.3 (2023-10-15):
+                - New method.
         """
         if not _has_np:
             raise ModuleNotFoundError(
@@ -4346,7 +4361,9 @@ class SQLDataModel:
         Note:
             - If ``headers`` are not provided, the existing pandas columns will be used as the new ``SQLDataModel`` headers.
 
-        .. versionadded:: 0.1.3
+        Changelog:
+            - Version 0.1.3 (2023-10-15):
+                - New method.
         """
         if not _has_pd:
             raise ModuleNotFoundError(
@@ -4552,7 +4569,9 @@ class SQLDataModel:
             - Polars uses different data types than those used by ``SQLDataModel``, see :meth:`SQLDataModel.set_column_dtypes()` for specific casting rules.
             - See related :meth:`SQLDataModel.to_polars()` for the inverse method of converting a ``SQLDataModel`` into a Polars ``DataFrame`` object.
 
-        .. versionadded:: 0.3.8
+        Changelog:
+            - Version 0.3.8 (2024-04-12):
+                - New method.
         """
         if not _has_pl:
             raise ModuleNotFoundError(
@@ -4615,9 +4634,11 @@ class SQLDataModel:
             - To convert an existing ``SQLDataModel`` instance to Apache Arrow format, see :meth:`SQLDataModel.to_pyarrow()`.
             - This method is only for in-memory Apache Arrow table objects, for reading and writing parquet see :meth:`SQLDataModel.from_parquet()`.
 
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.
-        .. versionadded:: 0.2.3            
+        Changelog:
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.2.3 (2024-03-28):
+                - New method.            
         """
         if not _has_pa:
             raise ModuleNotFoundError(
@@ -4723,25 +4744,21 @@ class SQLDataModel:
             sdm_table = SQLDataModel.from_sql("my_table", con)
         ```
 
-        Changelog:
-            - Version 0.9.1 (2024-06-27):
-                - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
-
-            - Version 0.8.2 (2024-06-24):
-                - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
-
         Note:
             - When ``con`` is provided as a string a connection will be attempted using :meth:`SQLDataModel._create_connection()` if the path does not exist, otherwise a ``sqlite3`` local connection will be attempted.
             - When ``con`` is provided as an object a connection is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
             - The ``dtypes``, if provided, are only applied to ``sqlite3`` connection objects as remaining supported connections implement SQL to python adapters.
             - See related :meth:`SQLDataModel.to_sql()` for writing to SQL database connections.
-            - See utility methods :meth:`SQLDataModel._parse_connection_url()` and :meth:`SQLDataModel._create_connection()` for implementation on creating database connections from urls.            
+            - See utility methods :meth:`SQLDataModel._parse_connection_url()` and :meth:`SQLDataModel._create_connection()` for implementation on creating database connections from urls.                      
 
-        .. versionchanged:: 0.9.1
-            Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
-        .. versionchanged:: 0.3.0
-            The ``sql_query`` parameter was renamed to ``sql`` for consistency with similar method arguments.            
+        Changelog:
+            - Version 0.9.1 (2024-06-27):
+                - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
+            - Version 0.8.2 (2024-06-24):
+                - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``sql_query`` parameter to ``sql`` for consistency with similar method arguments.  
         """
         if isinstance(con, str):
             if os.path.exists(con): # Connection provided as SQLite database filepath
@@ -4834,7 +4851,9 @@ class SQLDataModel:
             - This method is made for parsing ``SQLDataModel`` formatted text, such as the kind generated with ``print(sdm)`` or the output created by the inverse method :meth:`SQLDataModel.to_text()`
             - For parsing other delimited tabular data, this method calls the related :meth:`SQLDataModel.from_csv()` method, which parses tabular data constructed with common delimiters.
 
-        .. versionadded:: 0.1.9
+        Changelog:
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(text_source, str):
             raise TypeError(
@@ -4916,7 +4935,9 @@ class SQLDataModel:
             # Outputs
             supported_dialects = ('sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql')
         
-        .. versionadded:: 0.1.5            
+        Changelog:
+            - Version 0.1.5 (2023-11-24):
+                - New method.            
         """
         return ('sqlite3', 'psycopg2', 'pyodbc', 'cx_oracle', 'teradatasql')
    
@@ -5000,26 +5021,20 @@ class SQLDataModel:
             [('John',), ('Alice',), ('Travis',)]
         ```
 
-        Changelog:
-            - Version 0.10.0 (2024-06-29):
-                - Modified to use :meth:`SQLDataModel._generate_sql_stmt_fetchall()` to leverage deterministic behavior of method.    
-
-            - Version 0.5.0 (2024-05-09):
-                - Added ``strict_2d`` parameter to allow predictable return type regardless of data dimension.
-
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
-
         Note:
             - Many other ``SQLDataModel`` methods rely on this method, changing it will lead to undefined behavior.
             - See related :meth:`SQLDataModel.from_data()` for creating a new ``SQLDataModel`` from existing data sources.
             - Use ``strict_2d = True`` to always return data as a list of tuples regardless of data dimension.
-        
-        .. versionchanged:: 0.10.0
-            Modified to use :meth:`SQLDataModel._generate_sql_stmt_fetchall()` to leverage deterministic behavior of method.    
-        .. versionchanged:: 0.5.0
-            Added ``strict_2d`` parameter to allow predictable return type regardless of data dimension.
-        .. versionadded:: 0.1.5            
+
+        Changelog:
+            - Version 0.10.0 (2024-06-29):
+                - Modified to use :meth:`SQLDataModel._generate_sql_stmt_fetchall()` to leverage deterministic behavior of method.    
+            - Version 0.5.0 (2024-05-09):
+                - Added ``strict_2d`` parameter to allow predictable return type regardless of data dimension.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.1.5 (2023-11-24):
+                - New method.            
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt_fetchall(index=index))
         data = res.fetchall()
@@ -5114,17 +5129,6 @@ class SQLDataModel:
             1,Alice,28,162.0
             2,Travis,35,185.8
         ```
-        
-        Changelog:
-            - Version 0.6.4 (2024-05-17):
-                - Added ``encoding`` parameter to pass to file handler when writing contents as CSV file and set default to ``utf-8`` to align with expected SQLite codec.
-
-            - Version 0.4.0 (2024-04-23):
-                - Modified quoting behavior to avoid redundant quoting and to closely mimic csv module from standard library.
-                - Added ``na_rep`` to fill null or missing values when generating output, useful for space delimited data and minimal quoting.
-                
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - When ``index=True``, the ``sdm_index`` property determines the column name of the index in the result.
@@ -5132,6 +5136,15 @@ class SQLDataModel:
             - Quoting behavior can be modified by providing an additional keywork arg such as ``quoting=1`` to wrap all values in quotes, or ``quoting=2`` to quote only non-numeric values, see ``csv.QUOTE_X`` enums for all options.
             - Use :meth:`SQLDataModel.to_text()` to pretty print table in specified style for visualizing output if strict delimiting is unnecessary.
             - See :meth:`SQLDataModel.from_csv()` for creating a new ``SQLDataModel`` from existing CSV data
+        
+        Changelog:
+            - Version 0.6.4 (2024-05-17):
+                - Added ``encoding`` parameter to pass to file handler when writing contents as CSV file and set default to ``utf-8`` to align with expected SQLite codec.
+            - Version 0.4.0 (2024-04-23):
+                - Modified quoting behavior to avoid redundant quoting and to closely mimic csv module from standard library.
+                - Added ``na_rep`` to fill null or missing values when generating output, useful for space delimited data and minimal quoting.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index, na_rep=na_rep))
         headers = [x[0] for x in res.description]
@@ -5236,18 +5249,16 @@ class SQLDataModel:
             {'Col A': 'A,1', 'Col B': 'B,1', 'Col C': 'C,1'}
             {'Col A': 'A,2', 'Col B': 'B,2', 'Col C': 'C,2'}
         ```
-        
-        Changelog:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - Use ``index`` to return index data, otherwise current instance ``display_index`` value will be used.
             - For ``'list'`` orientation, data returned is JSON-like in structure, where each row has its own "column": "value" data.
-
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.        
-        .. versionadded:: 0.1.5                
+        
+        Changelog:
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.1.5 (2023-11-24):
+                - New method.                
         """   
         if orient not in ("rows", "columns", "list"):
             raise ValueError(
@@ -5319,24 +5330,19 @@ class SQLDataModel:
             └───┴───────┴──────┴────────┴────────┘
             [ Sheet1 ]
         ```
-        
-        Changelog:
-            - Version 0.8.1 (2024-06-23):
-                - Added ``if_exists`` parameter to provide the options to replace or append to existing file, as well as to fail if already exists.
-
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - Headers are dynamically inserted based on value for ``if_exists``, where using 'replace' will include headers and 'append' will ignore them unless worksheet creation occurred.
             - When providing a string argument for ``worksheet``, if the sheet does not exist, it will be created. However if providing an integer index for an out of range sheet, an ``IndexError`` will be raised.
             - See related :meth:`SQLDataModel.from_excel()` for creating a ``SQLDataModel`` from existing Excel content.
-
-        .. versionchanged:: 0.8.1
-            Added ``if_exists`` parameter to provide the options to replace or append to existing file, as well as to fail if already exists.
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.            
-        .. versionadded:: 0.2.2            
+        
+        Changelog:
+            - Version 0.8.1 (2024-06-23):
+                - Added ``if_exists`` parameter to provide the options to replace or append to existing file, as well as to fail if already exists.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.2.2 (2024-03-26):
+                - New method.
         """        
         if not _has_xl:
             raise ModuleNotFoundError(
@@ -5450,19 +5456,17 @@ class SQLDataModel:
                 table {font:size: 12pt;}
             </style>
         ```
-        
-        Changelog:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - Base styles are applied to reflect the styling of ``SQLDataModel`` in the terminal, including any ``display_color`` which is applied to the table CSS.
             - Table index is determined by the instance ``display_index`` attribute unless specified in the argument of the same name, overriding the instance attribute.
             - The default background-color is #E5E5E5, and the default font color is #090909, with 1 px solid border to mimic the ``repr`` for the instance.
-
-        .. versionchanged:: 0.3.0 
-            Renamed ``include_index`` parameter to ``index`` for package consistency.        
-        .. versionadded:: 0.1.9            
+        
+        Changelog:
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(filename, str) and filename is not None:
             raise TypeError(
@@ -5581,23 +5585,18 @@ class SQLDataModel:
                 "notes": "primary"
             }]
         ```
-        
-        Changelog:
-            - Version 0.3.2 (2024-04-02):
-                - Changed return object to JSON string literal when ``filename=None`` to convert to valid literal object.
-
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - When no filename is specified, JSON-like object will be returned as a rowwise array.
             - Any nested structure will be flattened by this method as well as the :meth:`SQLDataModel.from_json()` method.
-
-        .. versionchanged:: 0.3.2
-            Changed return object to JSON string literal when ``filename=None`` to convert to valid literal object.
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.            
-        .. versionadded:: 0.1.9            
+        
+        Changelog:
+            - Version 0.3.2 (2024-04-02):
+                - Changed return object to JSON string literal when ``filename=None`` to convert to valid literal object.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(filename, str) and filename is not None:
             raise TypeError(
@@ -5740,6 +5739,12 @@ class SQLDataModel:
             \\end{table}
             \\end{document}
         ```
+
+        Note:
+            - A ``\\centering`` command is included in the LaTeX output by default regardless of alignments specified.
+            - LaTeX headers and rows are indented by four spaces to keep with conventional table syntax and to distinguish the table data from commands.
+            - Table commands and headers are checked for invalid LaTeX characters and escaped such as ``'_'`` and ``'#'``, however the model data is not. 
+                Accordingly, ensure any model content is valid LaTeX when rendering to PDF, or simply format content as valid LaTeX before exporting.
         
         Changelog:
             - Version 0.11.0 (2024-07-05):
@@ -5748,20 +5753,12 @@ class SQLDataModel:
                 - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
                 - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
                 - Modified to check and escape any invalid LaTeX characters or symbols when generating headers.
-
             - Version 0.10.4 (2024-07-03):
                 - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
-
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
-
-        Note:
-            - A ``\\centering`` command is included in the LaTeX output by default regardless of alignments specified.
-            - LaTeX headers and rows are indented by four spaces to keep with conventional table syntax and to distinguish the table data from commands.
-            - Table commands and headers are checked for invalid LaTeX characters and escaped such as ``'_'`` and ``'#'``, however the model data is not. 
-                Accordingly, ensure any model content is valid LaTeX when rendering to PDF, or simply format content as valid LaTeX before exporting.
-
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(filename, str) and filename is not None:
             raise TypeError(
@@ -5915,25 +5912,19 @@ class SQLDataModel:
         ```text
             [0, 'Beth', 27, 172.4]
         ```
+        
+        Note:
+            - See :meth:`SQLDataModel.data()` to return the equivalent of ``cursor.fetchall()`` with data as a list of tuples.
+            - See :meth:`SQLDataModel.iter_rows()` to generate an iterable over the model data, which is preferred wherever possible.
 
         Changelog:
             - Version 0.5.0 (2024-05-09):
                 - Modified behavior to output 1-dimensional list when possible and a list of lists when not possible.
                 - Changed default to ``index = False`` to increase surface for 1-dimensional flattening.
-                
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
-        
-        Note:
-            - See :meth:`SQLDataModel.data()` to return the equivalent of ``cursor.fetchall()`` with data as a list of tuples.
-            - See :meth:`SQLDataModel.iter_rows()` to generate an iterable over the model data, which is preferred wherever possible.
-        
-        .. versionchanged:: 0.5.0
-            Modified behavior to output 1-dimensional list when possible and a list of lists when not possible.
-            Changed default to ``index = False`` to increase surface for 1-dimensional flattening.        
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.
-        .. versionadded:: 0.1.5
+            - Version 0.1.5 (2023-11-24):
+                - New method.
         """
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index))
         data = res.fetchall()
@@ -6046,26 +6037,24 @@ class SQLDataModel:
             | Alice   |   28 |  162.00 |
             | Michael |   35 |  185.80 |
         ```
-        
-        Changelog:
-            - Version 0.11.0 (2024-07-05):
-                - Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
-                - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
-                - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
-
-            - Version 0.10.4 (2024-07-03):
-                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
-
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - All markdown output will contain the alignment characters ``':'`` as determined by the :py:attr:`SQLDataModel.column_alignment` attribute or parameter.
             - Any exception encountered during file read or writing operations is caught and reraised, see related :meth:`SQLDataModel.from_markdown()`.
             - Use ``index_rep`` to provide a different representation, column name, for the index column if included in output.
             - Unlike other representations, no rowwise or vertical truncation is performed on output content.
-
-        .. versionadded:: 0.1.9              
+        
+        Changelog:
+            - Version 0.11.0 (2024-07-05):
+                - Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
+                - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
+                - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
+            - Version 0.10.4 (2024-07-03):
+                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(filename, str) and filename is not None:
             raise TypeError(
@@ -6177,17 +6166,15 @@ class SQLDataModel:
              ['1' 'Alice' '28' '162.0']
              ['2' 'Travis' '35' '185.8']]
         ```
-        
-        Changelog:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - Output will always be a 2-dimensional array of type ``numpy.ndarray``
 
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.
-        .. versionadded:: 0.1.3
+        Changelog:
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.1.3 (2023-10-15):
+                - New method.
         """
         if not _has_np:
             raise ModuleNotFoundError(
@@ -6244,17 +6231,15 @@ class SQLDataModel:
             1   Alice   28   162.0
             2  Travis   35   185.8
         ```
-        
-        Changelog:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
 
         Note:
             - SQLDataModel uses different data types than those used in ``pandas``, see :meth:`SQLDataModel.set_column_dtypes()` for more information about casting rules.
 
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.            
-        .. versionadded:: 0.1.3
+        Changelog:
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.1.3 (2023-10-15):
+                - New method.
         """
         if not _has_pd:
             raise ModuleNotFoundError(
@@ -6320,18 +6305,16 @@ class SQLDataModel:
             [3 rows x 3 columns]        
         ```
 
-        Changelog:
-            - Version 0.8.2 (2024-06-24):
-                - Added ``index`` parameter to toggle inclusion of SQLDataModel ``index`` column for greater flexibility and package consistency to similar methods.
-
         Note:
             - The ``pyarrow`` package is required to use this method as well as the :meth:`SQLDataModel.from_parquet()` method.
             - The :meth:`SQLDataModel.to_dict()` method is used prior to writing to parquet to convert the ``SQLDataModel`` into a dictionary suitable for parquet Table format.
             - Exceptions raised by the ``pyarrow`` package and its methods are caught and reraised when encountered to keep with package error formatting.
 
-        .. versionchanged:: 0.8.2
-            Added ``index`` parameter to toggle inclusion of SQLDataModel ``index`` column for greater flexibility and package consistency to similar methods.
-        .. versionadded:: 0.1.9              
+        Changelog:
+            - Version 0.8.2 (2024-06-24):
+                - Added ``index`` parameter to toggle inclusion of SQLDataModel ``index`` column for greater flexibility and package consistency to similar methods.
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not _has_pa:
             raise ModuleNotFoundError(
@@ -6461,7 +6444,9 @@ class SQLDataModel:
             - SQLDataModel uses different data types than those used in ``polars``, see :meth:`SQLDataModel.set_column_dtypes()` for more information about casting rules.
             - Polars does not really have a concept of an index column, therefore when using ``index=True``, the SQLDataModel index is just an additional column in the returned DataFrame object.
 
-        .. versionadded:: 0.3.8            
+        Changelog:
+            - Version 0.3.8 (2024-04-12):
+                - New method.            
         """
         if not _has_pl:
             raise ModuleNotFoundError(
@@ -6514,16 +6499,14 @@ class SQLDataModel:
             Grade: [[3.8,3.9,3.2]]
         ```
 
-        Changelog:
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
-
         Note:
             - Unmodified python types will follow conversion and casting rules specified in ``pyarrow`` implementation, for the modified ``date`` and ``datetime`` types, ``date32[day]`` and ``timestamp[us]`` will be used, respectively.
 
-        .. versionchanged:: 0.3.0
-            Renamed ``include_index`` parameter to ``index`` for package consistency.
-        .. versionadded:: 0.2.3
+        Changelog:
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
+            - Version 0.2.3 (2024-03-28):
+                - New method.
         """
         if not _has_pa:
             raise ModuleNotFoundError(
@@ -6630,7 +6613,9 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.to_text()` for writing textual representation directly to '.txt' files.
             - See :meth:`SQLDataModel.set_table_style()` for available style options and output examples.
 
-        .. versionadded:: 0.11.0
+        Changelog:
+            - Version 0.11.0 (2024-07-05):
+                - New method.
         """
         if (column_alignment is not None) and (column_alignment not in ('dynamic', 'left', 'center', 'right')):
             raise ValueError(
@@ -6912,18 +6897,6 @@ class SQLDataModel:
             └─────────────────┴─────────┴─────────┴────────┴─────────┴────────────────┴──────┴───────────┘
             [5 rows x 8 columns]
         ```
-
-        Changelog:
-            - Version 0.9.1 (2024-06-27):
-                - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
-
-            - Version 0.8.2 (2024-06-24):
-                - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
-        
-            - Version 0.3.0 (2024-03-31):
-                - Renamed arguments ``extern_con``: ``con``, ``replace_existing``: ``if_exists``, ``include_index``: ``index``.
-                - Added ``primary_key`` argument for specifying a primary key column for table schema.
-                - Added ``schema`` argument for specifying a target schema for the table.        
         
         Note:
             - When providing a ``primary_key`` column it will be assumed unique and the model will not perform any unique-ness constraints.
@@ -6935,12 +6908,15 @@ class SQLDataModel:
             - See related :meth:`SQLDataModel.from_sql()` for creating ``SQLDataModel`` from existing SQL database connections.
             - See utility methods :meth:`SQLDataModel._parse_connection_url()` and :meth:`SQLDataModel._create_connection()` for implementation on creating database connections from urls.
 
-        .. versionchanged:: 0.9.1
-            Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
-        .. versionchanged:: 0.3.0
-            Renamed ``extern_con`` parameter to ``con``, ``replace_existing`` to ``if_exists`` and ``include_index`` to ``index`` for package consistency.
-            Added ``primary_key`` argument for specifying a primary key column for table schema.
-            Added ``schema`` argument for specifying a target schema for the table.                
+        Changelog:
+            - Version 0.9.1 (2024-06-27):
+                - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
+            - Version 0.8.2 (2024-06-24):
+                - Modified handling of ``con`` parameter to allow providing SQLite database filepath directly as string to instantiate connection.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed arguments ``extern_con``: ``con``, ``replace_existing``: ``if_exists``, ``include_index``: ``index``.
+                - Added ``primary_key`` argument for specifying a primary key column for table schema.
+                - Added ``schema`` argument for specifying a target schema for the table.        
         """    
         if isinstance(con, str):
             if os.path.exists(con): # Connection provided as SQLite database filepath
@@ -7148,22 +7124,6 @@ class SQLDataModel:
         Important:
             Unlike output from ``print(sdm)`` or other calls to :meth:`SQLDataModel.__repr__()`, the output from this method includes the full ``SQLDataModel`` and is not restricted by current terminal size or the value set at :py:attr:`SQLDataModel.display_max_rows`. As such, horizontal truncation only occurs on cell values as determined by ``max_column_width`` and no other horizontal or vertical table-wide truncation is performed.
 
-        Changelog:
-            - Version 0.11.0 (2024-07-05):
-                - Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
-                - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
-                - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
-
-            - Version 0.10.4 (2024-07-03):
-                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
-
-            - Version 0.3.10 (2024-04-16):
-                - Added ``table_style`` parameter and updated output to reflect new formatting styles introduced in version 0.3.9.
-                - Added ``display_dimensions`` parameter to allow toggling display of table dimensions in output.
-
-            - Version 0.3.0 (2024-03-31):
-                - Renamed ``include_index`` parameter to ``index`` for package consistency.
-
         Note:
             - If ``filename`` is provided, the method writes the text to the specified file; otherwise, it returns the textual representation as a string.
             - If ``index`` is ``None``, the method uses the current value on :py:attr:`SQLDataModel.display_index`.
@@ -7175,14 +7135,20 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.set_table_style()` for modifying table format and available styles.
             - See :meth:`SQLDataModel.to_string()` for greater flexibility and control over generated string representations.
 
-        .. versionchanged:: 0.11.0
-            Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
-            Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
-            Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
-        .. versionchanged:: 0.10.4
-            Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
-        .. versionchanged:: 0.9.3
-            Added additional options 'rst-simple' and 'rst-grid' for ``table_style`` parameter. 
+        Changelog:
+            - Version 0.11.0 (2024-07-05):
+                - Added ``horizontal_ellipses`` parameter to allow customizing truncation characters used when column or cell values exceed maximumn column widths.
+                - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
+                - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
+            - Version 0.10.4 (2024-07-03):
+                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+            - Version 0.9.3 (2024-06-28):
+                - Added additional options 'rst-simple' and 'rst-grid' for ``table_style`` parameter. 
+            - Version 0.3.10 (2024-04-16):
+                - Added ``table_style`` parameter and updated output to reflect new formatting styles introduced in version 0.3.9.
+                - Added ``display_dimensions`` parameter to allow toggling display of table dimensions in output.
+            - Version 0.3.0 (2024-03-31):
+                - Renamed ``include_index`` parameter to ``index`` for package consistency.
         """        
         if not isinstance(filename, str) and filename is not None:
             raise TypeError(
@@ -7288,16 +7254,16 @@ class SQLDataModel:
             [3 rows x 3 columns]
         ```
 
-        Changelog:
-            - Version 0.5.2 (2024-05-13):
-                - Renamed ``db`` parameter to ``filename`` for package consistency and to avoid confusion between similarily named database objects.
-                - Changed ``filename`` from keyword to positional argument making it a required parameter to avoid accidental overwriting.
-
         Note:
             - Use any compatible SQL API to load the resulting database file or use :meth:`SQLDataModel.from_sql()` to reload it back into a ``SQLDataModel``.
             - Table name is determined by value at :py:attr:`SQLDataModel.sql_model` which is set to ``'sdm'`` by default, use :meth:`SQLDataModel.set_model_name()` to modify.
 
-        .. versionadded:: 0.1.5            
+        Changelog:
+            - Version 0.5.2 (2024-05-13):
+                - Renamed ``db`` parameter to ``filename`` for package consistency and to avoid confusion between similarily named database objects.
+                - Changed ``filename`` from keyword to positional argument making it a required parameter to avoid accidental overwriting.
+            - Version 0.1.5 (2023-11-24):
+                - New method.            
         """
         if not isinstance(filename, str):
             raise TypeError(
@@ -7391,7 +7357,8 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
             
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """           
         self_data = self.data(strict_2d=True)
         i_dim, j_dim = len(self_data), len(self_data[0])
@@ -7455,7 +7422,8 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """          
         self_data = self.data(strict_2d=True)
         i_dim, j_dim = len(self_data), len(self_data[0])
@@ -7581,7 +7549,8 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """          
         self_data = self.data(strict_2d=True)
         i_dim, j_dim = len(self_data), len(self_data[0])
@@ -7644,7 +7613,8 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """          
         self_data = self.data(strict_2d=True)
         i_dim, j_dim = len(self_data), len(self_data[0])
@@ -7708,7 +7678,8 @@ class SQLDataModel:
             - All operations on standard types like ``int``, ``float`` or ``str`` follow standard behavior and are not modified by performing the operations.
             - Operations can be chained using standard ``set`` operators like ``&`` and ``|`` to allow complex filtering, multiple operations require parenthesis.
 
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """          
         self_data = self.data(strict_2d=True)
         i_dim, j_dim = len(self_data), len(self_data[0])
@@ -7808,7 +7779,8 @@ class SQLDataModel:
         Note:
             - Mixing summands such as ``int + float`` will work, however an exception will be raised when attempting to perform addition on incompatible types such as ``str + float``.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(value, (str,int,float,SQLDataModel)):
             raise TypeError(
@@ -7992,7 +7964,8 @@ class SQLDataModel:
             - Mixing subtractors such as ``int + float`` will work, however an exception will be raised when attempting to perform subtraction on incompatible types such as ``str - float``.
             - See :meth:`SQLDataModel.__rsub__()` for right side operand subtraction operations.
 
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -8139,7 +8112,8 @@ class SQLDataModel:
         Note:
             - Mixing multipliers such as ``int * float`` will work, however an exception will be raised when attempting to perform multiplication on incompatible types such as ``str * float``.
 
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -8235,7 +8209,8 @@ class SQLDataModel:
         Note:
             - Mixing divisor types such as ``int / float`` will work, however an exception will be raised when attempting to perform division on incompatible types such as ``str / float``.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -8554,7 +8529,8 @@ class SQLDataModel:
         Note:
             - Mixing exponent types such as ``int ** float`` will work, however an exception will be raised when attempting to exponentiate incompatible types such as ``str ** float``.
 
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(value, (int,float,SQLDataModel)):
             raise TypeError(
@@ -8708,7 +8684,8 @@ class SQLDataModel:
             [4 rows x 4 columns]
         ```  
 
-        .. versionadded:: 0.1.9             
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         return self.__add__(value)
     
@@ -8760,7 +8737,8 @@ class SQLDataModel:
             [4 rows x 4 columns]
         ```
                 
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         return self.__sub__(value)    
     
@@ -8787,7 +8765,8 @@ class SQLDataModel:
             # Give raises to all!
             sdm['Salary'] *= 12
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         return self.__mul__(value)    
 
@@ -8815,7 +8794,8 @@ class SQLDataModel:
             # Adjust existing column
             sdm['Budget'] /= 52
         
-        .. versionadded:: 0.1.9        
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         return self.__truediv__(value)
 
@@ -8892,7 +8872,8 @@ class SQLDataModel:
             # More raises!
             sdm['Salary'] **= 2
         
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         return self.__pow__(value)
     
@@ -8948,7 +8929,8 @@ class SQLDataModel:
             - If ``other`` is not an instance of ``SQLDataModel``, a ``NotImplementedError`` is raised to be consistent with current conventions.
             - See :meth:`SQLDataModel.__or__()` for bitwise OR operation.
 
-        .. versionadded:: 0.7.4
+            - Version 0.7.4 (2024-06-13):
+                - New method.
         """        
         if not isinstance(other, SQLDataModel):
             raise NotImplementedError(
@@ -9010,7 +8992,8 @@ class SQLDataModel:
             - If ``other`` is not an instance of ``SQLDataModel``, a ``NotImplementedError`` is raised to be consistent with current conventions.
             - See :meth:`SQLDataModel.__and__()` for bitwise AND operation.
 
-        .. versionadded:: 0.7.4
+            - Version 0.7.4 (2024-06-13):
+                - New method.
         """        
         if not isinstance(other, SQLDataModel):
             raise NotImplementedError(
@@ -9065,7 +9048,8 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.iter_rows()` for iterating over rows with custom start and stop indicies.
             - See :meth:`SQLDataModel.iter_tuples()` for iterating over rows as named tuples.
 
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """  
         yield from (self.sql_db_conn.execute(self._generate_sql_stmt_fetchall(index=True)))
 
@@ -9272,7 +9256,8 @@ class SQLDataModel:
 
         .. versionchanged:: 0.7.5
             Added row indicies masking to allow selective updating when ``update_values`` is also an instance of ``SQLDataModel`` using ``target_indicies`` as mask.
-        .. versionadded:: 0.1.9              
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """            
         # first check if target is new column that needs to be created, if so create it and return so long as the target values aren't another sqldatamodel object:
         if isinstance(update_values, SQLDataModel):
@@ -9335,7 +9320,8 @@ class SQLDataModel:
             1000
         ```
 
-        .. versionadded:: 0.1.9          
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         return self.row_count
 
@@ -9583,7 +9569,8 @@ class SQLDataModel:
             Added styles ``'rst-grid'`` and ``'rst-simple'`` to allow ``SQLDataModel`` to generate table formats used by Sphinx and reStructured Text
         .. versionchanged:: 0.3.11
             Removed ``'thick'`` style and added ``'list'`` style for greater variety of available formats.
-        .. versionadded:: 0.3.8            
+            - Version 0.3.8 (2024-04-12):
+                - New method.            
         """
         if style not in ('ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple'):
             raise ValueError(
@@ -9904,7 +9891,8 @@ class SQLDataModel:
             - Models must be of compatible dimensions with equal ``column_count`` or equivalent dimension if ``list`` or ``tuple``
             - Headers are inherited from the model calling the :meth:`SQLDataModel.concat()` method whether done inplace or being returned as new instance.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         if not isinstance(other, (SQLDataModel,list,tuple)):
             raise TypeError(
@@ -10053,7 +10041,8 @@ class SQLDataModel:
         Note:
             - See :meth:`SQLDataModel.count_unique()` for column-wise count of unique, null and total values for each column.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         fetch_stmt = " ".join(("select",",".join([f"""sum(case when "{col}" is null then 0 else 1 end) as "{col}" """ for col in self.headers]),f'from "{self.sql_model}"'))
         return self.execute_fetch(fetch_stmt, dtypes={col:'int' for col in self.headers})
@@ -10166,7 +10155,8 @@ class SQLDataModel:
             - Ordering for ``keep_first`` is determined by the current :py:attr:`SQLDataModel.sql_idx` order of the instance.
             - For multiple columns ordering is done sequentially favoring first index in ``subset``, then i+1, ..., to ``i+len(subset)``
 
-        .. versionadded:: 0.1.5
+            - Version 0.1.5 (2023-11-24):
+                - New method.
         """        
         dyn_keep_order = 'min' if keep_first else 'max'
         if subset is not None:
@@ -10243,7 +10233,8 @@ class SQLDataModel:
             - The method supports filling missing values with various scalar types which are then adapted to the columns set dtype.
             - The ``strictly_null`` parameter controls whether additional values like ``('NA', 'NAN', 'n/a', 'na', '')`` with last being an empty string, are treated as null.
 
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(value, (str,int,float,bytes,bool)) and value is not None:
             raise TypeError(
@@ -10386,7 +10377,8 @@ class SQLDataModel:
         Note:
             - See related :meth:`SQLDataModel.tail()` for the opposite, grabbing the bottom ``n_rows`` from the current model.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(n_rows, int):
             raise TypeError(
@@ -10568,7 +10560,8 @@ class SQLDataModel:
 
         .. versionchanged:: 0.6.0
             Backward incompatible changes made to arguments and behavior, added ``index`` and ``on_conflict`` parameters for greater specificity and to align with broader conventions surrounding insert methods.
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         if not isinstance(index, int):
             raise TypeError(
@@ -10639,7 +10632,8 @@ class SQLDataModel:
 
         .. versionchanged:: 0.3.0
             Renamed ``include_index`` parameter to ``index`` for package consistency.             
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         min_row, max_row = min_row if min_row is not None else 0, max_row if max_row is not None else self.row_count
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index, rows=slice(min_row,max_row)))
@@ -10682,7 +10676,8 @@ class SQLDataModel:
         .. versionchanged:: 0.10.0
             Renamed ``include_idx_col`` parameter to ``index`` for package consistency.
             Modified to use :meth:`SQLDataModel._generate_sql_stmt_fetchall()` to leverage deterministic behavior of method.                    
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         try:
             Row = namedtuple('Row', [self.sql_idx,*self.headers] if index else self.headers)
@@ -11083,7 +11078,8 @@ class SQLDataModel:
             Changed ``merge_with`` from keyword argument to positional argument to reflect argument is required and not optional.
         .. versionchanged:: 0.10.1
             Modified to raise ``SQLProgrammingError`` if available sqlite3 version < 3.39.0 and join type is one of 'right' or 'full outer', which was not supported by older versions.            
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         # Add check for prior sqlite3 versions without support for right and full outer joins
         if (sqlite3.sqlite_version_info < (3,39,0)) and how in ("right", "full outer"):
@@ -11342,7 +11338,8 @@ class SQLDataModel:
             - The current index should be viewed more as a soft row number, to assign hard indicies use :meth:`SQLDataModel.freeze_index()` method.
             - Setting ``start_index`` too a very large negative or positive integer made lead to unpredictable behavior.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(start_index,int):
             raise TypeError(
@@ -11440,7 +11437,8 @@ class SQLDataModel:
             Modified to randomly select a color from preselected pool when ``color = None`` for demonstration purposes, see :mod:`SQLDataModel.ANSIColor` for more details.        
         .. versionchanged:: 0.7.0
             Removed warning message and modified to raise exception on failure to create display color pen.
-        .. versionadded:: 0.1.5
+            - Version 0.1.5 (2023-11-24):
+                - New method.
         """
         self.display_color = ANSIColor.rand_color() if rand_color else ANSIColor(color) if color is not None else color
 
@@ -11537,7 +11535,8 @@ class SQLDataModel:
             Modified to allow mixed integer and value indexing for columns sort order in ``by`` argument to reflect similar flexibility for column input across package.
         .. versionchanged:: 0.5.1
             Modified to allow integer indexing for column sort order in ``by`` argument.            
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if by is not None:
             by = self._validate_column(by, unmodified=False) # +REVCOL
@@ -11718,7 +11717,8 @@ class SQLDataModel:
         Note:
             - See related :meth:`SQLDataModel.head()` for the opposite, grabbing the top ``n_rows`` from the current model.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(n_rows, int):
             raise TypeError(
@@ -11971,7 +11971,8 @@ class SQLDataModel:
             - ``predicate`` can be any valid SQL, for example ordering can be acheived without any filtering by simple using the argument ``'(1=1) order by "age" asc'``
             - If ``predicate`` is not of type ``str``, a ``TypeError`` is raised, if it is not valid SQL, ``SQLProgrammingError`` will be raised.
 
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         if not isinstance(predicate, str):
             raise TypeError(
@@ -12093,7 +12094,8 @@ class SQLDataModel:
 
         .. versionchanged:: 0.7.6
             Modified to allow ``Callable`` or ``Type`` to be provided directly for ``dtype`` argument to map to data and return as new model for broader type conversion.        
-        .. versionadded:: 0.2.1
+            - Version 0.2.1 (2024-03-24):
+                - New method.
         """
         if dtype in ('bool','bytes','date','datetime','float','int','None','str'):
             str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
@@ -12199,7 +12201,8 @@ class SQLDataModel:
             - The number of ``func`` args must match the current number of columns in the model, or an ``Exception`` will be raised.
             - Use :meth:`SQLDataModel.generate_apply_function_stub()` method to return a preconfigured template using current ``SQLDataModel`` columns and dtypes to assist.
 
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         ### get column name from str or index ###
         if not isinstance(func, Callable):
@@ -12299,7 +12302,8 @@ class SQLDataModel:
 
         .. versionchanged:: 0.8.0
             Modified to allow ``columns`` argument to be provided as an any valid reference including integer indexes or an iterable sequence of indexes to reflect similar flexibility surrounding column referencing across package.                    
-        .. versionadded:: 0.1.9
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         dtypes = 1 if dtypes == "python" else 0
         if columns is None:
@@ -12372,7 +12376,8 @@ class SQLDataModel:
 
         .. versionchanged:: 0.7.9
             Modified to allow ``column`` argument to be provided as a dictionary mapping column names to dtypes to reflect current structure at :py:attr:`SQLDataModel.dtypes`.        
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if isinstance(column, dict):
             validated_args = {self._validate_column(k, unmodified=False)[0]:v for k,v in column.items()}
@@ -12423,7 +12428,8 @@ class SQLDataModel:
         Note:
             - Use :meth:`SQLDataModel.set_model_name()` to modify the table name used internally to represent the ``SQLDataModel`` instance.
 
-        .. versionadded:: 0.1.5            
+            - Version 0.1.5 (2023-11-24):
+                - New method.            
         """
         return self.sql_model
     
@@ -12451,7 +12457,8 @@ class SQLDataModel:
             - The provided value must be a valid SQL table name.
             - This alias will be reset to the default value for any new ``SQLDataModel`` instances: ``'sdm'``.
 
-        .. versionadded:: 0.1.5                
+            - Version 0.1.5 (2023-11-24):
+                - New method.                
         """
         full_stmt = f"""begin transaction; alter table "{self.sql_model}" rename to {new_name}; end transaction;"""
         try:
@@ -12514,7 +12521,8 @@ class SQLDataModel:
         
         .. versionchanged:: 0.6.2
             Inclusion of :py:attr:`SQLDataModel.table_style` argument in returned ``SQLDataModel`` to inherit all display properties in result.
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         try:
             res = self.sql_db_conn.execute(sql_query) if sql_params is None else self.sql_db_conn.execute(sql_query, sql_params) 
@@ -12583,7 +12591,8 @@ class SQLDataModel:
             A shallower and computationally cheaper check will still occur to ensure :py:attr:`SQLDataModel.header_master` remains in sync.
         .. versionchanged:: 0.7.4
             Added ``sql_params`` parameter to allow parameterized statements similar to other SQL execution methods.
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         try:
             self.sql_db_conn.execute(sql_stmt, sql_params) if sql_params else self.sql_db_conn.execute(sql_stmt)
@@ -12638,7 +12647,8 @@ class SQLDataModel:
         .. versionchanged:: 0.8.0
             Added ``update_row_meta`` parameter to speed up transactions that are guaranteed to have no effect on the current model :py:attr:`SQLDataModel.indicies` metadata. 
             A shallower and computationally cheaper check will still occur to ensure :py:attr:`SQLDataModel.header_master` remains in sync.
-        .. versionadded:: 0.1.9               
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         full_stmt = f"""begin transaction; {sql_script}; end transaction;"""
         try:
@@ -12705,7 +12715,8 @@ class SQLDataModel:
             - Freezing the index will assign the current :py:attr:`SQLDataModel.sql_idx` for each row as a new column, leaving the current index in place.
             - To modify the actual :py:attr:`SQLDataModel.sql_idx` value, use the :meth:`SQLDataModel.reset_index()` method instead.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         if not isinstance(column_name, str):
             raise TypeError(
@@ -12746,7 +12757,8 @@ class SQLDataModel:
             - Many other methods, including :meth:`SQLDataModel.__setitem__` rely on this method, therefore modifying it may cause unpredictable behavior.
             - Determination for when to copy existing versus when to assign string is value is done by :meth:`SQLDataModel.__eq__` against both values
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         create_col_stmt = f"""alter table "{self.sql_model}" add column "{column_name}" """
         if (value is not None) and (value in self.headers):
@@ -12829,7 +12841,8 @@ class SQLDataModel:
             - This method is a simplified version of the :meth:`SQLDataModel.apply()` method, which can be used for arbitrary function params and inputs.
             - If providing a function name, ensure it can be used a valid ``sqlite3`` identifier for the instance's connection otherwise ``SQLProgrammingError`` will be raised.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         ### get column name from str or index ###
         if (not isinstance(column, int)) and (not isinstance(column, str)):
@@ -12913,7 +12926,8 @@ class SQLDataModel:
             - This method is to meant as a general informative tool or for debugging assistance if needed
             - See :meth:`SQLDataModel.apply()` method for usage and implementation of functions in SQLDataModel using ``sqlite3`` 
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         func_signature = ", ".join([f"""{k.replace(" ","_")}:{v[1]}""" for k,v in self.header_master.items() if k != self.sql_idx])
         return f"""def func({func_signature}):\n    # apply logic and return value\n    return"""
@@ -12988,7 +13002,8 @@ class SQLDataModel:
             Modified to allow ``row_index`` and ``column_index`` arguments the same input type flexibility found across package, allowing both to be referenced directly or by their integer index.
         ..versionchanged:: 0.5.2
             Modified ``row_index`` parameter to use :py:attr:`SQLDataModel.indicies` to index into rows in lieu of row index value equality.            
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         row_index = self._validate_row(row_index, unmodified=False)[0] # +VALROW
         column_index = self._validate_column(column_index, unmodified=False)[0] # +VALCOL
@@ -13157,7 +13172,8 @@ class SQLDataModel:
         Note:
             - This method is called after operations that may modify the current model's structure and require synchronization.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """        
         fetch_metadata = f"""select "name" as "_ordered_name","type" as "_ordered_type","pk" as "_is_regular_column",case when ("type"='INTEGER' or "type"='REAL') then '>' else '<' end as "_def_alignment" from pragma_table_info('{self.sql_model}') order by {",".join([f'''"_ordered_name"='{col}' desc''' for col in self.headers])}"""
         metadata = self.sql_db_conn.execute(fetch_metadata).fetchall()
@@ -13205,7 +13221,8 @@ class SQLDataModel:
             Added ``nap_rep`` parameter to fill null or missing fields with provided value.
         .. versionchanged:: 0.3.0
             Renamed ``include_index`` parameter to ``index`` for package consistency.
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         columns = columns if columns else self.headers
         columns = [self.sql_idx,*columns] if index else columns
@@ -13297,7 +13314,8 @@ class SQLDataModel:
             Added 'rst-simple' and 'rst-grid' style formats.
         .. versionchanged:: 0.3.10
             Added ``style`` parameter to allow use by :meth:`SQLDataModel.to_text()` to generate new formatting styles introduced in version 0.3.9.        
-        .. versionadded:: 0.3.8            
+            - Version 0.3.8 (2024-04-12):
+                - New method.            
         """
         style = self.table_style if style is None else style
         if style == 'ascii':    
@@ -13392,7 +13410,8 @@ class SQLDataModel:
             - This method is called internally any time the :py:attr:`SQLDataModel.row_count` property is subject to change, or data manipulation requires updating the current values.
             - There is no reason to call this method manually unless the model has been changed outside of the standard instance methods.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         fetch_stmt = f"""select "{self.sql_idx}" from "{self.sql_model}" order by "{self.sql_idx}" asc"""
         self.indicies = tuple([x[0] for x in self.sql_db_conn.execute(fetch_stmt).fetchall()])
@@ -13455,7 +13474,8 @@ class SQLDataModel:
         Notes
             - Primary use is to confirm valid model indexing when starting index != 0 or filtering changes minimum/maximum indexes.
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         return self.indicies
 
@@ -13495,7 +13515,8 @@ class SQLDataModel:
             - To create a new column, pass a single header item in a list to the ``columns_to_update`` parameter.
             - To copy an existing column, pass the corresponding data is a list of tuples to the ``values_to_update`` parameter.        
 
-        .. versionadded:: 0.1.9            
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         update_sql_script = None
         # this is the problem, even if the indicies are 2-7, this will generate 0:5 since the rowcount is 5 regardless of min and max indicies
@@ -13591,7 +13612,8 @@ class SQLDataModel:
             CREATE TABLE "sdm" ("idx" INTEGER PRIMARY KEY,"first" TEXT,"last" TEXT,"age" INTEGER)
         ```
 
-        .. versionadded:: 0.1.5
+            - Version 0.1.5 (2023-11-24):
+                - New method.
         """
         return self.sql_db_conn.execute("select sql from sqlite_master").fetchone()[0]
 
@@ -13624,7 +13646,8 @@ class SQLDataModel:
 
         .. versionchanged:: 0.6.2
             Added ``include_dtypes`` parameter for use by methods such as :meth:`SQLDataModel.min()` and :meth:`SQLDataModel.max()` for operations that require returning the results of SQL fetch statements.
-        .. versionadded:: 0.1.9                 
+            - Version 0.1.9 (2024-03-19):
+                - New method.
         """
         args = {"display_max_rows":self.display_max_rows, "min_column_width":self.min_column_width, "max_column_width":self.max_column_width, "column_alignment":self.column_alignment, "display_color":self.display_color, "display_index":self.display_index, "display_float_precision":self.display_float_precision, "table_style":self.table_style}
         if include_dtypes:
