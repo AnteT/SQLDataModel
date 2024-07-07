@@ -15,7 +15,7 @@ class ANSIColor:
 
     Example::
 
-        from ANSIColor import ANSIColor
+        import ANSIColor
 
         # Create a pen by specifying a color in hex or rgb:
         green_bold = ANSIColor("#00ff00", text_bold=True)
@@ -33,9 +33,6 @@ class ANSIColor:
         print(green_bold.to_rgb())  # Output: (0, 255, 0)
 
     Changelog:
-        - Version 0.12.0 (2024-07-06):
-            - Removed random color selection when ``text_color`` not provided, it was a poor idea.
-
         - Version 0.10.2 (2024-06-30):
             - Added random color selection when initialized without a ``text_color`` argument.
             - Added dictionary of color values at :py:attr:`ANSIColor.Colors` to use as selection pool.
@@ -133,12 +130,12 @@ class ANSIColor:
         Initializes the ``ANSIColor`` object with the specified text color and bold setting, referred to as the 'pen' throughout documentation.
 
         Parameters:
-            ``text_color`` (str or tuple): Hex color code or RGB tuple. If not provided, an exception will be raised.
-            ``text_bold`` (bool): Whether text should be bold. Default is False.
+            ``text_color`` (str or tuple): Hex color code or RGB tuple. If not provided, a random color will be selected.
+            ``text_bold`` (bool): Whether text should be bold (default: False)
 
         Example::
 
-            from ANSIColor import ANSIColor
+            import ANSIColor
 
             # Initialize from hex value with normal weight
             color = ANSIColor("#00ff00")
@@ -146,10 +143,10 @@ class ANSIColor:
             # Initialize from rgb value with bold weight
             color = ANSIColor((0,255,0), text_bold=True)
 
-        Changelog:
-            - Version 0.12.0 (2024-07-06):
-                - Removed random color selection when ``text_color`` not provided, it was a poor idea.       
+            # Surprise me! Initialize pen from random color
+            color = ANSIColor()
 
+        Changelog:
             - Version 0.10.2 (2024-06-30):
                 - Modified to randomly select a color from :py:attr:`ANSIColor.Colors` when ``text_color = None`` for demonstration purposes.
         
@@ -159,6 +156,7 @@ class ANSIColor:
             - See :py:attr:`ANSIColor.text_color_rgb` to view the RGB tuple equivalent of ``text_color``.
             - See :py:attr:`ANSIColor.text_color_hex` to view the hex value equivalent of ``text_color``.
         """
+        text_color = ANSIColor.Colors[random.choice(list(ANSIColor.Colors.keys()))] if text_color is None else text_color # Use random color if None
         if not isinstance(text_color, (tuple,list,str)):
             raise TypeError(
                 ANSIColor.ErrorFormat(f"TypeError: invalid `text_color` type '{type(text_color).__name__}' received, expected value of type 'tuple' or 'str'")
@@ -216,7 +214,7 @@ class ANSIColor:
         
         Example::
             
-            from ANSIColor import ANSIColor
+            import ANSIColor
 
             # Error message to format
             formatted_error = ANSIColor.ErrorFormat("ValueError: Invalid value provided.")
@@ -238,7 +236,7 @@ class ANSIColor:
 
         Example::
 
-            from ANSIColor import ANSIColor
+            import ANSIColor
 
             # Surprise me!
             rand_color = ANSIColor.rand_color()
@@ -255,8 +253,10 @@ class ANSIColor:
         Note:
             - See :py:attr:`ANSIColor.Colors` for dictionary of values being used as random color selection pool.
 
-        .. versionadded:: 0.10.2
-            Added to allow a random color to be selected for :mod:`SQLDataModel.SQLDataModel.set_display_color()`
+        Changelog:
+            - Version 0.10.2 (2024-06-30):
+                - Added to allow a random color to be selected for :mod:`SQLDataModel.SQLDataModel.set_display_color()`
+                - New method.
         """
         rand_color = ANSIColor.Colors[random.choice(list(ANSIColor.Colors.keys()))]
         return cls(rand_color)
@@ -270,7 +270,7 @@ class ANSIColor:
 
         Example::
 
-            from ANSIColor import ANSIColor
+            import ANSIColor
 
             # Create the pen from a hex value
             color = ANSIColor('#EFAC65') 
@@ -315,7 +315,7 @@ class ANSIColor:
 
         Example::
         
-            from ANSIColor import ANSIColor
+            import ANSIColor
 
             # Create the color
             color = ANSIColor("#00ff00")
@@ -338,7 +338,7 @@ class ANSIColor:
 
         Example::
         
-            from ANSIColor import ANSIColor
+            import ANSIColor
 
             # Create the color
             blue_color = ANSIColor("#0000ff")

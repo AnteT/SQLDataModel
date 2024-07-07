@@ -253,8 +253,10 @@ class ANSIColor:
         Note:
             - See :py:attr:`ANSIColor.Colors` for dictionary of values being used as random color selection pool.
 
-        .. versionadded:: 0.10.2
-            Added to allow a random color to be selected for :mod:`SQLDataModel.SQLDataModel.set_display_color()`
+        Changelog:
+            - Version 0.10.2 (2024-06-30):
+                - Added to allow a random color to be selected for :mod:`SQLDataModel.SQLDataModel.set_display_color()`
+                - New method.
         """
         rand_color = ANSIColor.Colors[random.choice(list(ANSIColor.Colors.keys()))]
         return cls(rand_color)
