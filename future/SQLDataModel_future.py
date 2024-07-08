@@ -1693,7 +1693,7 @@ class SQLDataModel:
                 ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length '{len(new_headers)} != {self.column_count}' column count, please provide correct dimensions")
                 )
         sql_stmt = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
-        self.execute_transaction(sql_stmt)
+        self.execute_transaction(sql_stmt, update_row_meta=False)
 
     def normalize_headers(self, apply_function:Callable=None) -> None:
         """
