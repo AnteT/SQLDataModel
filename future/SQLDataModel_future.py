@@ -1121,7 +1121,8 @@ class SQLDataModel:
     
     @staticmethod
     def _create_connection(url:str) -> sqlite3.Connection|Any:
-        """Parses database connection url into component parameters and creates the specified connection.
+        """
+        Parses database connection url into component parameters and creates the specified connection.
         
         Parameters:
             ``url`` (str): The url connection string provided in the format of ``'scheme://user:pass@host:port/path'``
