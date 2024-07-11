@@ -1999,6 +1999,127 @@ def test_drop_row(sample_data):
     assert output_rids == expected_rids 
 
 @pytest.mark.core
+def test_drop_na():
+    drop_na_rows_headers = ['idx','1','2','3','4']
+    dropna_rows_data = [
+        (95, 'n/a', '95,1', '95,2', '95,3')
+        ,(96, '96,0', 'none', '96,2', '96,3')
+        ,(97, '97,0', '97,1', 'nan', '97,3')
+        ,(98, '98,0', '98,1', '98,2', 'null')
+        ,(99, None, None, None, None)
+        ,(100, None, '100,1', '100,2', '100,3')
+        ,(101, '101,0', None, '101,2', '101,3')
+        ,(102, '102,0', '102,1', None, '102,3')
+        ,(103, '103,0', '103,1', '103,2', None)
+        ,(104, '104,0', '104,1', '104,2', '104,3')
+        ,(105, 'none', 'na', 'nan', None)
+    ]
+    sdm = SQLDataModel(dropna_rows_data, drop_na_rows_headers)
+    ########################## Rows ##########################
+    ### how = 'any', Inplace = False ###
+    row_any_t_f = sdm.dropna(axis='rows', how='any', inplace=False, ignore_index=True, strictly_null=False)
+    output = row_any_t_f.data(index=True, strict_2d=True)
+    assert output == [(0, '104,0', '104,1', '104,2', '104,3')]
+    row_any_f_f = sdm.dropna(axis='rows', how='any', inplace=False, ignore_index=False, strictly_null=False)
+    output = row_any_f_f.data(index=True, strict_2d=True)
+    assert output == [(104, '104,0', '104,1', '104,2', '104,3')]    
+    row_any_t_t = sdm.dropna(axis='rows', how='any', inplace=False, ignore_index=True, strictly_null=True)
+    output = row_any_t_t.data(index=True, strict_2d=True)
+    assert output == [(0, 'n/a', '95,1', '95,2', '95,3'), (1, '96,0', 'none', '96,2', '96,3'), (2, '97,0', '97,1', 'nan', '97,3'), (3, '98,0', '98,1', '98,2', 'null'), (4, '104,0', '104,1', '104,2', '104,3')]
+    row_any_f_t = sdm.dropna(axis='rows', how='any', inplace=False, ignore_index=False, strictly_null=True)
+    output = row_any_f_t.data(index=True, strict_2d=True)
+    assert output == [(95, 'n/a', '95,1', '95,2', '95,3'), (96, '96,0', 'none', '96,2', '96,3'), (97, '97,0', '97,1', 'nan', '97,3'), (98, '98,0', '98,1', '98,2', 'null'), (104, '104,0', '104,1', '104,2', '104,3')]    
+    ### how = 'all', Inplace = False ###
+    row_all_t_f = sdm.dropna(axis='rows', how='all', inplace=False, ignore_index=True, strictly_null=False)
+    output = row_all_t_f.data(index=True, strict_2d=True)
+    assert output == [(0, 'n/a', '95,1', '95,2', '95,3'), (1, '96,0', 'none', '96,2', '96,3'), (2, '97,0', '97,1', 'nan', '97,3'), (3, '98,0', '98,1', '98,2', 'null'), (4, None, '100,1', '100,2', '100,3'), (5, '101,0', None, '101,2', '101,3'), (6, '102,0', '102,1', None, '102,3'), (7, '103,0', '103,1', '103,2', None), (8, '104,0', '104,1', '104,2', '104,3')]
+    row_all_f_f = sdm.dropna(axis='rows', how='all', inplace=False, ignore_index=False, strictly_null=False)
+    output = row_all_f_f.data(index=True, strict_2d=True)
+    assert output == [(95, 'n/a', '95,1', '95,2', '95,3'), (96, '96,0', 'none', '96,2', '96,3'), (97, '97,0', '97,1', 'nan', '97,3'), (98, '98,0', '98,1', '98,2', 'null'), (100, None, '100,1', '100,2', '100,3'), (101, '101,0', None, '101,2', '101,3'), (102, '102,0', '102,1', None, '102,3'), (103, '103,0', '103,1', '103,2', None), (104, '104,0', '104,1', '104,2', '104,3')]
+    row_all_t_t = sdm.dropna(axis='rows', how='all', inplace=False, ignore_index=True, strictly_null=True)
+    output = row_all_t_t.data(index=True, strict_2d=True)
+    assert output == [(0, 'n/a', '95,1', '95,2', '95,3'), (1, '96,0', 'none', '96,2', '96,3'), (2, '97,0', '97,1', 'nan', '97,3'), (3, '98,0', '98,1', '98,2', 'null'), (4, None, '100,1', '100,2', '100,3'), (5, '101,0', None, '101,2', '101,3'), (6, '102,0', '102,1', None, '102,3'), (7, '103,0', '103,1', '103,2', None), (8, '104,0', '104,1', '104,2', '104,3'), (9, 'none', 'na', 'nan', None)]
+    row_all_f_t = sdm.dropna(axis='rows', how='all', inplace=False, ignore_index=False, strictly_null=True)
+    output = row_all_f_t.data(index=True, strict_2d=True)
+    assert output == [(95, 'n/a', '95,1', '95,2', '95,3'), (96, '96,0', 'none', '96,2', '96,3'), (97, '97,0', '97,1', 'nan', '97,3'), (98, '98,0', '98,1', '98,2', 'null'), (100, None, '100,1', '100,2', '100,3'), (101, '101,0', None, '101,2', '101,3'), (102, '102,0', '102,1', None, '102,3'), (103, '103,0', '103,1', '103,2', None), (104, '104,0', '104,1', '104,2', '104,3'), (105, 'none', 'na', 'nan', None)]
+    ### how = 'any', Inplace = True ###
+    row_any_t_f = sdm.copy()
+    row_any_t_f.dropna(axis='rows', how='any', inplace=True, ignore_index=True, strictly_null=False)
+    output = row_any_t_f.data(index=True, strict_2d=True)
+    assert output == [(0, '104,0', '104,1', '104,2', '104,3')]
+    row_any_f_f = sdm.copy()
+    row_any_f_f.dropna(axis='rows', how='any', inplace=True, ignore_index=False, strictly_null=False)
+    output = row_any_f_f.data(index=True, strict_2d=True)
+    assert output == [(104, '104,0', '104,1', '104,2', '104,3')]    
+    row_any_t_t = sdm.copy()
+    row_any_t_t.dropna(axis='rows', how='any', inplace=True, ignore_index=True, strictly_null=True)
+    output = row_any_t_t.data(index=True, strict_2d=True)
+    assert output == [(0, 'n/a', '95,1', '95,2', '95,3'), (1, '96,0', 'none', '96,2', '96,3'), (2, '97,0', '97,1', 'nan', '97,3'), (3, '98,0', '98,1', '98,2', 'null'), (4, '104,0', '104,1', '104,2', '104,3')]
+    row_any_f_t = sdm.copy()
+    row_any_f_t.dropna(axis='rows', how='any', inplace=True, ignore_index=False, strictly_null=True)
+    output = row_any_f_t.data(index=True, strict_2d=True)
+    assert output == [(95, 'n/a', '95,1', '95,2', '95,3'), (96, '96,0', 'none', '96,2', '96,3'), (97, '97,0', '97,1', 'nan', '97,3'), (98, '98,0', '98,1', '98,2', 'null'), (104, '104,0', '104,1', '104,2', '104,3')]    
+    ### how = 'all', Inplace = True ###
+    row_all_t_f = sdm.copy()
+    row_all_t_f.dropna(axis='rows', how='all', inplace=True, ignore_index=True, strictly_null=False)
+    output = row_all_t_f.data(index=True, strict_2d=True)
+    assert output == [(0, 'n/a', '95,1', '95,2', '95,3'), (1, '96,0', 'none', '96,2', '96,3'), (2, '97,0', '97,1', 'nan', '97,3'), (3, '98,0', '98,1', '98,2', 'null'), (4, None, '100,1', '100,2', '100,3'), (5, '101,0', None, '101,2', '101,3'), (6, '102,0', '102,1', None, '102,3'), (7, '103,0', '103,1', '103,2', None), (8, '104,0', '104,1', '104,2', '104,3')]
+    row_all_f_f = sdm.copy()
+    row_all_f_f.dropna(axis='rows', how='all', inplace=True, ignore_index=False, strictly_null=False)
+    output = row_all_f_f.data(index=True, strict_2d=True)
+    assert output == [(95, 'n/a', '95,1', '95,2', '95,3'), (96, '96,0', 'none', '96,2', '96,3'), (97, '97,0', '97,1', 'nan', '97,3'), (98, '98,0', '98,1', '98,2', 'null'), (100, None, '100,1', '100,2', '100,3'), (101, '101,0', None, '101,2', '101,3'), (102, '102,0', '102,1', None, '102,3'), (103, '103,0', '103,1', '103,2', None), (104, '104,0', '104,1', '104,2', '104,3')]
+    row_all_t_t = sdm.copy()
+    row_all_t_t.dropna(axis='rows', how='all', inplace=True, ignore_index=True, strictly_null=True)
+    output = row_all_t_t.data(index=True, strict_2d=True)
+    assert output == [(0, 'n/a', '95,1', '95,2', '95,3'), (1, '96,0', 'none', '96,2', '96,3'), (2, '97,0', '97,1', 'nan', '97,3'), (3, '98,0', '98,1', '98,2', 'null'), (4, None, '100,1', '100,2', '100,3'), (5, '101,0', None, '101,2', '101,3'), (6, '102,0', '102,1', None, '102,3'), (7, '103,0', '103,1', '103,2', None), (8, '104,0', '104,1', '104,2', '104,3'), (9, 'none', 'na', 'nan', None)]
+    row_all_f_t = sdm.copy()
+    row_all_f_t.dropna(axis='rows', how='all', inplace=True, ignore_index=False, strictly_null=True)
+    output = row_all_f_t.data(index=True, strict_2d=True)
+    assert output == [(95, 'n/a', '95,1', '95,2', '95,3'), (96, '96,0', 'none', '96,2', '96,3'), (97, '97,0', '97,1', 'nan', '97,3'), (98, '98,0', '98,1', '98,2', 'null'), (100, None, '100,1', '100,2', '100,3'), (101, '101,0', None, '101,2', '101,3'), (102, '102,0', '102,1', None, '102,3'), (103, '103,0', '103,1', '103,2', None), (104, '104,0', '104,1', '104,2', '104,3'), (105, 'none', 'na', 'nan', None)]
+    ########################## Columns ##########################
+    drop_na_cols_headers = ['idx','1','2','3','4','5']
+    dropna_cols_data = [
+        (97,'X',None,'n/a','nan','X')
+        ,(98,'X',None,'n/a','nan','X')
+        ,(99,'na',None,'n/a','null','X')
+        ,(100,'X',None,'n/a','none','X')
+        ,(101,'X',None,None,'n/a','X')
+    ]
+    sdm = SQLDataModel(dropna_cols_data, drop_na_cols_headers)
+    ### how = 'any', Inplace = True ###
+    col_any_t_f = sdm.dropna(axis='columns', how='any', inplace=False, ignore_index=True, strictly_null=False)
+    output = col_any_t_f.data(index=True, strict_2d=True)
+    assert output == [(97, 'X'), (98, 'X'), (99, 'X'), (100, 'X'), (101, 'X')]
+    col_any_f_t = sdm.dropna(axis='columns', how='any', inplace=False, ignore_index=False, strictly_null=True)
+    output = col_any_f_t.data(index=True, strict_2d=True)
+    assert output == [(97, 'X', 'nan', 'X'), (98, 'X', 'nan', 'X'), (99, 'na', 'null', 'X'), (100, 'X', 'none', 'X'), (101, 'X', 'n/a', 'X')]  
+    ### how = 'all', Inplace = True ###
+    col_all_t_f = sdm.dropna(axis='columns', how='all', inplace=False, ignore_index=True, strictly_null=False)
+    output = col_all_t_f.data(index=True, strict_2d=True)
+    assert output == [(97, 'X', 'X'), (98, 'X', 'X'), (99, 'na', 'X'), (100, 'X', 'X'), (101, 'X', 'X')]
+    col_all_f_t = sdm.dropna(axis='columns', how='all', inplace=False, ignore_index=False, strictly_null=True)
+    output = col_all_f_t.data(index=True, strict_2d=True)
+    assert output == [(97, 'X', 'n/a', 'nan', 'X'), (98, 'X', 'n/a', 'nan', 'X'), (99, 'na', 'n/a', 'null', 'X'), (100, 'X', 'n/a', 'none', 'X'), (101, 'X', None, 'n/a', 'X')]
+    ### how = 'any', Inplace = False ###
+    col_any_t_f = sdm.copy()
+    col_any_t_f.dropna(axis='columns', how='any', inplace=True, ignore_index=True, strictly_null=False)
+    output = col_any_t_f.data(index=True, strict_2d=True)
+    assert output == [(97, 'X'), (98, 'X'), (99, 'X'), (100, 'X'), (101, 'X')]
+    col_any_f_t = sdm.copy()
+    col_any_f_t.dropna(axis='columns', how='any', inplace=True, ignore_index=False, strictly_null=True)
+    output = col_any_f_t.data(index=True, strict_2d=True)
+    assert output == [(97, 'X', 'nan', 'X'), (98, 'X', 'nan', 'X'), (99, 'na', 'null', 'X'), (100, 'X', 'none', 'X'), (101, 'X', 'n/a', 'X')]  
+    ### how = 'all', Inplace = False ###
+    col_all_t_f = sdm.copy()
+    col_all_t_f.dropna(axis='columns', how='all', inplace=True, ignore_index=True, strictly_null=False)
+    output = col_all_t_f.data(index=True, strict_2d=True)
+    assert output == [(97, 'X', 'X'), (98, 'X', 'X'), (99, 'na', 'X'), (100, 'X', 'X'), (101, 'X', 'X')]
+    col_all_f_t = sdm.copy()
+    col_all_f_t.dropna(axis='columns', how='all', inplace=True, ignore_index=False, strictly_null=True)
+    output = col_all_f_t.data(index=True, strict_2d=True)
+    assert output == [(97, 'X', 'n/a', 'nan', 'X'), (98, 'X', 'n/a', 'nan', 'X'), (99, 'na', 'n/a', 'null', 'X'), (100, 'X', 'n/a', 'none', 'X'), (101, 'X', None, 'n/a', 'X')]
+
+@pytest.mark.core
 def test_count_min_max():
     headers = ['string', 'int', 'float', 'bool', 'date', 'bytes', 'nonetype', 'datetime']
     data = [

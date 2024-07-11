@@ -10215,7 +10215,7 @@ class SQLDataModel:
         """
         if not isinstance(value, (str,int,float,bytes,bool)) and value is not None:
             raise TypeError(
-                ErrorFormat(f"TypeError: invalid type '{type(value).__name__}', ``value`` argument for `fillna()` must be scalar type or one of 'str', 'int', 'bytes', 'bool' or 'float'")
+                ErrorFormat(f"TypeError: invalid type '{type(value).__name__}', argument for `value` must be scalar type or one of 'str', 'int', 'bytes', 'bool' or 'float'")
             )
         na_values = ('none','null','nan','n/a','na','')
         if inplace:
@@ -11328,8 +11328,7 @@ class SQLDataModel:
         insert into "{tmp_table_name}"("{self.sql_idx}",{headers_str})
         select row_number() over (order by "{self.sql_idx}" asc) + {start_index} as "{self.sql_idx}",{headers_str} from "{self.sql_model}" order by "{self.sql_idx}" asc;
         drop table if exists "{self.sql_model}"; alter table "{tmp_table_name}" rename to "{self.sql_model}";"""
-        self.execute_transaction(reset_idx_stmt)
-        self._update_model_metadata(update_row_meta=True)        
+        self.execute_transaction(reset_idx_stmt, update_row_meta=True)
         return
 
     def set_display_color(self, color:str|tuple=None, rand_color:bool=False) -> None:
@@ -14385,4 +14384,109 @@ class SQLDataModel:
                 - New method.
         """
         self_data = self.data(strict_2d=True)
-        return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0]))))         
+        return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0]))))
+
+    def dropna(self, axis:Literal['rows','columns']='columns', how:Literal['any','all']='all', strictly_null:bool=True, ignore_index:bool=True, inplace:bool=False) -> SQLDataModel:
+        """
+        Drop rows or columns with NA values from the SQLDataModel.
+
+        Parameters:
+            ``axis`` (Literal['rows', 'columns'], optional): The axis along which to drop NA values as either ``'rows'`` or ``'columns'``. 
+                Default is ``'columns'``, dropping columns with all NA values.
+            ``how`` (Literal['any', 'all'], optional): Determines when to drop NA values, ``'any'`` drops if any NA values are present, ``'all'`` drops only if all values are NA.
+                Default is ``'all'``, dropping only when all the values are NA along a the specified axis.
+            ``strictly_null`` (bool, optional): If True, only strictly NULL values are considered NA. If False, additional representations of NA (e.g., 'NaN', 'n/a') are also considered.
+            ``ignore_index`` (bool, optional): If True, the index column is not considered when dropping rows. Ignored if when axis is set to ``'columns'``.
+            ``inplace`` (bool, optional): If True, perform the operation in place and modify the SQLDataModel. If False, return a new SQLDataModel with the NA values dropped.
+
+        Returns:
+            ``SQLDataModel``: If ``inplace=False`` returns a new SQLDataModel with the NA values dropped. Otherwise, modifies the current SQLDataModel in place and returns ``None``.
+
+        Raises:
+            ``ValueError``: If ``axis`` is not one of ('rows', 'columns') or ``how`` is not one of ``'any'`` or ``'all'``.
+            ``DimensionError``: If all columns are to be dropped when ``axis='columns'`` and ``how='all'`` resulting in an invalid table representation.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            headers = ['Name', 'Age', 'Gender', 'City']
+            data = [
+                ('Sarah', 35, 'Female', 'Houston'),
+                ('Alice', None, 'Female', 'Milwaukee'),
+                ('Mike', None, 'Male', 'Atlanta'),
+                ('John', 25, 'Male', 'Boston'),
+                ('Bob', None, 'Male', 'Chicago'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Drop rows with any NA values
+            sdm = sdm.dropna(axis='rows', how='any')
+
+            # View result
+            print(sdm)
+
+        This will output the result containing only the rows where no NA values are present:
+
+        ```text
+            ┌───────┬─────┬────────┬─────────┐
+            │ Name  │ Age │ Gender │ City    │
+            ├───────┼─────┼────────┼─────────┤
+            │ Sarah │  35 │ Female │ Houston │
+            │ John  │  25 │ Male   │ Boston  │
+            └───────┴─────┴────────┴─────────┘
+            [2 rows x 4 columns]
+        ```
+
+        Note:
+            - Null or na like is determined by satisfying the SQL NULL value or the Python equivalent `None` for any values in the row.
+            - See related :meth:`SQLDataModel.notna()` to filter for rows or columns containing values that are not null.
+            - See :meth:`SQLDataModel.fillna()` to fill all missing or null values in the model.
+
+        Changelog:
+            - Version 0.12.3 (2024-07-11):
+                - New method.
+        """
+        if axis not in ('rows', 'columns'):
+            raise ValueError(
+                ErrorFormat(f"ValueError: invalid value '{axis}', argument for `axis` must be one of 'rows' or 'columns' representing along which axes to drop NA values")
+            )
+        if how not in ('any', 'all'):
+            raise ValueError(
+                ErrorFormat(f"ValueError: invalid value '{how}', argument for `how` must be one of 'any' or 'all' representing when to drop NA values")
+            )    
+        na_values = ('none','null','nan','n/a','na','')
+        if axis == 'rows':
+            cols_in_scope = self.headers if ignore_index else [self.sql_idx, *self.headers]
+            logic_op = """ OR """ if how == 'any' else """ AND """
+            logical_negate = """""" if inplace else """NOT"""
+            action_take_str = """ """.join(("""SELECT""", """,""".join((f'"{col}"' for col in cols_in_scope)))) if not inplace else """DELETE"""
+            logic_op = """ AND """ if (logic_op == ' OR ' and not inplace) else """ OR """ if (logic_op == ' AND ' and not inplace) else logic_op
+            drop_where_str = logic_op.join((f'({logical_negate} ("{col}" IS NULL))' if strictly_null else f'({logical_negate} ("{col}" IS NULL OR (LOWER("{col}") IN {na_values})))' for col in cols_in_scope if col != self.sql_idx))
+            sql_stmt = f'{action_take_str} FROM "{self.sql_model}" WHERE ({drop_where_str})'
+            if inplace:
+                self.execute_statement(sql_stmt=sql_stmt, update_row_meta=True)
+                if ignore_index:
+                    self.reset_index()
+                return
+            else:
+                return self.execute_fetch(sql_stmt)
+        else: # 'columns'
+            headers_str = """,""".join([f'''count(*)-(SUM(CASE WHEN "{header}" IS NULL THEN 1 ELSE 0 END)) AS "{header}"'''  if strictly_null else f'''count(*)-(SUM(CASE WHEN "{header}" IS NULL OR (LOWER("{header}") IN {na_values}) THEN 1 ELSE 0 END)) AS "{header}"''' for header in self.headers])
+            sql_stmt = """ """.join(("SELECT",headers_str,f'FROM "{self.sql_model}"'))
+            null_counts = dict(zip(self.headers,self.sql_db_conn.execute(sql_stmt).fetchone()))
+            cols_to_drop = [col for col, nulls in null_counts.items() if nulls == 0] if how == 'all' else [col for col, nulls in null_counts.items() if nulls != self.row_count]
+            if (num_cols := len(cols_to_drop)) == self.column_count:
+                raise DimensionError(
+                    ErrorFormat(f"DimensionError: cannot drop all columns, the number of columns to drop '{num_cols}' cannot be equal to the current column count '{self.column_count}'")
+                )
+            if inplace:
+                self.drop_column(cols_to_drop)
+                return
+            else:
+                cols_to_keep = [col for col in self.headers if col not in cols_to_drop]
+                keep_stmt = self._generate_sql_stmt(columns=cols_to_keep)
+                return self.execute_fetch(keep_stmt)        
