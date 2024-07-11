@@ -14404,7 +14404,7 @@ class SQLDataModel:
 
         Raises:
             ``ValueError``: If ``axis`` is not one of ('rows', 'columns') or ``how`` is not one of ``'any'`` or ``'all'``.
-            ``DimensionError``: If all columns are to be dropped when ``axis='columns'`` and ``how='all'`` resulting in an invalid table representation.
+            ``DimensionError``: If all columns are to be dropped when ``axis='columns'`` resulting in an invalid model schema.
 
         Example::
 
@@ -14423,11 +14423,35 @@ class SQLDataModel:
             # Create the model
             sdm = SQLDataModel(data, headers)
 
+            # Drop columns with any NA values in place
+            sdm.dropna(axis='columns', how='any', inplace=True)
+
+            # View result
+            print(sdm)
+
+        This will output the updated model after dropping the 'Age' column:
+
+        ```text
+            ┌───────┬────────┬───────────┐
+            │ Name  │ Gender │ City      │
+            ├───────┼────────┼───────────┤
+            │ Sarah │ Female │ Houston   │
+            │ Alice │ Female │ Milwaukee │
+            │ Mike  │ Male   │ Atlanta   │
+            │ John  │ Male   │ Boston    │
+            │ Bob   │ Male   │ Chicago   │
+            └───────┴────────┴───────────┘
+        ```
+
+        Rows can also be used as the axis to check against
+
+        ```python
             # Drop rows with any NA values
             sdm = sdm.dropna(axis='rows', how='any')
 
             # View result
             print(sdm)
+        ```
 
         This will output the result containing only the rows where no NA values are present:
 
@@ -14442,8 +14466,8 @@ class SQLDataModel:
         ```
 
         Note:
-            - Null or na like is determined by satisfying the SQL NULL value or the Python equivalent `None` for any values in the row.
-            - See related :meth:`SQLDataModel.notna()` to filter for rows or columns containing values that are not null.
+            - Null or na like is determined by satisfying the SQL NULL value or 'null like' values when ``strictly_null = False`` in the specified axis.
+            - See :meth:`SQLDataModel.isna()` or :meth:`SQLDataModel.notna()` to filter for rows containing null values.
             - See :meth:`SQLDataModel.fillna()` to fill all missing or null values in the model.
 
         Changelog:
