@@ -14386,7 +14386,7 @@ class SQLDataModel:
         self_data = self.data(strict_2d=True)
         return set(i for i in range(len(self_data)) if any(self_data[i][j] is not None for j in range(len(self_data[0]))))
 
-    def dropna(self, axis:Literal['rows','columns']='columns', how:Literal['any','all']='all', strictly_null:bool=True, ignore_index:bool=True, inplace:bool=False) -> SQLDataModel:
+    def dropna(self, axis:Literal['rows','columns']='columns', how:Literal['any','all']='all', strictly_null:bool=True, ignore_index:bool=True, inplace:bool=True) -> None|SQLDataModel:
         """
         Drop rows or columns with NA values from the SQLDataModel.
 
@@ -14400,7 +14400,7 @@ class SQLDataModel:
             ``inplace`` (bool, optional): If True, perform the operation in place and modify the SQLDataModel. If False, return a new SQLDataModel with the NA values dropped.
 
         Returns:
-            ``SQLDataModel``: If ``inplace=False`` returns a new SQLDataModel with the NA values dropped. Otherwise, modifies the current SQLDataModel in place and returns ``None``.
+            ``None`` or ``SQLDataModel``: If ``inplace=False`` returns a new SQLDataModel with the NA values dropped. Otherwise, modifies the current SQLDataModel in place and returns ``None``.
 
         Raises:
             ``ValueError``: If ``axis`` is not one of ('rows', 'columns') or ``how`` is not one of ``'any'`` or ``'all'``.
@@ -14471,6 +14471,8 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.fillna()` to fill all missing or null values in the model.
 
         Changelog:
+            - Version 1.0.0 (2024-08-09):
+                - Changed default to ``inplace = True`` to align more with similar ``SQLDataModel`` methods.
             - Version 0.12.3 (2024-07-11):
                 - New method.
         """
