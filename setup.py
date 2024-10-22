@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
 
 setuptools.setup(
      name='SQLDataModel',  
-     version='1.0.0',
+     version='1.1.0',
      scripts=['src/SQLDataModel/SQLDataModel.py'] ,
      author='Ante Tonkovic-Capin',
      author_email='antetc@icloud.com',
@@ -32,6 +32,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.10',         
         'Programming Language :: Python :: 3.11',         
         'Programming Language :: Python :: 3.12',         
+        'Programming Language :: Python :: 3.13',         
         'Topic :: Scientific/Engineering',
      ],
      python_requires = '>=3.9'

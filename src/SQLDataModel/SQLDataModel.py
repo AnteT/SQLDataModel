@@ -6394,6 +6394,8 @@ class SQLDataModel:
             - Polars does not really have a concept of an index column, therefore when using ``index=True``, the SQLDataModel index is just an additional column in the returned DataFrame object.
 
         Changelog:
+            - Version 1.1.0 (2024-10-22):
+                - Added ``orient = 'row'`` argument to explicitly set data orientation when constructing dataframe.
             - Version 0.3.8 (2024-04-12):
                 - New method.            
         """
@@ -6402,7 +6404,7 @@ class SQLDataModel:
                 ErrorFormat(f"""ModuleNotFoundError: required package not found, polars must be installed in order to use `.to_polars()` method""")
                 )
         data = self.data(index=index, include_headers=include_headers)
-        return _pl.DataFrame(data=data[1:] if include_headers else data,schema=data[0] if include_headers else None)
+        return _pl.DataFrame(data=data[1:] if include_headers else data,schema=data[0] if include_headers else None, orient='row')
 
     def to_pyarrow(self, index:bool=False) -> _pa.Table:
         """
