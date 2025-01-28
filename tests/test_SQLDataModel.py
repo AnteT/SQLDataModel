@@ -802,6 +802,45 @@ def test_headers(sample_data):
     out_headers = sdm.get_headers()
     assert all([rename_headers[i] == out_headers[i] for i in range(len(rename_headers))])
 
+    # Test new wrapper rename_headers using callable
+    input_headers = ['First Column', 'Second Column', 'Third Column', 'Fourth Column']
+    input_data = [[f"{x},{y}" for y in range(len(input_headers))] for x in range(10)]
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    expected_headers = ['first column', 'second column', 'third column', 'fourth column']
+    sdm.rename_headers(lambda cols: [col.lower() for col in cols])
+    output_headers = sdm.headers
+    assert output_headers == expected_headers
+
+    # Test new wrapper rename_headers using list directly
+    input_headers = ['First Column', 'Second Column', 'Third Column', 'Fourth Column']
+    input_data = [[f"{x},{y}" for y in range(len(input_headers))] for x in range(10)]
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    expected_headers = ['1', '2', '3', '4']
+    sdm.rename_headers(expected_headers)
+    output_headers = sdm.headers
+    assert output_headers == expected_headers
+
+    # Test new wrapper rename_header using int to reference column
+    input_headers = ['A', 'B', 'C', 'D']
+    input_data = [[f"{x},{y}" for y in range(len(input_headers))] for x in range(10)]
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    expected_headers = ['1', '2', '3', '4']
+    for cid in range(sdm.column_count): # Using int to reference column
+        sdm.rename_header(cid, expected_headers[cid])
+    output_headers = sdm.headers
+    assert output_headers == expected_headers    
+
+    # Using str to reference old column
+    input_headers = ['A', 'B', 'C', 'D']
+    input_data = [[f"{x},{y}" for y in range(len(input_headers))] for x in range(10)]
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    expected_headers = ['1th', '2nd', '3rd', '4th']
+    for cid in range(sdm.column_count): # Using int to reference column
+        sdm.rename_header(input_headers[cid], expected_headers[cid])
+    output_headers = sdm.headers
+    assert output_headers == expected_headers      
+
+
 @pytest.mark.core
 def test_py_sql_dtypes():
     input_data, input_headers = [['abcdefg', 12_345, b'bytes', 3.14159, datetime.date(1992,11,22), datetime.datetime(1978,1,3,7,23,59)]], ['strings','integers','binary','floats','date','datetime']

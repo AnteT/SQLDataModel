@@ -1493,7 +1493,7 @@ class SQLDataModel:
 
     def rename_column(self, column:int|str, new_column_name:str) -> None:
         """
-        Renames a column in the ``SQLDataModel`` at the specified index or using the old column name with the provided value in ``new_column_name``.
+        Renames a column in the ``SQLDataModel`` at the specified index or using the old column name into the new value provided in ``new_column_name``.
 
         Parameters:
             ``column`` (int|str): The index or current str value of the column to be renamed.
@@ -1517,7 +1517,7 @@ class SQLDataModel:
             ]
 
             # Create the model with sample data
-            sdm = SQLDataModel(data,headers)
+            sdm = SQLDataModel(data, headers)
 
             # Example: Rename the column at index 1 to 'first_name'
             sdm.rename_column(1, 'first_name')
@@ -1551,6 +1551,89 @@ class SQLDataModel:
         self.headers[self.headers.index(column)] = new_column_name # replace old column with new column in same position as original column
         self._update_model_metadata()
 
+    def rename_header(self, header:int|str, new_header_name:str) -> None:
+        """
+        Renames a header in the ``SQLDataModel`` at the specified index or using the old header name into the new value provided in ``new_header_name``.
+
+        Parameters:
+            ``header`` (int|str): The index or current str value of the header to be renamed.
+            ``new_header_name`` (str): The new name as a str value for the specified header.
+
+        Raises:
+            ``TypeError``: If the ``header`` or ``new_header_name`` parameters are invalid types.
+            ``IndexError``: If the provided header index is outside the current column range.
+            ``SQLProgrammingError``: If there is an issue with the SQL execution during the header renaming.
+
+        Example::
+
+            from SQLDataModel import SQLDataModel
+
+            headers = ['idx', 'first', 'last', 'age']
+            data = [
+                (0, 'john', 'smith', 27)
+                ,(1, 'sarah', 'west', 29)
+                ,(2, 'mike', 'harlin', 36)
+                ,(3, 'pat', 'douglas', 42)
+            ]
+
+            # Create the model with sample data
+            sdm = SQLDataModel(data, headers)
+
+            # Example: Rename the column at index 1 to 'first_name'
+            sdm.rename_column(1, 'first_name')
+
+            # Get current values
+            new_headers = sdm.get_headers()
+
+            # Outputs ['first_name', 'last', 'age']
+            print(new_headers)
+
+        Note:
+            - The method allows renaming a column identified by its index in the SQLDataModel.
+            - Handles negative indices by adjusting them relative to the end of the column range.
+            - If an error occurs during SQL execution, it rolls back the changes and raises a SQLProgrammingError with an informative message.
+
+        Changelog:
+            - Version 1.2.0 (2025-01-28):
+                - New convenience method wrapping :meth:`SQLDataModel.rename_column()` to reflect additional naming convention.       
+        """        
+        self.rename_column(header, new_header_name)
+
+    def rename_headers(self, new_headers:list[str] | Callable[[list[str]], list[str]]) -> None:
+        """
+        Renames the current ``SQLDataModel`` headers to values provided in ``new_headers``. Headers must match the existing column count.
+
+        Parameters:
+            ``new_headers`` (list[str] or Callable[[list[str]], list[str]]): A sequence (e.g., list, tuple) of new header names
+                or a callable that takes the existing headers and returns a new list of header names.
+                
+        Raises:
+            ``TypeError``: If the ``new_headers`` type is not a valid type (list or tuple) or contains instances that are not of type 'str'.
+            ``DimensionError``: If the length of ``new_headers`` does not match the column count.
+            ``TypeError``: If the type of the first element in ``new_headers`` is not a valid type (str, int, or float).
+
+        Returns:
+            ``None``
+
+        Example::
+            
+            from SQLDataModel import SQLDataModel
+
+            # Create model
+            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+
+            # Set new headers
+            sdm.rename_headers(['First_Name', 'Last_Name', 'Payment'])
+
+            # Alternatively, provide a callable argument to transform headers using existing names
+            sdm.rename_headers(lambda headers: [header.replace(' ', '_') for header in headers])
+        
+        Changelog:
+            - Version 1.2.0 (2025-01-28):
+                - New convenience method wrapping :meth:`SQLDataModel.set_headers()` to reflect additional naming convention.             
+        """
+        self.set_headers(new_headers)
+        
     def replace(self, pattern:str, replacement:str, inplace:bool=False, **kwargs) -> SQLDataModel:
         """
         Replaces matching occurrences of a specified pattern with a replacement value in the ``SQLDataModel`` instance. 
@@ -1654,16 +1737,16 @@ class SQLDataModel:
         """
         return self.headers
     
-    def set_headers(self, new_headers:list[str]) -> None:
+    def set_headers(self, new_headers:list[str] | Callable[[list[str]], list[str]]) -> None:
         """
-        Renames the current ``SQLDataModel`` headers to values provided in ``new_headers``. Headers must have the same dimensions
-        and match existing headers.
+        Renames the current ``SQLDataModel`` headers to values provided in ``new_headers``. Headers must match the existing column count.
 
         Parameters:
-            ``new_headers`` (list): A list of new header names. It must have the same dimensions as the existing headers.
-
+            ``new_headers`` (list[str] or Callable[[list[str]], list[str]]): A sequence (e.g., list, tuple) of new header names
+                or a callable that takes the existing headers and returns a new list of header names.
+                
         Raises:
-            ``TypeError``: If the ``new_headers`` type is not a valid type (list or tuple).
+            ``TypeError``: If the ``new_headers`` type is not a valid type (list or tuple) or contains instances that are not of type 'str'.
             ``DimensionError``: If the length of ``new_headers`` does not match the column count.
             ``TypeError``: If the type of the first element in ``new_headers`` is not a valid type (str, int, or float).
 
@@ -1679,19 +1762,35 @@ class SQLDataModel:
 
             # Set new headers
             sdm.set_headers(['First_Name', 'Last_Name', 'Payment'])
+
+            # Alternatively, provide a callable argument to transform headers using existing names
+            sdm.set_headers(lambda headers: [header.replace(' ', '_') for header in headers])
         
         Changelog:
+            - Version 1.2.0 (2025-01-28):
+                - Added ability to provide a callable for ``new_headers`` to apply a transformation using existing headers.
+                - Added additional validation ensuring all headers provided are of type 'str', raising ``TypeError`` otherwise.
             - Version 0.1.5 (2023-11-24):
                 - New method.                
         """
+        # Handle the option to provide a callable to map a transformation using the existing headers
+        if callable(new_headers):
+            new_headers = new_headers(self.headers)
         if not isinstance(new_headers, Iterable) or isinstance(new_headers, str):
             raise TypeError(
                 ErrorFormat(f"TypeError: invalid type '{type(new_headers).__name__}', `new_headers` must be a collection or sequence of type 'str' representing the new header names")
             )
+        # Ensure new headers are now subscriptable so we can index into them using the column count index
+        new_headers = list(new_headers)
         if len(new_headers) != self.column_count:
             raise DimensionError(
                 ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length '{len(new_headers)} != {self.column_count}' column count, please provide correct dimensions")
                 )
+        # Ensure new headers are of type 'str'
+        if not all(isinstance(header, str) for header in new_headers):
+            raise TypeError(
+                ErrorFormat("TypeError: invalid new header type(s), all values in `new_headers` must be of type 'str'")
+            )        
         sql_stmt = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
         self.execute_transaction(sql_stmt, update_row_meta=False)
 
@@ -1727,12 +1826,15 @@ class SQLDataModel:
             sdm.get_headers() # now outputs ['FIRST_NAME', 'LAST_NAME', 'SALARY']
         
         Changelog:
+            - Version 1.2.0 (2025-01-28):
+                - Added duplicate aliasing to prevent post-normalization name collisions using :meth:`SQLDataModel.alias_duplicates`
+                - Modified default normalization function to better handle occurrences of multiple invalid characters.
             - Version 0.1.5 (2023-11-24):
                 - New method.            
         """
         if apply_function is None:
-            apply_function = lambda x: "_".join(x.strip() for x in re.sub('[^0-9a-z_]+', '', x.lower().replace(" ","_")).split('_') if x !='')
-        new_headers = [apply_function(x) for x in self.get_headers()]
+            apply_function = lambda x: re.sub(r'[^0-9a-z]+', '_', x.lower().strip()).strip('_')
+        new_headers = list(SQLDataModel.alias_duplicates([apply_function(x) for x in self.get_headers()]))
         self.set_headers(new_headers)
 
     def get_display_max_rows(self) -> int|None:
@@ -14517,4 +14619,4 @@ class SQLDataModel:
             else:
                 cols_to_keep = [col for col in self.headers if col not in cols_to_drop]
                 keep_stmt = self._generate_sql_stmt(columns=cols_to_keep)
-                return self.execute_fetch(keep_stmt)        
+                return self.execute_fetch(keep_stmt)

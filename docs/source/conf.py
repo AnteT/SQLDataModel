@@ -12,9 +12,9 @@ sys.path.append(project_root)
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'SQLDataModel'
-copyright = '2024, Ante Tonkovic-Capin'
+copyright = '2025, Ante Tonkovic-Capin'
 author = 'Ante Tonkovic-Capin'
-release = '1.1.0'
+release = '1.2.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
