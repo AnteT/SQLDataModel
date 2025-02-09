@@ -11850,6 +11850,128 @@ class SQLDataModel:
         """
         return type(self)(data=[row for row in zip(*self.data(include_headers=include_headers, index=False))], infer_types=infer_types, **self._get_display_args())
 
+    def unique(self, ignore_index:bool=True) -> SQLDataModel:
+        """
+        Returns a new model using the unique values of the current model, keeping the first by order of appearance.
+
+        Parameters:
+            ``ignore_index`` (bool, optional): If True, the original index of the unique values is ignored. If False, the original index is kept. Default is True.
+
+        Returns:
+            ``SQLDataModel``: A new model consisting of the unique values contained in the original model.
+
+        Example:
+
+        ```python
+            from SQLDataModel import SQLDataModel
+
+            # Sample data
+            data = [
+                ('Bob', 'Chicago'),
+                ('Bob', 'Chicago'),
+                ('Bob', 'Chicago'),
+                ('Alice', 'New York'),
+                ('Alice', 'New York'),
+                ('Charles', 'Boston')
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers=['Name', 'City'])
+
+            # Create a new model from only unique rows
+            sdm_unique = sdm.unique()
+
+            # View it
+            print(sdm_unique)    
+        ```
+
+        This will output the first unique rows, ignoring the original indicies:
+
+        ```shell
+            ┌───┬─────────┬──────────┐
+            │   │ Name    │ City     │
+            ├───┼─────────┼──────────┤
+            │ 0 │ Bob     │ Chicago  │
+            │ 1 │ Alice   │ New York │
+            │ 2 │ Charles │ Boston   │
+            └───┴─────────┴──────────┘
+            [3 rows x 2 columns]
+        ```
+
+        Alternatively, the original index for each unique row can be retained
+
+        ```python
+            # Do not ignore the indicies
+            sdm_unique_with_idx = sdm.unique(ignore_index=False)
+
+            # View it
+            print(sdm_unique_with_idx)
+        ```
+
+        This will output a similar result, but the original indicies from the rows kept is retained:
+
+        ```shell
+            ┌───┬─────────┬──────────┐
+            │   │ Name    │ City     │
+            ├───┼─────────┼──────────┤
+            │ 0 │ Bob     │ Chicago  │
+            │ 3 │ Alice   │ New York │
+            │ 5 │ Charles │ Boston   │
+            └───┴─────────┴──────────┘
+            [3 rows x 2 columns]
+        ```
+
+        This method is particularly useful when needing to extract subsets of data, for example:
+
+        ```python
+            # Sample data
+            headers = ['Name', 'Age', 'Department']
+            data = [
+                ('Alice', 38, 'HR'),
+                ('Carol', 37, 'HR'),
+                ('Billy', 23, 'Marketing'),
+                ('Nate',  28, 'Sales'),
+                ('Jill',  27, 'Sales'),
+                ('John',  31, 'Engineering'),
+                ('Kyle',  32, 'Engineering'),
+            ]
+
+            # Create the model
+            sdm = SQLDataModel(data, headers)
+
+            # Filter rows by 'Age' and return unique 'Department' values
+            under_30_depts = sdm[sdm['Age'] < 30, 'Department'].unique()
+
+            # View it
+            print(under_30_depts)
+        ```
+
+        This will output the unique 'Department' values for those rows matching the 'Age' filter:
+
+        ```shell
+            ┌───┬────────────┐
+            │   │ Department │
+            ├───┼────────────┤
+            │ 0 │ Marketing  │
+            │ 1 │ Sales      │
+            └───┴────────────┘
+            [2 rows x 1 columns]
+        ```
+
+        Note:
+            - Null values are considered a unique value by SQLite and are treated accordingly when present.
+            - See :meth:`SQLDataModel.deduplicate()` to drop duplicates or modify the model in place based on duplicate values.
+            - See :meth:`SQLDataModel.count_unique()` to generate counts of unique values by column.
+            - See :meth:`SQLDataModel.fillna()` to fill missing or null values in the model if needed.
+
+        Changelog:
+            - Version 1.3.0 (2025-02-09):
+                - New method.
+        """
+        columns = ', '.join(f'"{col}"' for col in self.headers)
+        fetch_stmt = f'SELECT DISTINCT {columns} FROM "{self.sql_model}"' if ignore_index else f'SELECT MIN("{self.sql_idx}") AS "{self.sql_idx}", {columns} FROM "{self.sql_model}" GROUP BY {columns} '
+        return self.execute_fetch(fetch_stmt)
+
     def vstack(self, *other:SQLDataModel, inplace:bool=False) -> SQLDataModel:
         """
         Vertically stacks one or more ``SQLDataModel`` objects to the current model.
