@@ -2958,3 +2958,44 @@ def test_validate_indicies():
     for test_index, test_validation in test_indicies:
         output_indicies = sdm._validate_indicies(test_index)
         assert output_indicies == test_validation    
+
+@pytest.mark.core
+def test_unique():
+    input_headers = ['idx', 'String', 'Int', 'Floats', 'Bools', 'Dates', 'Bytes', 'Nullable', 'Datetimes']
+    input_data = [
+        (0,'A', 1, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (1,'A', 1, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (2,'0', 1, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (3,'0', 1, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (4,'A', 0, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (5,'A', 0, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (6,'A', 1, 0, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (7,'A', 1, 0, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (8,'A', 1, 1.23, False, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (9,'A', 1, 1.23, False, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (10,'A', 1, 1.23, True, datetime.date(1999, 11, 1), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (11,'A', 1, 1.23, True, datetime.date(1999, 11, 1), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (12,'A', 1, 1.23, True, datetime.date(1999, 11, 24), b'Z', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (13,'A', 1, 1.23, True, datetime.date(1999, 11, 24), b'Z', None, datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (14,'A', 1, 1.23, True, datetime.date(1999, 11, 1), b'X', 'Some', datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (15,'A', 1, 1.23, True, datetime.date(1999, 11, 1), b'X', 'Some', datetime.datetime(2001, 2, 3, 4, 5, 6)),
+        (16,'A', 1, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 59)),
+        (17,'A', 1, 1.23, True, datetime.date(1999, 11, 24), b'X', None, datetime.datetime(2001, 2, 3, 4, 5, 59))
+    ]
+    sdm = SQLDataModel(input_data, input_headers)
+    output_data = sdm.unique(ignore_index=False).data(strict_2d=True, index=True)
+
+    # Ignoring index
+    output_expected, seen = [], set()
+    for row in input_data:
+        key = tuple(row[1:])
+        if key not in seen:
+            seen.add(key)
+            output_expected.append(row)
+    output_expected.sort(key=lambda x: x[0])
+    assert output_expected == output_data
+
+    # Retaining index
+    output_data = sdm.unique(ignore_index=True).data(strict_2d=True, index=True)
+    output_expected = [tuple((i, *sublist[1:])) for (i, sublist) in enumerate(output_expected)]
+    assert output_expected == output_data    
