@@ -1,53 +1,25 @@
 from __future__ import annotations
 import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, random, urllib.request
-from urllib.parse import urlparse
-from collections.abc import Generator, Callable, Iterator, Iterable
+from collections.abc import Callable, Iterator, Iterable
 from collections import namedtuple
 from typing import Literal, Any, Type, NamedTuple
-from ast import literal_eval
 from io import StringIO
 
+from . import optionals
+from . import utils
 from .exceptions import DimensionError, SQLProgrammingError, ErrorFormat, WarnFormat
-from .StandardDeviation import StandardDeviation
-from .JSONEncoder import DataTypesEncoder
-from .HTMLParser import HTMLParser
-from .ANSIColor import ANSIColor
+from .standarddeviation import StandardDeviation
+from .jsonencoder import DataTypesEncoder
+from .htmlparser import HTMLParser
+from .ansicolor import ANSIColor
 
-try:
-    from dateutil.parser import parse as dateparser
-    _has_dateutil = True
-except ModuleNotFoundError:
-    _has_dateutil = False
-    
-try:
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
     import numpy as _np
-    _has_np = True
-except ModuleNotFoundError:
-    _has_np = False
-
-try:
     import pandas as _pd
-    _has_pd = True
-except ModuleNotFoundError:
-    _has_pd = False
-
-try:
     import polars as _pl
-    _has_pl = True
-except ModuleNotFoundError:
-    _has_pl = False
-
-try:
-    import pyarrow as _pa, pyarrow.parquet as _pq
-    _has_pa = True
-except ModuleNotFoundError:
-    _has_pa = False
-
-try:
-    import openpyxl as _xl
-    _has_xl = True
-except ModuleNotFoundError:
-    _has_xl = False
+    import pyarrow as _pa
 
 class SQLDataModel:
     """
@@ -68,13 +40,13 @@ class SQLDataModel:
     -----
 
     ```python
-        from SQLDataModel import SQLDataModel
+        import sqldatamodel as sdm
         
         # Lets grab a random table from Wikipedia
-        sdm = SQLDataModel.from_html("https://en.wikipedia.org/wiki/FIFA_World_Cup", table_identifier=7)
+        df = sdm.from_html("https://en.wikipedia.org/wiki/FIFA_World_Cup", table_identifier=7)
 
         # Lets see what we found
-        print(sdm)
+        print(df)
     ```
 
     This will output:
@@ -98,7 +70,7 @@ class SQLDataModel:
     
     Example::
 
-        from SQLDataModel import SQLDataModel
+        import sqldatamodel as sdm
 
         # For example, setup a source connection
         source_db_conn = pyodbc.connect(...)
@@ -107,44 +79,44 @@ class SQLDataModel:
         destination_db_conn = sqlite3.connect(...)
 
         # Grab your source table
-        sdm = SQLDataModel.from_sql("select * from source_table", source_db_conn)
+        df = sdm.from_sql("select * from source_table", source_db_conn)
 
         # Modify it however you want, whether through plain SQL
-        sdm = sdm.execute_fetch('select "whatever", "i", "want" from "wherever_i_want" where "what_i_need" is not null ')
+        df = df.execute_fetch('select "whatever", "i", "want" from "wherever_i_want" where "what_i_need" is not null ')
 
         # Or through any number of built-in methods like filtering
-        sdm = sdm[sdm['create_date'] >= '2023-01-01']
+        df = df[df['create_date'] >= '2023-01-01']
 
         # Or creating new columns
-        sdm['new_date'] = datetime.now()
+        df['new_date'] = datetime.now()
 
         # Or modifying existing ones
-        sdm['salary'] = sdm['salary'] * 2
+        df['salary'] = df['salary'] * 2
 
         # Or applying functions
-        sdm['user_id'] = sdm['user_id'].apply(lambda x: x**2)
+        df['user_id'] = df['user_id'].apply(lambda x: x**2)
 
         # Or deduplicating
-        sdm = sdm.deduplicate(subset=['user_id','user_name'])
+        df = df.deduplicate(subset=['user_id','user_name'])
 
         # Or iterate through it row-by-row and modify it
-        for idx, row in sdm.iter_tuples(index=True):
+        for idx, row in df.iter_tuples(index=True):
             if row['number'] % 2 == 0:
                 row[idx,'odd_even'] = 'even'
             else:
                 row[idx,'odd_even'] = 'odd'
 
         # Or join it using any of the standard join operations
-        sdm = sdm_left.merge(sdm_right, how='left', left_on='id', right_on='id')
+        df = df_left.merge(df_right, how='left', left_on='id', right_on='id')
 
         # Or group or aggregate the data:
-        sdm_agg = sdm.group_by(["first", "last", "position"])            
+        df_agg = df.group_by(["first", "last", "position"])            
 
         # Or have your data imported and described for you
-        sdm = SQLDataModel.from_parquet('titanic.parquet').describe()
+        df = sdm.from_parquet('titanic.parquet').describe()
 
         # View result
-        print(sdm)
+        print(df)
 
     This will output:
         
@@ -172,32 +144,32 @@ class SQLDataModel:
 
     ```python
         # Load it to your destination database:
-        sdm.to_sql("new_table", destination_db_conn)
+        df.to_sql("new_table", destination_db_conn)
 
         # Or any number of formats including:
-        sdm.to_csv("output.csv")
-        sdm.to_html("output.html")
-        sdm.to_json("output.json")
-        sdm.to_latex("output.tex")
-        sdm.to_markdown("output.md")
-        sdm.to_parquet("output.parquet")
-        sdm.to_pickle("output.sdm")
-        sdm.to_text("output.txt")
-        sdm.to_local_db("output.db")
+        df.to_csv("output.csv")
+        df.to_html("output.html")
+        df.to_json("output.json")
+        df.to_latex("output.tex")
+        df.to_markdown("output.md")
+        df.to_parquet("output.parquet")
+        df.to_pickle("output.sdm")
+        df.to_text("output.txt")
+        df.to_local_db("output.db")
 
         # Reload it back again from more formats:
-        sdm = SQLDataModel.from_csv("output.csv")
-        sdm = SQLDataModel.from_dict(py_dict)
-        sdm = SQLDataModel.from_html("output.html")
-        sdm = SQLDataModel.from_json("output.json")
-        sdm = SQLDataModel.from_latex("output.tex")
-        sdm = SQLDataModel.from_markdown("output.md")
-        sdm = SQLDataModel.from_numpy(np_arr)
-        sdm = SQLDataModel.from_pandas(pd_df)
-        sdm = SQLDataModel.from_polars(pl_df)
-        sdm = SQLDataModel.from_parquet("output.parquet")
-        sdm = SQLDataModel.from_pickle("output.sdm")
-        sdm = SQLDataModel.from_sql("output", sqlite3.connect('output.db'))
+        df = sdm.from_csv("output.csv")
+        df = sdm.from_dict(py_dict)
+        df = sdm.from_html("output.html")
+        df = sdm.from_json("output.json")
+        df = sdm.from_latex("output.tex")
+        df = sdm.from_markdown("output.md")
+        df = sdm.from_numpy(np_arr)
+        df = sdm.from_pandas(pd_df)
+        df = sdm.from_polars(pl_df)
+        df = sdm.from_parquet("output.parquet")
+        df = sdm.from_pickle("output.sdm")
+        df = sdm.from_sql("output", sqlite3.connect('output.db'))
     ```
     
     Data Formats
@@ -299,16 +271,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create sample data
             data = [('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
 
             # Create the model with custom headers
-            sdm = SQLDataModel(data, headers=['Name','Age','Sex'])
+            df = sdm.SQLDataModel(data, headers=['Name','Age','Sex'])
             
             # Display the model
-            print(model)
+            print(df)
         
         This will output the SQLDataModel formatted to fit within the current terminal:
         
@@ -326,7 +298,7 @@ class SQLDataModel:
         A ``SQLDataModel`` can be initialized from dozens of data formats, including python dictionaries:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Dictionary with sample data
             data = {
@@ -336,10 +308,10 @@ class SQLDataModel:
             }
 
             # Create the model and set a new style
-            sdm = SQLDataModel(data, table_style='list')
+            df = sdm.SQLDataModel(data, table_style='list')
 
             # View it
-            print(sdm)
+            print(df)
         ```
 
         This will output the SQLDataModel using the 'list' styling:
@@ -399,7 +371,7 @@ class SQLDataModel:
         if had_data:
             if isinstance(data, dict) or isinstance(data[0], dict):
                 if isinstance(data, list):
-                    data = SQLDataModel.flatten_json(data)
+                    data = utils.flatten_json(data)
                 rowwise = True if all(isinstance(x, int) for x in data.keys()) else False
                 if rowwise:
                     col_count = len(data[next(iter(data))])
@@ -503,7 +475,7 @@ class SQLDataModel:
         self.table_style = table_style
         """``str``: The table style used for string representations of the model. Available styles are ``'ascii'``, ``'bare'``, ``'dash'``, ``'default'``, ``'double'``, ``'list'``, ``'markdown'``, ``'outline'``, ``'pandas'``, ``'polars'``, ``'postgresql'`` or ``'round'``. Defaults to ``'default'`` table style."""
         if infer_types and self.row_count > 0:
-            inferred_dtypes = SQLDataModel.infer_types_from_data(input_data=random.sample(data, min(self.row_count, 16)))
+            inferred_dtypes = utils.infer_types_from_data(input_data=random.sample(data, min(self.row_count, 16)))
             headers_to_py_dtypes_dict = {self.headers[i]:inferred_dtypes[i+dyn_idx_offset] for i in range(self.column_count)}
         else:
             headers_to_py_dtypes_dict = {self.headers[i]:type(data[0][i+dyn_idx_offset]).__name__ for i in range(self.column_count)}        
@@ -520,7 +492,7 @@ class SQLDataModel:
         self.dtypes = headers_to_py_dtypes_dict
         """``dict[str, str]``: The current model data types mapped to each column in the format of ``{'col': 'dtype'}`` where ``'dtype'`` is a string representing the corresponding python type."""
         sql_create_stmt = f"""create table if not exists "{self.sql_model}" ("{self.sql_idx}" INTEGER PRIMARY KEY,{headers_with_sql_dtypes_str})"""
-        sql_insert_params = ",".join([SQLDataModel.sqlite_cast_type_format(dtype=headers_to_py_dtypes_dict[col], as_binding=True) for col in self.headers])        
+        sql_insert_params = ",".join([utils.sqlite_cast_type_format(dtype=headers_to_py_dtypes_dict[col], as_binding=True) for col in self.headers])        
         sql_insert_stmt = f"""insert into "{self.sql_model}" ({dyn_add_idx_insert}{','.join([f'"{col}"' for col in self.headers])}) values ({dyn_idx_bind}{sql_insert_params})"""
         try:
             self.sql_db_conn.execute(sql_create_stmt)
@@ -562,685 +534,6 @@ class SQLDataModel:
 ################################################ static methods ################################################
 ################################################################################################################
 
-    @staticmethod
-    def generate_html_table_chunks(html_source:str) -> Generator[str, None, None]:
-        """
-        Generate chunks of HTML content for all ``<table>`` elements found in provided source as complete and unbroken chunks for parsing.
-
-        Parameters:
-            ``html_source`` (str): The raw HTML content from which to generate chunks.
-
-        Raises:
-            ``ValueError``: If zero ``<table>`` elements were found in ``html_source`` provided.
-
-        Yields:
-            ``str``: Chunks of HTML content containing complete ``<table>`` elements.
-
-        Example::
-
-            from SQLDataModel import SQLDataModel
-
-            # HTML content to chunk
-            html_source = '''
-            <html> 
-                <table><tr><td>Table 1</td></tr></table>
-                ...
-                <p>Non-table elements</p>
-                ...
-                <table><tr><td>Table 2</td></tr></table>
-            </html>
-            '''
-
-            # Generate and view the returned table chunks
-            for chunk in SQLDataModel.generate_html_table_chunks(html_source):
-                print('Chunk:', chunk)
-            
-        This will output:
-
-        ```text
-            Chunk: <table><tr><td>Table 1</td></tr></table>
-            Chunk: <table><tr><td>Table 2</td></tr></table>
-        ```
-        
-        Note:
-            - HTML content before the first ``<table>`` element and after the last ``</table>`` element is ignored and not yielded.
-            - See :meth:`SQLDataModel.from_html()` for full implementation and how this function is used for HTML parsing.
-
-        Changelog:
-            - Version 0.2.1 (2024-03-24):
-                - New method.
-        """
-        start_index, table_found = 0, False
-        while True:
-            start = html_source.find('<table', start_index)
-            end = html_source.find('</table>', start)
-            if start == -1 or end == -1:
-                break
-            yield html_source[start:end + 8] # len('</table>')
-            start_index = end + 8
-            table_found = True
-        if not table_found:
-            raise ValueError(
-                ErrorFormat(f"ValueError: zero table elements found in provided source, confirm `html_source` is valid HTML or check integrity of data")
-            )
-            
-    @staticmethod
-    def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> str:    
-        """
-        Infer the data type of the input object.
-
-        Parameters:
-            ``obj`` (str): The object for which the data type is to be inferred.
-            ``date_format`` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
-            ``datetime_format`` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
-
-        Returns:
-            ``str``: The inferred data type.
-        
-        Inference:
-            - ``'str'``: If the input object is a string, or cannot be parsed as another data type.
-            - ``'date'``: If the input object represents a date without time information.
-            - ``'datetime'``: If the input object represents a datetime with both date and time information.
-            - ``'int'``: If the input object represents an integer.
-            - ``'float'``: If the input object represents a floating-point number.
-            - ``'bool'``: If the input object represents a boolean value.
-            - ``'bytes'``: If the input object represents a binary array.
-            - ``'None'``: If the input object is None, empty, or not a string.
-
-        Note:
-            - This method attempts to infer the data type of the input object by evaluating its content.
-            - If the input object is a string, it is parsed to determine whether it represents a date, datetime, integer, or float.
-            - If the input object is not a string or cannot be parsed, its type is determined based on its Python type (bool, int, float, bytes, or None).
-        
-        Changelog:
-            - Version 0.1.9 (2024-03-19):
-                - New method.
-        """        
-        if obj is None or obj == '' or not isinstance(obj, str):
-            return type(obj).__name__ if obj is not None else 'None'
-        try:
-            obj = literal_eval(obj)
-        except (ValueError, SyntaxError):
-            pass
-        if isinstance(obj, (bool, bytes, int, type(None))):
-            return type(obj).__name__ if obj is not None else 'None'
-        if isinstance(obj, float):
-            return 'int' if obj.is_integer() else 'float'
-        try:
-            if _has_dateutil:
-                dt_obj = dateparser(obj, fuzzy=False, fuzzy_with_tokens=False, ignoretz=True)
-            else:
-                try:
-                    dt_obj = datetime.datetime.strptime(obj, datetime_format)
-                except:
-                    dt_obj = datetime.datetime.strptime(obj, date_format)
-            return 'datetime' if dt_obj.time() != datetime.time.min else 'date'
-        except:
-            pass
-        return 'str'
-    
-    @staticmethod
-    def infer_types_from_data(input_data:list[list], date_format:str='%Y-%m-%d', datetime_format:str='%Y-%m-%d %H:%M:%S') -> list[str]:
-        """
-        Infer the best types of ``input_data`` by using a simple presence-based voting scheme. Sampling is assumed prior to function call, treating ``input_data`` as already a sampled subset from the original data.
-
-        Parameters:
-            ``input_data`` (list[list]): A list of lists containing the input data.
-            ``date_format`` (str): The format string to use for parsing date values. Default is `'%Y-%m-%d'`.
-            ``datetime_format`` (str): The format string to use for parsing datetime values. Default is `'%Y-%m-%d %H:%M:%S'`.
-
-        Returns:
-            ``list``: A list representing the best-matching inferred types for each column based on the sampled data.
-            
-        Note:
-            - If multiple types are present in the samples, the most appropriate type is inferred based on certain rules.
-            - If a column contains both ``date`` and ``datetime`` instances, the type is inferred as ``datetime``.
-            - If a column contains both ``int`` and ``float`` instances, the type is inferred as ``float``.
-            - If a column contains only ``str`` instances or multiple types with no clear choice, the type remains as ``str``.
-            - See :meth:`SQLDataModel.infer_str_type()` for type determination process.
-        
-        Changelog:
-            - Version 0.1.9 (2024-03-19):
-                - New method.
-        """        
-        n_rows, n_cols = len(input_data), len(input_data[0])
-        rand_dtypes = [list(set([SQLDataModel.infer_str_type(input_data[i][j], date_format=date_format, datetime_format=datetime_format) for i in range(n_rows)])) for j in range(n_cols)]
-        parsed_dtypes = ['str' for _ in range(n_cols)] # default type
-        for cid in range(n_cols):
-            col_type_ocurx = rand_dtypes[cid]
-            if ('None' in col_type_ocurx) and (len(col_type_ocurx) > 1):
-                col_type_ocurx = [x for x in col_type_ocurx if x != 'None']
-            num_types = len(col_type_ocurx)
-            if 'str' in col_type_ocurx or num_types > 2 or num_types < 1:
-                continue # leave as is, too many types
-            if num_types == 1:
-                parsed_dtypes[cid] = col_type_ocurx[0]
-                continue
-            if num_types == 2:
-                if 'date' in col_type_ocurx and 'datetime' in col_type_ocurx:
-                    parsed_dtypes[cid] = 'datetime'
-                    continue
-                if 'int' in col_type_ocurx and 'float' in col_type_ocurx:
-                    parsed_dtypes[cid] = 'float'
-                    continue
-        return parsed_dtypes
-
-    @staticmethod
-    def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','str','bytes','date','datetime','NoneType','bool']='str', as_binding:bool=True, as_alias:bool=False):
-        """
-        Formats the specified param to be cast consistently into the python type specified for insert params or as a named alias param.
-
-        Parameters:
-            ``param`` (str): The parameter to be formatted.
-            ``dtype`` (Literal['None', 'int', 'float', 'str', 'bytes', 'date', 'datetime', 'NoneType', 'bool']): The python data type of the parameter as a string.
-            ``as_binding`` (bool, optional): Whether to format as a binding parameter (default is True).
-            ``as_alias`` (bool, optional): Whether to include an alias for the parameter (default is False).
-
-        Returns:
-            ``str``: The parameter formatted for SQL type casting.
-
-        Note:
-            - This function provides consistent formatting for casting parameters into specific data types for SQLite, changing it will lead to unexpected behaviors.
-            - Used by :meth:`SQLDataModel.__init__()` with ``as_binding=True`` to allow parameterized inserts to cast to appropriate data type.
-
-        Changelog:
-            - Version 0.7.6 (2024-06-16):
-                - Added support for additional date formats when ``dtype='date'`` including: ``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``.
-                - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
-            - Version 0.3.3 (2024-04-03):
-                - New method.
-        """
-        param_alias =  f'''as "{param}"''' if as_alias else ''''''
-        if dtype in ('str','None','NoneType'):
-            return '''CAST(NULLIF(NULLIF(?,'None'),'') as TEXT)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as TEXT) {param_alias}'''
-        elif dtype == 'int':
-            return '''CAST(NULLIF(NULLIF(?,'None'),'') as INTEGER)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as INTEGER) {param_alias}'''
-        elif dtype == 'float':
-            return '''CAST(NULLIF(NULLIF(?,'None'),'') as REAL)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as REAL) {param_alias}'''
-        elif dtype == 'bytes':
-            return """(SELECT CAST(CASE WHEN (SUBSTR(val,1,2) = 'b''' AND SUBSTR(val,-1,1) ='''') THEN SUBSTR(val,3,LENGTH(val)-3) ELSE NULLIF(NULLIF(val,'None'),'') END as BLOB) FROM (SELECT ? AS val))""" if as_binding else f"""CAST(CASE WHEN (SUBSTR("{param}",1,2) = 'b''' AND SUBSTR("{param}",-1,1) ='''') THEN SUBSTR("{param}",3,LENGTH("{param}")-3) ELSE NULLIF(NULLIF("{param}",'None'),'') END as BLOB) {param_alias} """
-        elif dtype == 'date':
-            return '''(SELECT CASE WHEN SUBSTR(val, 3, 1) = '-' THEN DATE(SUBSTR(val, 7, 4) || '-' ||SUBSTR(val, 1, 2) || '-' ||SUBSTR(val, 4, 2)) ELSE DATE(NULLIF(NULLIF(val, 'None'), '')) END FROM (SELECT REPLACE(REPLACE(?, '/', '-'), '.', '-') AS val))''' if as_binding else f'''CASE WHEN SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'),3,1) = '-' THEN DATE(SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 7, 4) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 1, 2) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 4, 2)) ELSE DATE(NULLIF(NULLIF(REPLACE(REPLACE("{param}",'/','-'),'.','-'),'None'),'')) END {param_alias} '''
-        elif dtype == 'datetime':
-            return '''DATETIME(NULLIF(NULLIF(?,'None'),''))''' if as_binding else f'''DATETIME(NULLIF(NULLIF("{param}",'None'),'')) {param_alias}'''
-        elif dtype == 'bool':
-            return '''CAST(CASE COALESCE(NULLIF(?,''),'None') WHEN 'None' THEN null WHEN 'False' THEN 0 WHEN '0' THEN 0 WHEN 0 THEN 0 ELSE 1 END as INTEGER)''' if as_binding else f'''CAST(CASE coalesce(NULLIF("{param}",''),'None') WHEN 'None' THEN null WHEN 'False' THEN 0 WHEN '0' THEN 0 WHEN 0 THEN 0 ELSE 1 END as INTEGER) {param_alias}'''
-        else:
-            return '''NULLIF(NULLIF(?,'None'),'')''' if as_binding else f'''NULLIF(NULLIF("{param}",'None'),'') {param_alias}'''
-        
-    @staticmethod
-    def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None, escape_newline:bool=False, truncation_chars:str='⠤⠄') -> str:
-        """
-        Formats SQLite SELECT clauses based on column parameters to provide preformatted fetches, providing most of the formatting for ``repr`` output.
-
-        Parameters:
-            ``column`` (str): The name of the column.
-            ``dtype`` (str): The data type of the column ('float', 'int', 'bytes', 'index', or 'custom').
-            ``max_pad_width`` (int): The maximum width to pad the output.
-            ``float_precision`` (int, optional): The precision for floating-point numbers (default is 4).
-            ``alignment`` (str, optional): The alignment of the output ('<', '>', or None for no alignment).
-            ``escape_newline`` (bool, optional): If newline characters should be escaped when ``dtype = 'str'``. Default is False.
-            ``truncation_chars`` (str, optional): Truncation characters to use if column exceeds maximum width. Default is ``'⠤⠄'``.
-
-        Returns:
-            ``str``: The formatted SELECT clause for SQLite.
-
-        Note:
-            - This function generates SQLite SELECT clauses for single column only.
-            - The output preformats SELECT result to fit ``repr`` method for tabular output.
-            - The return ``str`` is not valid SQL by itself, representing only the single column select portion.
-
-        Changelog:
-            - Version 0.11.0 (2024-07-05):
-                - Added ``truncation_chars`` keyword argument to allow custom truncation characters when column value exceeds maximum width.
-            - Version 0.10.4 (2024-07-03):
-                - Added ``escape_newline`` keyword argument to escape newline characters to prevent wrapping lines when called by :meth:`SQLDataModel.__repr__()`
-            - Version 0.7.0 (2024-06-08):
-                - Added preemptive check for custom flag to pass through string formatting directly to support horizontally centered repr changes.
-            - Version 0.1.9 (2024-03-19):
-                - New method.
-        """
-        if dtype == 'custom':
-            return f"""printf('%{max_pad_width}s', '{column}') """ # treats column as literal argument for string format substitution
-        if alignment is None: # dynamic alignment
-            if dtype == 'float':
-                select_item_fmt = f"""(CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s', '') WHEN LENGTH(printf('% .{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%.{max_pad_width}s', printf('% {max_pad_width}.{float_precision}f',"{column}")) ELSE SUBSTR(printf('% .{float_precision}f',"{column}"),1,{max_pad_width}-{len(truncation_chars)}) || '{truncation_chars}' END)"""
-            elif dtype == 'int':
-                select_item_fmt = f"""printf('%{max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-{len(truncation_chars)})||'{truncation_chars}' END) """
-            elif dtype == 'bytes':
-                select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}",1,({max_pad_width})-{len(truncation_chars)})||'{truncation_chars}' END) """
-            elif dtype == 'index':
-                select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
-            else:
-                column = f'"{column}"' if not escape_newline else  "".join((f'REPLACE("{column}",',"'\n','\\n')"))
-                select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN length({column}) <= ({max_pad_width}) THEN {column} ELSE substr({column},1,({max_pad_width})-{len(truncation_chars)})||'{truncation_chars}' END) """
-            return select_item_fmt
-        else: # left, right aligned
-            if alignment in ("<", ">"):
-                dyn_left_right = '-' if alignment == '<' else ''
-                if dtype == 'float':
-                    select_item_fmt = f"""(CASE WHEN "{column}" IS NULL THEN printf('%{dyn_left_right}{max_pad_width}s', '') WHEN LENGTH(printf('%{dyn_left_right}.{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%.{max_pad_width}s', printf('%{dyn_left_right}{max_pad_width}.{float_precision}f',"{column}")) ELSE SUBSTR(printf('%{dyn_left_right}.{float_precision}f',"{column}"),1,{max_pad_width}-{len(truncation_chars)}) || '{truncation_chars}' END)"""
-                elif dtype == 'bytes':
-                    select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}"||'''',1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END) """
-                elif dtype == 'index':
-                    select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
-                else:
-                    column = f'"{column}"' if not escape_newline else  "".join((f'REPLACE("{column}",',"'\n','\\n')"))
-                    select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN length({column}) <= ({max_pad_width}) THEN {column} ELSE substr({column},1,({max_pad_width})-{len(truncation_chars)})||'{truncation_chars}' END) """
-                return select_item_fmt            
-            else: # center aligned
-                if dtype == 'index':
-                    select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
-                else:
-                    # Negative numbers favor right side, positive the left when no even split is possible, use ON_UNEVEN_SPLIT_{DTYPE} = +1 to replicate pythons uneven break behavior, which is used by the headers
-                    ON_UNEVEN_SPLIT_FLOAT = 1 # break left
-                    ON_UNEVEN_SPLIT_INT = 1 # break left
-                    ON_UNEVEN_SPLIT_BYTES = 0 # break arbitrarily
-                    ON_UNEVEN_SPLIT_REMAINING = 1 # break left
-                    if dtype == 'float':
-                        col_discriminator = f"""(CASE WHEN LENGTH(printf('%.{float_precision}f',"{column}")) <= {max_pad_width} THEN (printf('%*.{float_precision}f',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_FLOAT} /* [Favor left (-) or right (+) on uneven split] */ - length(printf('%.{float_precision}f',"{column}")))/2),"{column}")) ELSE SUBSTR(printf('%.{float_precision}f',"{column}"),1,{max_pad_width}-{len(truncation_chars)}) || '{truncation_chars}' END)"""
-                    elif dtype == 'int':
-                        col_discriminator = f"""(CASE WHEN LENGTH("{column}") <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_INT} /* [Favor left (-) or right (+) on uneven split] */ - length("{column}"))/2),"{column}") ELSE SUBSTR(printf('%!s',"{column}"),1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END)"""                        
-                    elif dtype == 'bytes':
-                        col_discriminator = f"""(CASE WHEN LENGTH("{column}")+3 <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_BYTES} /* [Favor left (-) or right (+) on uneven split] */ - (length("{column}")+3))/2),('b'''||"{column}"||'''')) ELSE SUBSTR('b'''||"{column}"||'''',1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END)"""
-                    else:
-                        column = f'"{column}"' if not escape_newline else  "".join((f'REPLACE("{column}",',"'\n','\\n')"))
-                        col_discriminator = f"""(CASE WHEN LENGTH({column}) <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_REMAINING} /* [Favor left (-) or right (+) on uneven split] */ - length({column}))/2),{column}) ELSE SUBSTR(printf('%!s',{column}),1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END)"""
-                        string_only_select_item_fmt = f"""CASE WHEN {column} IS NULL THEN printf('%{max_pad_width}s',"") ELSE printf('%!-{max_pad_width}.{max_pad_width}s',{col_discriminator}) END"""
-                        return string_only_select_item_fmt
-                    select_item_fmt = f"""CASE WHEN "{column}" IS NULL THEN printf('%{max_pad_width}s',"") ELSE printf('%!-{max_pad_width}.{max_pad_width}s',{col_discriminator}) END"""
-        return select_item_fmt
-
-    @staticmethod
-    def alias_duplicates(headers:list) -> Generator:
-        """
-        Rename duplicate column names in a given list by appending an underscore and a numerical suffix.
-
-        Parameters:
-            ``headers`` (list): A list of column names that require parsing for duplicates.
-
-        Yields:
-            ``Generator``: A generator object that yields the original or modified column names.
-
-        Example::
-
-            from SQLDataModel import SQLDataModel
-
-            # Original list of column names with duplicates
-            original_headers = ['ID', 'Name', 'Amount', 'Name', 'Date', 'Amount']
-
-            # Use the static method to return a generator for the duplicates
-            renamed_generator = SQLDataModel.alias_duplicates(original_headers)
-
-            # Obtain the modified column names
-            modified_headers = list(renamed_generator)
-
-            # View modified column names
-            print(modified_headers)
-
-            # Output
-            modified_headers = ['ID', 'Name', 'Amount', 'Name_2', 'Date', 'Amount_2']
-        
-        Example of implementation for SQLDataModel:
-
-        ```python
-            # Given a list of headers
-            original_headers = ['ID', 'ID', 'Name', 'Name', 'Name', 'Unique']
-
-            # Create a separate list for aliasing duplicates
-            aliased_headers = list(SQLDataModel.alias_duplicates(original_headers))
-
-            # View aliases
-            for col, alias in zip(original_headers, aliased_headers):
-                print(f"{col} as {alias}")
-        ```
-
-        This will output:
-
-        ```shell
-            ID as ID
-            ID as ID_2
-            Name as Name
-            Name as Name_2
-            Name as Name_3
-            Unique as Unique
-        ```
-
-        Note:
-            - Used by :meth:`SQLDataModel.execute_fetch()` when column selection is unknown and may require duplicate aliasing.
-
-        Changelog:
-            - Version 0.3.4 (2024-04-05):
-                - Modified to re-alias partially aliased input to prevent runaway incrementation on suffixes.
-            - Version 0.1.9 (2024-03-19):
-                - New method.
-        """        
-        dupes = {}
-        for col in headers:
-            if col in dupes:
-                dupes[col] += 1
-                new_col = f"{col}_{dupes[col]}"
-                while new_col in headers:
-                    dupes[col] += 1
-                    new_col = f"{col}_{dupes[col]}"
-                yield new_col
-            else:
-                dupes[col] = 1
-                yield col
-    
-    @staticmethod
-    def flatten_json(json_source:list|dict, flatten_rows:bool=True, level_sep:str='_', key_prefix:str=None) -> dict:
-        """
-        Parses raw JSON data and flattens it into a dictionary with optional normalization.
-
-        Parameters:
-            ``json_source`` (dict | list): The raw JSON data to be parsed.
-            ``flatten_rows`` (bool): If True, the data will be normalized into columns and rows. If False,
-                columns will be concatenated from each row using the specified `key_prefix`.
-            ``level_sep`` (str): Separates nested levels from other levels and used to concatenate prefix to column.
-            ``key_prefix`` (str): The prefix to prepend to the JSON keys. If None, an empty string is used.
-
-        Returns:
-            ``dict``: A flattened dictionary representing the parsed JSON data.
-
-        Example::
-        
-            from SQLDataModel import SQLDataModel
-        
-            # Sample JSON
-            json_source = [{
-                "alpha": "A",
-                "value": 1
-            },  
-            {
-                "alpha": "B",
-                "value": 2
-            },
-            {
-                "alpha": "C",
-                "value": 3
-            }]
-
-            # Flatten JSON with normalization
-            flattened_data = flatten_json(json_data, flatten_rows=True)
-
-            # Format of result
-            flattened_data = {"alpha": ['A','B','C'], "value": [1, 2, 3]}
-
-            # Alternatively, flatten columns without rows and adding a prefix
-            flattened_data = flatten_json(raw_input,key_prefix='row_',flatten_rows=False)
-
-            # Format of result
-            flattened_data = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
-
-        Note:
-            - Used by :meth:`SQLDataModel.from_dict()` to flatten deeply nested JSON objects into 2 dimensions when encountered.
-
-        Changelog:
-            - Version 0.1.9 (2024-03-19):
-                - New method.
-        """
-        if isinstance(json_source, dict):
-            json_source = [json_source]
-        key_prefix = key_prefix if key_prefix is not None else ''
-        headers, rows, output = [], [], {}
-        def flatten(x:list|dict, pref:str='', cols:list=[], rows:list=[]):
-            if isinstance(x, dict):
-                for a in x:
-                    flatten(x[a], pref + a + level_sep, cols=cols)
-            elif isinstance(x, list):
-                i = 0
-                for a in x:
-                    flatten(a, pref + f"{i}" + level_sep, cols=cols)
-                    if i not in rows:
-                        rows.append(i)
-                    i += 1
-            else:
-                output[pref[:-1]] = x
-                col_id = pref[len(key_prefix):-1].split(level_sep,1)[-1]
-                if col_id not in cols:
-                    cols.append(col_id)
-        flatten(json_source, pref=key_prefix, cols=headers, rows=rows)
-        if not flatten_rows:
-            return output
-        flat_dict = {col:[] for col in headers}
-        for col in headers:
-            for rfound in rows:
-                rowcol = f"{key_prefix}{rfound}_{col}"
-                if rowcol in output:
-                    flat_dict[col].append(output[rowcol])
-                else:
-                    flat_dict[col].append(None)
-        return flat_dict
-
-    @staticmethod
-    def _parse_connection_url(url:str) -> NamedTuple:
-        """
-        Parses database connection url into component parameters and returns the parsed components as a NamedTuple
-
-        Parameters:
-            ``url`` (str): The url connection string provided in the format of ``'scheme://user:pass@host:port/path'``
-        
-        Raises:
-            ``AttributeError``: If ``url`` provided could not be parsed into expected component properties.
-            ``ValueError``: If scheme is not provided or is not one of the currently supported driver formats or module aliases below
-                SQLite: ``'file'`` or ``'sqlite3'``
-                PostgreSQL: ``'postgresql'`` or ``'psycopg2'``
-                SQL Server ODBC: ``'mssql'`` or ``'pyodbc'``
-                Oracle: ``'oracle'`` or ``'cx_oracle'``
-                Teradata: ``'teradata'`` or ``'teradatasql'``
-
-        Returns:
-            ``ConnectionDetails``: The parsed details as ``ConnectionDetails('scheme', 'user', 'cred', 'host', 'port', 'db')``
-        
-        Supported Formats:
-            - SQLite using ``sqlite3`` with format ``'file:///path/to/database.db'``
-            - PostgreSQL using ``psycopg2`` with format ``'postgresql://user:pass@hostname:port/db'``
-            - SQL Server ODBC using ``pyodbc`` with format ``'mssql://user:pass@hostname:port/db'``
-            - Oracle using ``cx_Oracle`` with format ``'oracle://user:pass@hostname:port/db'``
-            - Teradata using ``teradatasql`` with format ``'teradata://user:pass@hostname:port/db'``
-        
-        Example::
-
-            from SQLDataModel import SQLDataModel
-
-            # SQLite connection url
-            url = 'file:///home/database/users.db'
-
-            # Parse the connection properties
-            url_props = SQLDataModel._parse_connection_url(url)
-
-            # View attributes
-            print(url_props)
-        
-        This will output the connection details for a local SQLite database file:
-
-        ```text
-            ConnectionDetails(
-                scheme='file', user=None, cred=None, host=None, port=None, db='/home/database/users.db'
-            )
-        ```
-
-        PostgreSQL connections can be parsed from a valid format:
-
-        ```python
-            from SQLDataModel import SQLDataModel
-
-            # PostgreSQL connection url
-            url = 'postgresql://scott:tiger@12.34.56.78:5432/pgdb'
-
-            # Parse the connection properties
-            url_props = SQLDataModel._parse_connection_url(url)
-
-            # View attributes
-            print(url_props)
-        ```
-
-        This will output the connection details for a PostgreSQL connection:
-
-        ```text
-            ConnectionDetails(
-                scheme='postgresql', user='scott', cred='tiger', host='12.34.56.78', port=5432, db='pgdb'
-            )
-        ```
-
-        Note:
-            - This method is used by :meth:`SQLDataModel._create_connection()` to parse details from url and create a connection object.
-            - This method can be used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parsed connection details when connection parameter provided as string.
-
-        Changelog:
-            - Version 0.9.3 (2024-06-28):
-                - Modified behavior when ``scheme`` is not provided, treating as file path when parsed in absence of auth related properties to retain prior version behavior of creating new sqlite3 database file when path is provided.
-                - Added driver module names as valid aliases for relevant connection drivers, valid schemes now include 'file', 'sqlite3', 'postgresql', 'psycopg2', 'mssql', 'pyodbc', 'oracle', 'cx_oracle', 'teradata', 'teradatasql'
-            - Version 0.9.2 (2024-06-27):
-                - Modified to use ``urllib.parse.urlparse`` instead of added 3rd party package dependency.
-            - Version 0.9.1 (2024-06-27):
-                - New method.
-        """
-        ConnectionDetails = namedtuple('ConnectionDetails', ['scheme', 'user', 'cred', 'host', 'port', 'db'])
-        # valid_connection_drivers: file|sqlite3, mssql|pyodbc, postgresql|psycopg2, oracle|cx_oracle or teradata|teradatasql
-        url = url.replace("cx_oracle", "cxoracle", 1) # Handle cx_oracle being interpreted as relative filepath
-        is_windows = re.match(r"^[a-zA-Z]:\\", url) # Handle Windows paths by detecting them using a regex
-        if is_windows:
-            url = "".join(("file:///", url.replace('\\', '/')))
-        try:
-            url_details = urlparse(url)
-        except Exception as e:
-            raise type(e)(
-                ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to parse connection url: '{url}'")
-            ).with_traceback(e.__traceback__) from None         
-        user, cred, host = url_details.username, url_details.password, url_details.hostname
-        port, db = url_details.port, url_details.path
-        scheme = url_details.scheme.lower() if url_details.scheme else 'file'
-        if scheme not in ('file','sqlite3','postgresql','psycopg2','mssql','pyodbc','oracle','cxoracle','teradata','teradatasql'):
-            raise ValueError(
-                ErrorFormat(f"ValueError: invalid scheme '{scheme}', scheme must be one of 'file', 'postgresql', 'mssql', 'oracle' or 'teradata'")
-            )        
-        db = db.lstrip('/') if ((db is not None and scheme not in ('file','sqlite3')) or (scheme in ('file','sqlite3') and is_windows)) else db
-        return ConnectionDetails(scheme=scheme, user=user, cred=cred, host=host, port=port, db=db)
-    
-    @staticmethod
-    def _create_connection(url:str) -> sqlite3.Connection|Any:
-        """
-        Parses database connection url into component parameters and creates the specified connection.
-        
-        Parameters:
-            ``url`` (str): The url connection string provided in the format of ``'scheme://user:pass@host:port/path'``
-        
-        Raises:
-            ``ValueError``: If scheme is provided and not one of the currently supported driver formats.
-            ``ModuleNotFoundError``: If required driver for specified scheme is not installed or not found.
-
-        Returns:
-            ``Connection`` (sqlite3.Connection | Any): The driver connection object for the scheme specified.
-        
-        Supported Formats:
-            - SQLite using ``sqlite3`` with format ``'file:///path/to/database.db'``
-            - PostgreSQL using ``psycopg2`` with format ``'postgresql://user:pass@hostname:port/db'``
-            - SQL Server ODBC using ``pyodbc`` with format ``'mssql://user:pass@hostname:port/db'``
-            - Oracle using ``cx_Oracle`` with format ``'oracle://user:pass@hostname:port/db'``
-            - Teradata using ``teradatasql`` with format ``'teradata://user:pass@hostname:port/db'``
-
-        Examples:
-
-        SQLite
-        ------
-
-        ```python
-            from SQLDataModel import SQLDataModel
-
-            # SQLite connection url
-            url = 'file:///home/database/users.db'
-
-            # Parse and create sqlite3 connection
-            conn = SQLDataModel._create_connection(url)
-        ```
-        
-        PostgreSQL
-        ----------
-
-        ```python
-            from SQLDataModel import SQLDataModel
-
-            # Sample url
-            url = 'postgresql://scott:tiger@12.34.56.78:5432/pgdb'
-
-            # Parse and create psycopg2 connection
-            conn = SQLDataModel._create_connection(url)
-        ```
-
-        Note:
-            - Used by :meth:`SQLDataModel.from_sql()` and :meth:`SQLDataModel.to_sql()` to parse and create connection objects from url.
-            - See :meth:`SQLDataModel._parse_connection_url()` for implementation on parsing url properties from connection string.
-
-        Changelog:
-            - Version 0.9.2 (2024-06-27):
-                - New method.
-        """
-        url_props = SQLDataModel._parse_connection_url(url)
-        driver = url_props.scheme
-        # Valid drivers: ('file','sqlite3') or ('postgresql','psycopg2') or ('mssql','pyodbc') or ('oracle','cxoracle') or ('teradata','teradatasql')
-        if driver in ('file', 'sqlite3'):
-            try:
-                conn = sqlite3.connect(url_props.db)
-            except Exception as e:
-                raise type(e)(
-                    ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open sqlite3 connection")
-                ).with_traceback(e.__traceback__) from None                  
-        elif driver in ('postgresql', 'psycopg2'):
-            try:
-                import psycopg2
-            except ModuleNotFoundError:
-                raise ModuleNotFoundError(
-                    ErrorFormat(f"ModuleNotFoundError: required package not found, 'psycopg2' must be installed in order to use a PostgreSQL connection driver")
-                ) from None
-            try:
-                conn = psycopg2.connect(host=url_props.host,database=url_props.db,user=url_props.user,password=url_props.cred,port=url_props.port)
-            except Exception as e:
-                raise type(e)(
-                    ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open psycopg2 connection")
-                ).with_traceback(e.__traceback__) from None                  
-        elif driver in ('mssql', 'pyodbc'):
-            try:
-                import pyodbc
-            except ModuleNotFoundError:
-                raise ModuleNotFoundError(
-                    ErrorFormat(f"ModuleNotFoundError: required package not found, 'pyodbc' must be installed in order to use a SQL Servier connection driver")
-                ) from None
-            try:
-                conn = pyodbc.connect(driver='{ODBC Driver 17 for SQL Server}',server=f'{url_props.host},{url_props.port}' if url_props.port else f'{url_props.host}' ,database=url_props.db,uid=url_props.user,pwd=url_props.cred)
-            except Exception as e:
-                raise type(e)(
-                    ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open pyodbc connection")
-                ).with_traceback(e.__traceback__) from None                   
-        elif driver in ('oracle', 'cxoracle'):
-            try:
-                import cx_Oracle
-            except ModuleNotFoundError:
-                raise ModuleNotFoundError(
-                    ErrorFormat(f"ModuleNotFoundError: required package not found, 'cx_Oracle' must be installed in order to use an Oracle connection driver")
-                ) from None        
-            try:    
-                conn = cx_Oracle.connect(user=url_props.user, password=url_props.cred, dsn=f"{url_props.host}:{url_props.port}/{url_props.db}")            
-            except Exception as e:
-                raise type(e)(
-                    ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open cx_Oracle connection")
-                ).with_traceback(e.__traceback__) from None                   
-        elif driver in ('teradata', 'teradatasql'):
-            try:
-                import teradatasql
-            except ModuleNotFoundError:
-                raise ModuleNotFoundError(
-                    ErrorFormat(f"ModuleNotFoundError: required package not found, 'teradatasql' must be installed in order to use an Oracle connection driver")
-                ) from None        
-            try:
-                conn = teradatasql.connect(host=url_props.host, user=url_props.user, password=url_props.cred, encryptdata='true')
-            except Exception as e:
-                raise type(e)(
-                    ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open teradatasql connection")
-                ).with_traceback(e.__traceback__) from None                
-        return conn
-    
 #############################################################################################################
 ######################################### columns & display params ##########################################
 #############################################################################################################
@@ -1263,7 +556,7 @@ class SQLDataModel:
         
         Examples::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data
             headers = ['Name', 'Age', 'Gender', 'City']
@@ -1276,13 +569,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data,headers)
+            df = sdm.SQLDataModel(data,headers)
 
             # Drop the 'Gender' column
-            sdm.drop_column('Gender')
+            df.drop_column('Gender')
 
             # View updated model
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -1303,10 +596,10 @@ class SQLDataModel:
 
         ```python
             # Drop first and last columns by index
-            sdm.drop_column([0,-1])
+            df.drop_column([0,-1])
 
             # View updated model
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -1328,10 +621,10 @@ class SQLDataModel:
 
         ```python
             # Drop the multiple columns and return as a new model
-            sdm = sdm.drop_column(['Age','Gender'], inplace=False)
+            df = df.drop_column(['Age','Gender'], inplace=False)
 
             # View updated model    
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -1394,7 +687,7 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['Rank', 'Location', 'Population']
             data = [(1, "Tokyo, Japan", 37.4),
@@ -1409,16 +702,16 @@ class SQLDataModel:
                     (10,"Osaka, Japan", 19.1)]
 
             # Create the sample model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Drop the last row
-            sdm.drop_row(-1)
+            df.drop_row(-1)
 
             # Drop rows based on condition of less than 25 Million population
-            sdm.drop_row(sdm['Population'] < 25.0)
+            df.drop_row(df['Population'] < 25.0)
 
             # View result
-            print(sdm)  
+            print(df)  
 
         This will output:
 
@@ -1437,16 +730,16 @@ class SQLDataModel:
 
         ```python
             # Create a new model using the same sample data
-            sdm = SQLDataModel(data, headers)
+            df = SQLDataModel(data, headers)
 
             # Set row indicies to drop
             row_indices = range(0, 5) # or [0, 1, 2, 3, 4]
 
             # Drop top 5 cities and return as a new model
-            sdm_new = sdm.drop_row(row_indices, inplace=False)
+            df_new = df.drop_row(row_indices, inplace=False)
 
             # View new model
-            print(sdm_new)
+            print(df_new)
         ```
 
         This will output:
@@ -1506,7 +799,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age']
             data = [
@@ -1517,13 +810,13 @@ class SQLDataModel:
             ]
 
             # Create the model with sample data
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Example: Rename the column at index 1 to 'first_name'
-            sdm.rename_column(1, 'first_name')
+            df.rename_column(1, 'first_name')
 
             # Get current values
-            new_headers = sdm.get_headers()
+            new_headers = df.get_headers()
 
             # Outputs ['first_name', 'last', 'age']
             print(new_headers)
@@ -1566,7 +859,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age']
             data = [
@@ -1577,13 +870,13 @@ class SQLDataModel:
             ]
 
             # Create the model with sample data
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Example: Rename the column at index 1 to 'first_name'
-            sdm.rename_column(1, 'first_name')
+            df.rename_column(1, 'first_name')
 
             # Get current values
-            new_headers = sdm.get_headers()
+            new_headers = df.get_headers()
 
             # Outputs ['first_name', 'last', 'age']
             print(new_headers)
@@ -1617,16 +910,16 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
             # Set new headers
-            sdm.rename_headers(['First_Name', 'Last_Name', 'Payment'])
+            df.rename_headers(['First_Name', 'Last_Name', 'Payment'])
 
             # Alternatively, provide a callable argument to transform headers using existing names
-            sdm.rename_headers(lambda headers: [header.replace(' ', '_') for header in headers])
+            df.rename_headers(lambda headers: [header.replace(' ', '_') for header in headers])
         
         Changelog:
             - Version 1.2.0 (2025-01-28):
@@ -1653,7 +946,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['first', 'last', 'age', 'service']
             data = [
@@ -1664,13 +957,13 @@ class SQLDataModel:
             ]        
 
             # Create the model
-            sdm = SQLDataModel(data, headers,display_float_precision=2, display_index=False)
+            df = sdm.SQLDataModel(data, headers,display_float_precision=2, display_index=False)
 
             # Replace 'John' in the 'first' column
-            sdm['first'] = sdm['first'].replace("John","Jane")
+            df['first'] = df['first'].replace("John","Jane")
             
             # View model
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -1720,13 +1013,13 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
             # Get current model headers
-            headers = sdm.get_headers()
+            headers = df.get_headers()
 
             # Display values
             print(headers) # outputs: ['First Name', 'Last Name', 'Salary']
@@ -1755,16 +1048,16 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
             # Set new headers
-            sdm.set_headers(['First_Name', 'Last_Name', 'Payment'])
+            df.set_headers(['First_Name', 'Last_Name', 'Payment'])
 
             # Alternatively, provide a callable argument to transform headers using existing names
-            sdm.set_headers(lambda headers: [header.replace(' ', '_') for header in headers])
+            df.set_headers(lambda headers: [header.replace(' ', '_') for header in headers])
         
         Changelog:
             - Version 1.2.0 (2025-01-28):
@@ -1808,33 +1101,33 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
             # Use default normalization scheme, uncased and strips invalid SQL identifiers
-            sdm.normalize_headers()
+            df.normalize_headers()
 
             # Get renamed headers after default normalization
-            sdm.get_headers() # now outputs ['first_name', 'last_name', 'salary']
+            df.get_headers() # now outputs ['first_name', 'last_name', 'salary']
 
             # Or use custom renaming scheme
-            sdm.normalize_headers(lambda x: x.upper())
+            df.normalize_headers(lambda x: x.upper())
 
             # Get renamed headers again
-            sdm.get_headers() # now outputs ['FIRST_NAME', 'LAST_NAME', 'SALARY']
+            df.get_headers() # now outputs ['FIRST_NAME', 'LAST_NAME', 'SALARY']
         
         Changelog:
             - Version 1.2.0 (2025-01-28):
-                - Added duplicate aliasing to prevent post-normalization name collisions using :meth:`SQLDataModel.alias_duplicates`
+                - Added duplicate aliasing to prevent post-normalization name collisions using :meth:`utils.alias_duplicates`
                 - Modified default normalization function to better handle occurrences of multiple invalid characters.
             - Version 0.1.5 (2023-11-24):
                 - New method.            
         """
         if apply_function is None:
             apply_function = lambda x: re.sub(r'[^0-9a-z]+', '_', x.lower().strip()).strip('_')
-        new_headers = list(SQLDataModel.alias_duplicates([apply_function(x) for x in self.get_headers()]))
+        new_headers = list(utils.alias_duplicates([apply_function(x) for x in self.get_headers()]))
         self.set_headers(new_headers)
 
     def get_display_max_rows(self) -> int|None:
@@ -1846,13 +1139,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Get current value
-            display_max_rows = sdm.get_display_max_rows()
+            display_max_rows = df.get_display_max_rows()
 
             # By default rows will be limited by current terminal height
             print(display_max_rows) # None
@@ -1883,16 +1176,16 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Any call to `print` or `repr` will be restricted to 500 max rows
-            sdm.set_display_max_rows(500)
+            df.set_display_max_rows(500)
 
             # Alternatively, auto-detect dimensions by setting to `None`
-            sdm.set_display_max_rows(None)
+            df.set_display_max_rows(None)
         
         Note:
             - Modifying :py:attr:`SQLDataModel.display_max_rows` does not affect the actual number of rows in the model, only the maximum rows **displayed**.
@@ -1920,13 +1213,13 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Get and save the current value
-            min_width = sdm.get_min_column_width()
+            min_width = df.get_min_column_width()
 
             # Output
             print(min_width)  # 6
@@ -1946,16 +1239,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Set a new minimum column width value
-            sdm.set_min_column_width(8)
+            df.set_min_column_width(8)
 
             # Check updated value
-            print(sdm.min_column_width) # 8
+            print(df.min_column_width) # 8
         
         Note:
             - If ``min_column_width`` is set to a value below the current ``max_column_width`` property, the maximum width will override the minimum width.
@@ -1973,13 +1266,13 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Get the current max column width value
-            max_width = sdm.get_max_column_width()
+            max_width = df.get_max_column_width()
 
             # Output
             print(max_width)  # 32
@@ -1999,13 +1292,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Change the max column width for the table representation
-            sdm.set_max_column_width(20)
+            df.set_max_column_width(20)
         
         Note:
             - If ``max_column_width`` is set to a value below the current ``min_column_width`` property, the maximum width will override the minimum width.
@@ -2023,13 +1316,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Get the current alignment value
-            alignment = sdm.get_column_alignment()
+            alignment = df.get_column_alignment()
 
             # Outputs 'dynamic'
             print(alignment)
@@ -2060,16 +1353,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Set to right-align columns
-            sdm.set_column_alignment('right')
+            df.set_column_alignment('right')
 
             # Output
-            print(sdm)
+            print(df)
         
         This will output the model with values right-aligned:
 
@@ -2091,7 +1384,7 @@ class SQLDataModel:
             sdm.set_column_alignment('left')
 
             # Output
-            print(sdm)
+            print(df)
         ```
 
         This will output the model with left-aligned values instead:
@@ -2137,13 +1430,13 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Get the current value for displaying the index
-            display_index = sdm.get_display_index()
+            display_index = df.get_display_index()
 
             # Output: True
             print(display_index)
@@ -2173,13 +1466,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Disable displaying index
-            sdm.set_display_index(False)
+            df.set_display_index(False)
 
         Note:
             - Use :meth:`SQLDataModel.set_table_style()` to more broadly modify the appearance and formatting style of ``SQLDataModel`` string representations.
@@ -2203,7 +1496,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
             sdm = SQLDataModel([[1,2,3],
@@ -2211,7 +1504,7 @@ class SQLDataModel:
                                 [7,8,9]])
 
             # Get the current shape
-            shape = sdm.get_shape()
+            shape = df.get_shape()
 
             # View it
             print("shape:", shape)
@@ -2225,10 +1518,10 @@ class SQLDataModel:
         The shape can also be seen when printing the model:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel([[1,2,3],
+            df = sdm.SQLDataModel([[1,2,3],
                                 [4,5,6],
                                 [7,8,9]])
 
@@ -2251,7 +1544,7 @@ class SQLDataModel:
 
         Note:
             - If an empty model is initialized, the :py:attr:`SQLDataModel.row_count` will be 0 until the first row is inserted.
-            - Using the :meth:`SQLDataModel.__getitem__()` syntax of ``sdm[row, col]`` returns a new model instance with the corresponding shape.
+            - Using the :meth:`SQLDataModel.__getitem__()` syntax of ``df[row, col]`` returns a new model instance with the corresponding shape.
 
         Changelog:
             - Version 0.3.6 (2024-04-09):
@@ -2296,7 +1589,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age', 'service_time']
             data = [
@@ -2307,13 +1600,13 @@ class SQLDataModel:
             ]
 
             # Create the model with sample data
-            sdm = SQLDataModel(data,headers)
+            df = sdm.SQLDataModel(data,headers)
 
             # Example: Set the float display precision to 2
-            sdm.set_display_float_precision(2)
+            df.set_display_float_precision(2)
 
             # View model
-            print(sdm)
+            print(df)
 
         This will output:
         
@@ -2423,13 +1716,13 @@ class SQLDataModel:
         
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('employees.csv')
+            df = sdm.from_csv('employees.csv')
 
             # View all 10 rows
-            print(sdm)
+            print(df)
 
         This will output:
         
@@ -2455,10 +1748,10 @@ class SQLDataModel:
 
         ```python
             # Generate statistics
-            sdm_described = sdm.describe()
+            df_described = df.describe()
 
             # View stats
-            print(sdm_described)
+            print(df_described)
         ```
 
         This will output:
@@ -2487,10 +1780,10 @@ class SQLDataModel:
 
         ```python
             # Set filters to exclude all str dtypes and the 'hire_date' column:
-            sdm_describe = sdm.describe(exclude_dtypes=['str'], exclude_columns=['hire_date'])
+            df_describe = df.describe(exclude_dtypes=['str'], exclude_columns=['hire_date'])
 
             # View statistics
-            print(sdm_described)
+            print(df_described)
         ```
 
         This will output:
@@ -2591,19 +1884,19 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Amount'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Amount'])
             
             # Example 1: Sample 10 random rows
-            sample_result = sdm.sample(n_samples=10)
+            sample_result = df.sample(n_samples=10)
 
             # Create the model
-            sdm2 = SQLDataModel.from_csv('another_example.csv', headers=['Code', 'Description', 'Price'])
+            df2 = sdm.from_csv('another_example.csv', headers=['Code', 'Description', 'Price'])
             
             # Example 2: Sample 20% of rows
-            sample_result2 = sdm2.sample(n_samples=0.2)
+            sample_result2 = df2.sample(n_samples=0.2)
 
         Note:
             - If the current model's :py:attr:`SQLDataModel.row_count` value is less than the sample size, the current row count will be used instead.
@@ -2650,7 +1943,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data of ``str`` containing probable datatypes
             headers = ['first', 'last', 'age', 'service', 'hire_date']
@@ -2663,16 +1956,16 @@ class SQLDataModel:
             ]     
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
             
             # Get current column dtypes for reference
-            dtypes_before = sdm.get_column_dtypes()
+            dtypes_before = df.get_column_dtypes()
 
             # Infer and set data types based on 10 random samples
-            sdm.infer_dtypes(n_samples=10)
+            df.infer_dtypes(n_samples=10)
 
             # View updated model
-            print(sdm)
+            print(df)
 
         This will output data with dtypes correctly aligned:
         
@@ -2693,10 +1986,10 @@ class SQLDataModel:
         
         ```python
             # Get new column types to confirm
-            dtypes_after = sdm.get_column_dtypes()
+            dtypes_after = df.get_column_dtypes()
 
             # View updated dtypes
-            for col in sdm.headers:
+            for col in df.headers:
                 print(f"{col:<10} {dtypes_before[col]} -> {dtypes_after[col]}")
         ```
 
@@ -2718,7 +2011,7 @@ class SQLDataModel:
             - Ties between dtypes are broken according to `current type` < ``str`` < ``float`` < ``int`` < ``datetime`` < ``date`` < ``bytes`` < ``None``
             - This method calls :meth:`SQLDataModel.set_column_dtypes()` once the column dtypes have been inferred if they differ from the current dtype.
             - See :meth:`SQLDataModel.infer_str_type()` for type determination process.
-            - See :meth:`SQLDataModel.infer_types_from_data()` for type voting scheme used for inference.
+            - See :meth:`utils.infer_types_from_data()` for type voting scheme used for inference.
 
         Changelog:
             - Version 0.2.0 (2024-03-19):
@@ -2752,7 +2045,7 @@ class SQLDataModel:
         row_targets = row_targets if len(row_targets) > 1 else f"({row_targets[0]})"
         fetch_str_dtype_stmt = " ".join((f"""select""", ",".join([f'trim("{col}")' for col in str_columns]),f"""from "{self.sql_model}" where "{self.sql_idx}" in {row_targets} """))
         sample_data = self.sql_db_conn.execute(fetch_str_dtype_stmt).fetchall()
-        sample_types = SQLDataModel.infer_types_from_data(input_data=sample_data, date_format=date_format, datetime_format=datetime_format)
+        sample_types = utils.infer_types_from_data(input_data=sample_data, date_format=date_format, datetime_format=datetime_format)
         for col, dtype in zip(str_columns, sample_types):
             if dtype != 'str':
                 self.set_column_dtypes(column=col, dtype=dtype)
@@ -2784,13 +2077,13 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a 3x3 model filled by 'X'
-            sdm = SQLDataModel.from_shape((3,3), fill='X')            
+            df = sdm.from_shape((3,3), fill='X')            
 
             # View it
-            print(sdm)
+            print(df)
             
         This will output a 3x3 grid of 'X' characters:
 
@@ -2808,13 +2101,13 @@ class SQLDataModel:
         We can iteratively build the model from the shape dimensions:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Define shape
             shape = (6,6)
             
             # Initialize the multiplcation table with integer dtypes
-            mult_table = SQLDataModel.from_shape(shape=shape, dtype='int')
+            mult_table = sdm.from_shape(shape=shape, dtype='int')
 
             # Construct the table values
             for x in range(shape[0]):
@@ -2922,20 +2215,20 @@ class SQLDataModel:
         -------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # CSV file path or raw CSV string
             csv_source = "/path/to/data.csv"
 
             # Create the model using the CSV file, providing custom headers
-            sdm = SQLDataModel.from_csv(csv_source, headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv(csv_source, headers=['ID', 'Name', 'Value'])
         ```
 
         From CSV Literal
         ----------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # CSV data
             data = '''
@@ -2946,10 +2239,10 @@ class SQLDataModel:
             '''
 
             # Create the model
-            sdm = SQLDataModel.from_csv(data)
+            df = sdm.from_csv(data)
 
             # View result
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3046,16 +2339,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create SQLDataModel from a CSV file
-            sdm_csv = SQLDataModel.from_data("data.csv", headers=['ID', 'Name', 'Value'])
+            df_csv = sdm.from_data("data.csv", headers=['ID', 'Name', 'Value'])
 
             # Create SQLDataModel from a dictionary
-            sdm_dict = SQLDataModel.from_data({"ID": int, "Name": str, "Value": float})
+            df_dict = sdm.from_data({"ID": int, "Name": str, "Value": float})
 
             # Create SQLDataModel from a list of tuples
-            sdm_list = SQLDataModel.from_data([(1, 'Alice', 100.0), (2, 'Bob', 200.0)], headers=['ID', 'Name', 'Value'])
+            df_list = sdm.from_data([(1, 'Alice', 100.0), (2, 'Bob', 200.0)], headers=['ID', 'Name', 'Value'])
 
             # Create SQLDataModel from raw string literal
             delimited_literal = '''
@@ -3066,10 +2359,10 @@ class SQLDataModel:
             '''
 
             # Create the model by having correct constructor inferred
-            sdm = SQLDataModel.from_data(delimited_literal)
+            df = sdm.from_data(delimited_literal)
 
             # View output
-            print(sdm)
+            print(df)
         
         This will output:
         
@@ -3199,7 +2492,7 @@ class SQLDataModel:
         ----------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Space delimited literal
             source_data = '''
@@ -3210,10 +2503,10 @@ class SQLDataModel:
             Will 35 185.8'''
 
             # Create the model
-            sdm = SQLDataModel.from_delimited(source_data)
+            df = sdm.from_delimited(source_data)
 
             # View output
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3234,13 +2527,13 @@ class SQLDataModel:
         -------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Tab separated file
             tsv_file = 'persons.tsv'
 
             # Create the model
-            sdm = SQLDataModel.from_delimited(tsv_file)
+            df = sdm.from_delimited(tsv_file)
         ```
 
         Note:
@@ -3304,7 +2597,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data with column orientation
             data = {
@@ -3314,10 +2607,10 @@ class SQLDataModel:
             }
 
             # Create the model
-            sdm = SQLDataModel.from_dict(data)
+            df = sdm.from_dict(data)
 
             # View it
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -3336,7 +2629,7 @@ class SQLDataModel:
         We can also create a model using a dictionary with row orientation:
         
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data with row orientation
             data = {
@@ -3347,10 +2640,10 @@ class SQLDataModel:
             }
 
             # Create the model with custom headers
-            sdm = SQLDataModel.from_dict(data, headers=['Planet', 'Gravity'])
+            df = sdm.from_dict(data, headers=['Planet', 'Gravity'])
 
             # View output
-            print(sdm)
+            print(df)
         ```
 
         This will output the model created using row-wise dictionary data:
@@ -3428,7 +2721,7 @@ class SQLDataModel:
             ``**kwargs``: Additional keyword arguments to pass to the ``SQLDataModel`` constructor.
 
         Raises:
-            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``_has_xl`` flag.
+            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``optionals._has_xl`` flag.
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid Excel file path.
             ``Exception``: If an error occurs during Excel read and write operations related to openpyxl processing.
 
@@ -3456,13 +2749,13 @@ class SQLDataModel:
         Example 1: Load Excel file with default parameters
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model using the default parameters
-            sdm = SQLDataModel.from_excel('data.xlsx')
+            df = sdm.from_excel('data.xlsx')
 
             # View imported data
-            print(sdm)
+            print(df)
         ```
 
         This will output all of the data starting from 'A1':
@@ -3483,13 +2776,13 @@ class SQLDataModel:
         Example 2: Load Excel file from specific worksheet
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model from 'Sheet2'
-            sdm = SQLDataModel.from_excel('data.xlsx', worksheet='Sheet2')
+            df = sdm.from_excel('data.xlsx', worksheet='Sheet2')
 
             # View imported data
-            print(sdm)
+            print(df)
         ```
         
         This will output the contents of 'Sheet2':
@@ -3507,16 +2800,16 @@ class SQLDataModel:
         Example 3: Load Excel file with custom headers starting from different row
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Use our own headers instead of the Excel ones
             new_cols = ['Col A', 'Col B', 'Col C', 'Col D']
 
             # Create the model starting from the 2nd row to ignore the original headers
-            sdm = SQLDataModel.from_excel('data.xlsx', min_row=2, headers=new_cols)
+            df = sdm.from_excel('data.xlsx', min_row=2, headers=new_cols)
 
             # View the data
-            print(sdm)
+            print(df)
         ```
 
         This will output the data with our renamed headers:
@@ -3537,13 +2830,13 @@ class SQLDataModel:
         Example 4: Load Excel file with specific subset of columns
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model using the middle two columns only
-            sdm = SQLDataModel.from_excel('data.xlsx', min_col=2, max_col=3)
+            df = sdm.from_excel('data.xlsx', min_col=2, max_col=3)
 
             # View the data
-            print(sdm)
+            print(df)
         ```        
 
         This will output only the middle two columns:
@@ -3571,7 +2864,7 @@ class SQLDataModel:
             - Version 0.2.2 (2024-03-26):
                 - New method.
         """
-        if not _has_xl:
+        if not optionals._has_xl:
             raise ModuleNotFoundError(
                 ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method")
             )
@@ -3580,6 +2873,7 @@ class SQLDataModel:
                 ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid Excel file path")
             )        
         try:
+            _xl = optionals._get_xl()
             wb = _xl.load_workbook(filename=filename, read_only=True)
             ws = wb.worksheets[worksheet] if isinstance(worksheet, int) else wb[worksheet]
             data = [row for row in ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col, values_only=True)]
@@ -3614,7 +2908,7 @@ class SQLDataModel:
         ------------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample JSON string
             json_data = '''[{
@@ -3634,10 +2928,10 @@ class SQLDataModel:
             }]'''   
 
             # Create the model
-            sdm = SQLDataModel.from_json(json_data)
+            df = sdm.from_json(json_data)
 
             # View result
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3657,7 +2951,7 @@ class SQLDataModel:
         ---------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # JSON-like sample
             json_data = [{
@@ -3674,10 +2968,10 @@ class SQLDataModel:
             }]
 
             # Create the model
-            sdm = SQLDataModel.from_json(json_data)
+            df = sdm.from_json(json_data)
 
             # Output
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3698,16 +2992,16 @@ class SQLDataModel:
         --------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # JSON file path
             json_data = 'data/json-sample.json'
 
             # Create the model
-            sdm = SQLDataModel.from_json(json_data, encoding='latin-1')
+            df = sdm.from_json(json_data, encoding='latin-1')
 
             # View output
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3727,7 +3021,7 @@ class SQLDataModel:
         ```
 
         Note:
-            - If ``json_source`` is deeply-nested it will be flattened according to the staticmethod :meth:`SQLDataModel.flatten_json()`
+            - If ``json_source`` is deeply-nested it will be flattened according to the staticmethod :meth:`utils.flatten_json()`
             - If ``json_source`` is a JSON-like string object that is not an array, it will be wrapped according as an array.
         
         Changelog:
@@ -3748,7 +3042,7 @@ class SQLDataModel:
                         ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `json_source`")
                     ).with_traceback(e.__traceback__) from None    
             json_source = json.loads(json_source)
-        data_dict = SQLDataModel.flatten_json(json_source)
+        data_dict = utils.flatten_json(json_source)
         return SQLDataModel.from_dict(data_dict, **kwargs)
 
     @classmethod
@@ -3787,16 +3081,16 @@ class SQLDataModel:
         ----------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # From URL
             url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
             
             # Lets get the 95th table from the 1998 World Cup
-            sdm = SQLDataModel.from_html(url, table_identifier=95)
+            df = sdm.from_html(url, table_identifier=95)
 
             # View result:
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3821,13 +3115,13 @@ class SQLDataModel:
         ---------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # From HTML file
-            sdm = SQLDataModel.from_html('path/to/file.html')
+            df = sdm.from_html('path/to/file.html')
 
             # View output
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3852,7 +3146,7 @@ class SQLDataModel:
         -------------
 
         ```python        
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Raw HTML
             raw_html = 
@@ -3876,10 +3170,10 @@ class SQLDataModel:
             </table>'''
 
             # Create the model and search for id attribute
-            sdm = SQLDataModel.from_html(raw_html, table_identifier="find-me")
+            df = sdm.from_html(raw_html, table_identifier="find-me")
 
             # View output
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -3898,7 +3192,7 @@ class SQLDataModel:
             - ``**kwargs`` passed to method are used in ``urllib.request.urlopen`` if ``html_source`` is being considered as a web url.
             - ``**kwargs`` passed to method are used in ``open`` if ``html_source`` is being considered as a filepath.
             - The largest row size encountered will be used as the ``column_count`` for the returned ``SQLDataModel``, rows will be padded with ``None`` if less.
-            - See :meth:`SQLDataModel.generate_html_table_chunks()` for initial source chunking before content fed to :mod:`SQLDataModel.HTMLParser`.
+            - See :meth:`utils.generate_html_table_chunks()` for initial source chunking before content fed to :mod:`SQLDataModel.HTMLParser`.
 
         Changelog:
             - Version 0.9.0 (2024-06-26):
@@ -3930,13 +3224,13 @@ class SQLDataModel:
                     ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open and read from provided `html_source`")
                 ).with_traceback(e.__traceback__) from None
         tparser = HTMLParser(table_identifier=table_identifier)
-        for c in SQLDataModel.generate_html_table_chunks(html_source):
+        for c in utils.generate_html_table_chunks(html_source):
             if tparser._is_finished:
                 break
             tparser.feed(c)
         data, headers = tparser.validate_table()
         tparser.close() 
-        headers = list(SQLDataModel.alias_duplicates(headers)) if headers is not None else headers
+        headers = list(utils.alias_duplicates(headers)) if headers is not None else headers
         return cls(data=data, headers=headers, infer_types=infer_types)
 
     @classmethod
@@ -3971,7 +3265,7 @@ class SQLDataModel:
         ------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Raw LaTeX literal
             latex_content = '''
@@ -3987,10 +3281,10 @@ class SQLDataModel:
             '''
 
             # Create the model from the LaTeX
-            sdm = SQLDataModel.from_latex(latex_content)
+            df = sdm.from_latex(latex_content)
 
             # View result
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -4010,20 +3304,20 @@ class SQLDataModel:
         ---------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Load LaTeX content from file
             latex_file = 'path/to/latex/file.tex'
 
             # Create the model using the path
-            sdm = SQLDataModel.from_latex(latex_file)
+            df = sdm.from_latex(latex_file)
         ```
 
         Specifying table identifier
         ---------------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Raw LaTeX literal with multiple tables
             latex_content = '''
@@ -4051,10 +3345,10 @@ class SQLDataModel:
             '''
 
             # Create the model from the 2nd table
-            sdm = SQLDataModel.from_latex(latex_content, table_identifier=2)
+            df = sdm.from_latex(latex_content, table_identifier=2)
 
             # View output
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -4152,7 +3446,7 @@ class SQLDataModel:
         ---------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Raw markdown literal
             markdown_content = '''
@@ -4164,10 +3458,10 @@ class SQLDataModel:
             '''
 
             # Create the model from the markdown
-            sdm = SQLDataModel.from_markdown(markdown_content)
+            df = sdm.from_markdown(markdown_content)
 
             # View result
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -4188,20 +3482,20 @@ class SQLDataModel:
         ------------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Load markdown content from file
             markdown_file_path = 'path/to/markdown_file.md'
 
             # Create the model using the path
-            sdm = SQLDataModel.from_markdown(markdown_file_path)
+            df = sdm.from_markdown(markdown_file_path)
         ```
 
         Specifying Table Identifier
         ---------------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Raw markdown literal with multiple tables
             markdown_content = '''
@@ -4221,10 +3515,10 @@ class SQLDataModel:
 
             '''
             # Create the model from the 2nd table
-            sdm = SQLDataModel.from_markdown(markdown_content, table_identifier=2)
+            df = sdm.from_markdown(markdown_content, table_identifier=2)
 
             # View output
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -4335,16 +3629,16 @@ class SQLDataModel:
         Example::
 
             import numpy as np
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample array
             arr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 
             # Create the model with custom headers
-            sdm = SQLDataModel.from_numpy(arr, headers=['Col A', 'Col B', 'Col C])
+            df = sdm.from_numpy(arr, headers=['Col A', 'Col B', 'Col C])
 
             # View output
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -4367,7 +3661,7 @@ class SQLDataModel:
             - Version 0.1.3 (2023-10-15):
                 - New method.
         """
-        if not _has_np:
+        if not optionals._has_np:
             raise ModuleNotFoundError(
                 ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use the `from_numpy()` method""")
                 )
@@ -4401,13 +3695,13 @@ class SQLDataModel:
         Example::
 
             import pandas as pd
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a pandas DataFrame
-            df = pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']})
+            df_pd = pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']})
             
             # Create the model
-            sdm = SQLDataModel.from_pandas(df)
+            df_sdm = sdm.from_pandas(df_pd)
 
         Note:
             - If ``headers`` are not provided, the existing pandas columns will be used as the new ``SQLDataModel`` headers.
@@ -4416,7 +3710,7 @@ class SQLDataModel:
             - Version 0.1.3 (2023-10-15):
                 - New method.
         """
-        if not _has_pd:
+        if not optionals._has_pd:
             raise ModuleNotFoundError(
                 ErrorFormat(f"""ModuleNotFoundError: required package not found, Pandas must be installed in order to use the `from_pandas()` method""")
                 )
@@ -4441,23 +3735,23 @@ class SQLDataModel:
             ``SQLDataModel``: A new instance of ``SQLDataModel`` created from the parquet file.
 
         Raises:
-            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pa`` flag.
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``optionals._has_pa`` flag.
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid parquet file path.
             ``FileNotFoundError``: If the specified parquet ``filename`` is not found.
             ``Exception``: If any unexpected exception occurs during the file or parquet reading process.
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample parquet file
             pq_file = "titanic.parquet"
 
             # Create the model
-            sdm = SQLDataModel.from_parquet(pq_file)
+            df = sdm.from_parquet(pq_file)
 
             # View column counts
-            print(sdm.count())
+            print(df.count())
 
         This will output:
 
@@ -4486,10 +3780,11 @@ class SQLDataModel:
             - Once the file is read into pyarrow.parquet, the ``to_pydict()`` method is used to pass the data to this package's :meth:`SQLDataModel.from_dict()` method.
             - Titanic parquet data used in example available at https://www.kaggle.com/code/taruntiwarihp/titanic-dataset
         """
-        if not _has_pa:
+        if not optionals._has_pa:
             raise ModuleNotFoundError(
                 ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.from_parquet()` method")
             )
+        _pa, _pq = optionals._get_pa_pq()
         if not isinstance(filename, str):
             raise TypeError(
                 ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid parquet file path")
@@ -4524,22 +3819,22 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['Name','Age','Sex']
             data = [('Alice', 20, 'F'), ('Bob', 25, 'M'), ('Gerald', 30, 'M')]
 
             # Create the model with sample data
-            sdm = SQLDataModel(data=data, headers=headers)
+            df = sdm.SQLDataModel(data=data, headers=headers)
 
             # Filepath
             pkl_file = 'people.sdm'
 
             # Save the model
-            sdm.to_pickle(filename=pkl_file)
+            df.to_pickle(filename=pkl_file)
 
             # Load it back from file
-            sdm = SQLDataModel.from_pickle(filename=pkl_file)
+            df = sdm.from_pickle(filename=pkl_file)
 
         Note:
             - All data, headers, data types and display properties will be saved when pickling.
@@ -4583,7 +3878,7 @@ class SQLDataModel:
         Example::
 
             import polars as pl
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             data = {
@@ -4593,15 +3888,15 @@ class SQLDataModel:
             }
 
             # Create the polars DataFrame
-            df = pl.DataFrame(data)
+            df_pl = pl.DataFrame(data)
             
             # Create a SQLDataModel object
-            sdm = SQLDataModel.from_polars(df)
+            df_sdm = sdm.from_polars(df_pl)
         
             # View result
-            print(sdm)
+            print(df_sdm)
 
-        This will output a ``SQLDataModel`` constructed from the Polars ``df``:
+        This will output a ``SQLDataModel`` constructed from the Polars ``df_pl``:
 
         ```shell
             ┌────────┬─────┬─────────┐
@@ -4624,7 +3919,7 @@ class SQLDataModel:
             - Version 0.3.8 (2024-04-12):
                 - New method.
         """
-        if not _has_pl:
+        if not optionals._has_pl:
             raise ModuleNotFoundError(
                 ErrorFormat(f"""ModuleNotFoundError: required package not found, Polars must be installed in order to use the `from_polars()` method""")
                 )
@@ -4653,7 +3948,7 @@ class SQLDataModel:
         Example::
 
             import pyarrow as pa
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             data = {
@@ -4666,7 +3961,7 @@ class SQLDataModel:
             table = pa.Table.from_pydict(data)
 
             # Create model from PyArrow table
-            sdm = SQLDataModel.from_pyarrow(table)
+            df = sdm.from_pyarrow(table)
 
         This will output:
 
@@ -4691,10 +3986,11 @@ class SQLDataModel:
             - Version 0.2.3 (2024-03-28):
                 - New method.            
         """
-        if not _has_pa:
+        if not optionals._has_pa:
             raise ModuleNotFoundError(
                 ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.from_pyarrow()` method")
             )
+        _pa, _pq = optionals._get_pa_pq()            
         if not isinstance(table,_pa.lib.Table):
             raise TypeError(
                 ErrorFormat(f"TypeError: invalid type '{type(table).__name__}', argument for `table` must point to an Apache Arrow object of type 'pyarrow.lib.Table'")
@@ -4735,13 +4031,13 @@ class SQLDataModel:
         --------------
         
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Single word parameter
-            sdm = SQLDataModel.from_sql("table_name", sqlite3.Connection)
+            df = sdm.from_sql("table_name", sqlite3.Connection)
             
             # Equilavent query executed
-            sdm = SQLDataModel.from_sql("select * from table_name", sqlite3.Connection)
+            df = sdm.from_sql("select * from table_name", sqlite3.Connection)
         ```
 
         From SQLite Database
@@ -4749,16 +4045,16 @@ class SQLDataModel:
 
         ```python            
             import sqlite3
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create connection object
             sqlite_db_conn = sqlite3.connect('./database/users.db')
 
             # Basic usage with a select query
-            sdm = SQLDataModel.from_sql("SELECT * FROM my_table", sqlite_db_conn)
+            df = sdm.from_sql("SELECT * FROM my_table", sqlite_db_conn)
 
             # When a single word is provided, it is treated as a table name for a select all query
-            sdm_table = SQLDataModel.from_sql("my_table", sqlite_db_conn)
+            df_table = df.from_sql("my_table", sqlite_db_conn)
         ```
             
         From PostgreSQL Database
@@ -4766,16 +4062,16 @@ class SQLDataModel:
 
         ```python
             import psycopg2
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create connection object
             pg_db_conn = psycopg2.connect('dbname=users user=postgres password=postgres')
             
             # Basic usage with a select query
-            sdm = SQLDataModel.from_sql("SELECT * FROM my_table", pg_db_conn)
+            df = sdm.from_sql("SELECT * FROM my_table", pg_db_conn)
 
             # When a single word is provided, it is treated as a table name for a select all query
-            sdm_table = SQLDataModel.from_sql("my_table", pg_db_conn)
+            df_table = df.from_sql("my_table", pg_db_conn)
         ```
 
         From SQL Server Databse
@@ -4783,25 +4079,25 @@ class SQLDataModel:
 
         ```python
             import pyodbc
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create connection object
             con = pyodbc.connect("DRIVER={SQL Server};SERVER=host;DATABASE=db;UID=user;PWD=pw;")
             
             # Basic usage with a select query
-            sdm = SQLDataModel.from_sql("SELECT * FROM my_table", con)
+            df = sdm.from_sql("SELECT * FROM my_table", con)
 
             # When a single word is provided, it is treated as a table name for a select all query
-            sdm_table = SQLDataModel.from_sql("my_table", con)
+            df_table = df.from_sql("my_table", con)
         ```
 
         Note:
-            - When ``con`` is provided as a string a connection will be attempted using :meth:`SQLDataModel._create_connection()` if the path does not exist, otherwise a ``sqlite3`` local connection will be attempted.
+            - When ``con`` is provided as a string a connection will be attempted using :meth:`utils._create_connection()` if the path does not exist, otherwise a ``sqlite3`` local connection will be attempted.
             - When ``con`` is provided as an object a connection is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
             - Unsupported connection object will output a ``SQLDataModelWarning`` advising unstable or undefined behaviour.
             - The ``dtypes``, if provided, are only applied to ``sqlite3`` connection objects as remaining supported connections implement SQL to python adapters.
             - See related :meth:`SQLDataModel.to_sql()` for writing to SQL database connections.
-            - See utility methods :meth:`SQLDataModel._parse_connection_url()` and :meth:`SQLDataModel._create_connection()` for implementation on creating database connections from urls.                      
+            - See utility methods :meth:`utils._parse_connection_url()` and :meth:`utils._create_connection()` for implementation on creating database connections from urls.                      
 
         Changelog:
             - Version 0.9.1 (2024-06-27):
@@ -4820,7 +4116,7 @@ class SQLDataModel:
                         ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
                     ).with_traceback(e.__traceback__) from None     
             else: # Connection provided as url with format 'scheme://user:pass@host:port/path'
-                con = SQLDataModel._create_connection(con)        
+                con = utils._create_connection(con)        
         if dtypes is not None and not isinstance(dtypes, dict):
             raise TypeError(
                 ErrorFormat(f"TypeError: invalid type '{type(dtypes).__name__}', argument for ``dtypes`` must be of type 'dict' representing 'column': 'python dtype' values to assign model")
@@ -4890,16 +4186,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Text source containing tabular data
             text_source = "/path/to/tabular_data.txt"
 
             # Create the model using the text source
-            sdm = SQLDataModel.from_text(text_source, table_identifier=2)
+            df = sdm.from_text(text_source, table_identifier=2)
 
         Note:
-            - This method is made for parsing ``SQLDataModel`` formatted text, such as the kind generated with ``print(sdm)`` or the output created by the inverse method :meth:`SQLDataModel.to_text()`
+            - This method is made for parsing ``SQLDataModel`` formatted text, such as the kind generated with ``print(df)`` or the output created by the inverse method :meth:`SQLDataModel.to_text()`
             - For parsing other delimited tabular data, this method calls the related :meth:`SQLDataModel.from_csv()` method, which parses tabular data constructed with common delimiters.
 
         Changelog:
@@ -4975,10 +4271,10 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Get supported dialects
-            supported_dialects = SQLDataModel.get_supported_sql_connections()
+            supported_dialects = sdmSQLDataModel.get_supported_sql_connections()
 
             # View details
             print(supported_dialects)
@@ -5011,7 +4307,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -5022,10 +4318,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers, display_float_precision=2)
+            df = sdm.SQLDataModel(data, headers, display_float_precision=2)
 
             # View full table
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -5044,7 +4340,7 @@ class SQLDataModel:
 
         ```python
             # Grab data from single row
-            row_data = sdm[0].data()
+            row_data = df[0].data()
 
             # View it
             print(row_data)
@@ -5060,7 +4356,7 @@ class SQLDataModel:
 
         ```python
             # Grab data from single column
-            col_data = sdm['Name'].data()
+            col_data = df['Name'].data()
             
             # View it
             print(col_data)
@@ -5119,7 +4415,7 @@ class SQLDataModel:
         ---------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -5130,10 +4426,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Generate the literal using tab delimiter
-            csv_literal = sdm.to_csv(delimiter='\\t')
+            csv_literal = df.to_csv(delimiter='\\t')
 
             # View output
             print(csv_literal)
@@ -5152,7 +4448,7 @@ class SQLDataModel:
         -------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -5163,13 +4459,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # CSV filename
             csv_file = 'persons.csv'
 
             # Write to the file, keeping the index
-            sdm.to_csv(filename=csv_file, index=True)
+            df.to_csv(filename=csv_file, index=True)
         ```
 
         Contents of ``persons.csv``:
@@ -5232,7 +4528,7 @@ class SQLDataModel:
         --------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Col A','Col B', 'Col C']
@@ -5243,10 +4539,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Convert to dictionary with rows as keys and values
-            rows_dict = sdm.to_dict(orient="rows")
+            rows_dict = df.to_dict(orient="rows")
 
             # View output
             for k, v in rows_dict.items():
@@ -5266,7 +4562,7 @@ class SQLDataModel:
         
         ```python
             # Convert to dictionary with columns as keys and rows as values
-            columns_dict = sdm.to_dict(orient="columns")
+            columns_dict = df.to_dict(orient="columns")
 
             # View output
             for k, v in columns_dict.items():
@@ -5286,7 +4582,7 @@ class SQLDataModel:
         
         ```python
             # Convert to list of dictionaries with each dictionary representing a row with columns as keys
-            list_dict = sdm.to_dict(orient="list")
+            list_dict = df.to_dict(orient="list")
 
             # View output
             for row in list_dict:
@@ -5335,7 +4631,7 @@ class SQLDataModel:
             ``if_exists`` (Literal['append','replace','fail']): Action to take if file already exists. Default is 'replace', overwriting existing file.
 
         Raises:
-            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``_has_xl`` flag.        
+            ``ModuleNotFoundError``: If the required package ``openpyxl`` is not installed as determined by ``optionals._has_xl`` flag.        
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid Excel file path to create or write to.
             ``ValueError``: If ``if_exists`` is not one of 'append', 'replace' or 'fail' representing action to take if file exists.
             ``IndexError``: If ``worksheet`` is provided as type 'int' but is out of range of the available worksheets.
@@ -5347,7 +4643,7 @@ class SQLDataModel:
         Example::
 
             import openpyxl
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Rate', 'Gender']
@@ -5359,13 +4655,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Export into a new Excel file
-            sdm.to_excel('Team-Overview.xlsx')
+            df.to_excel('Team-Overview.xlsx')
 
             # Or append to existing Excel file as a new worksheet
-            sdm.to_excel('Team.xlsx', worksheet='Demographics', if_exists='append')
+            df.to_excel('Team.xlsx', worksheet='Demographics', if_exists='append')
         
         This will create a new Excel file ``Team-Overview.xlsx``:
 
@@ -5395,10 +4691,11 @@ class SQLDataModel:
             - Version 0.2.2 (2024-03-26):
                 - New method.
         """        
-        if not _has_xl:
+        if not optionals._has_xl:
             raise ModuleNotFoundError(
                 ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method")
             )
+        _xl = optionals._get_xl()
         if not isinstance(filename, str):
             raise TypeError(
                 ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid Excel file path")
@@ -5472,16 +4769,16 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel(data=[(1, 'John'), (2, 'Doe')], headers=['ID', 'Name'])
+            df = sdm.SQLDataModel(data=[(1, 'John'), (2, 'Doe')], headers=['ID', 'Name'])
 
             # Create and save as new html file
-            sdm.to_html('output.html', style_params={'font-size': '12pt'})
+            df.to_html('output.html', style_params={'font-size': '12pt'})
             
             # Get HTML as a string
-            html_string = sdm.to_html()
+            html_string = df.to_html()
 
             # View output
             print(html_string)
@@ -5571,7 +4868,7 @@ class SQLDataModel:
         -----------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample JSON to first create model
             json_source = [
@@ -5581,10 +4878,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel.from_json(json_source)
+            df = sdm.from_json(json_source)
 
             # View current state
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -5605,10 +4902,10 @@ class SQLDataModel:
 
         ```python
             # Write model to JSON file
-            sdm.to_json('output.json')
+            df.to_json('output.json')
 
             # Or convert to JSON-like object
-            json_data = sdm.to_json()
+            json_data = df.to_json()
 
             # View JSON object
             print(json_data)
@@ -5716,7 +5013,7 @@ class SQLDataModel:
         -----------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -5727,10 +5024,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data=data, headers=headers)
+            df = sdm.SQLDataModel(data=data, headers=headers)
 
             # Generate LaTeX table literal
-            latex_output = sdm.to_latex()
+            latex_output = df.to_latex()
 
             # View LaTeX output
             print(latex_output)
@@ -5754,7 +5051,7 @@ class SQLDataModel:
         -------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -5765,10 +5062,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data=data, headers=headers)
+            df = sdm.SQLDataModel(data=data, headers=headers)
 
             # Write the output to the file, formatting the output as a proper LaTeX document
-            latex_table = sdm.to_latex(filename='Table.tex', format_output_as='document')      
+            latex_table = df.to_latex(filename='Table.tex', format_output_as='document')      
         ```
 
         Contents of file ``Table.tex``:
@@ -5805,7 +5102,7 @@ class SQLDataModel:
                 - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
                 - Modified to check and escape any invalid LaTeX characters or symbols when generating headers.
             - Version 0.10.4 (2024-07-03):
-                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+                - Modified to escape newline characters through :meth:`utils.sqlite_printf_format()` to avoid wrapping table rows.
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
             - Version 0.1.9 (2024-03-19):
@@ -5902,7 +5199,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -5914,10 +5211,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)    
+            df = sdm.SQLDataModel(data, headers)    
             
             # Get all model data as a list of lists
-            model_data = sdm.to_list()
+            model_data = df.to_list()
 
             # Iterate over each row
             for row in model_data:
@@ -5936,7 +5233,7 @@ class SQLDataModel:
 
         ```python
             # Get 'Name' column as a list
-            col_data = sdm['Name'].to_list()
+            col_data = df['Name'].to_list()
 
             # View output
             print(col_data)
@@ -5952,7 +5249,7 @@ class SQLDataModel:
 
         ```python
             # Get first row as a list with index
-            row_data = sdm[0].to_list(index=True)
+            row_data = df[0].to_list(index=True)
             
             # View result
             print(row_data)
@@ -6028,7 +5325,7 @@ class SQLDataModel:
         -------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -6039,10 +5336,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data=data, headers=headers)
+            df = sdm.SQLDataModel(data=data, headers=headers)
 
             # Generate markdown table literal
-            markdown_table = sdm.to_markdown()
+            markdown_table = df.to_markdown()
 
             # View markdown output
             print(markdown_table)
@@ -6062,7 +5359,7 @@ class SQLDataModel:
         ----------------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -6073,10 +5370,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data=data, headers=headers)
+            df = sdm.SQLDataModel(data=data, headers=headers)
 
             # Write the output to the file, center-aligning all columns
-            sdm.to_markdown(filename='Table.MD', column_alignment='center')  
+            df.to_markdown(filename='Table.MD', column_alignment='center')  
         ```
 
         Contents of ``Table.MD``:
@@ -6101,7 +5398,7 @@ class SQLDataModel:
                 - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
                 - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
             - Version 0.10.4 (2024-07-03):
-                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+                - Modified to escape newline characters through :meth:`utils.sqlite_printf_format()` to avoid wrapping table rows.
             - Version 0.3.0 (2024-03-31):
                 - Renamed ``include_index`` parameter to ``index`` for package consistency.
             - Version 0.1.9 (2024-03-19):
@@ -6157,7 +5454,7 @@ class SQLDataModel:
         else:
             return table_repr  
 
-    def to_numpy(self, index:bool=False, include_headers:bool=False) -> _np.ndarray:
+    def to_numpy(self, index:bool=False, include_headers:bool=False) ->' _np.ndarray':
         """
         Converts ``SQLDataModel`` to a NumPy ``ndarray`` object of shape ``(rows, columns)``.
         Note that the ``numpy`` package must be installed to use this method.
@@ -6175,7 +5472,7 @@ class SQLDataModel:
         Example::
 
             import numpy
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -6185,8 +5482,11 @@ class SQLDataModel:
                 ('Travis', 35, 185.8)
             ]
 
+            # Create the sample model
+            df = sdm.SQLDataModel(data, headers)
+
             # Create the numpy array with default parameters, no indicies or headers
-            result_array = sdm.to_numpy()
+            result_array = df.to_numpy()
 
             # View array
             print(result_array)
@@ -6203,7 +5503,7 @@ class SQLDataModel:
 
         ```python
             # Create the numpy array with with indicies and headers
-            result_array = sdm.to_numpy(index=True, include_headers=True)
+            result_array = df.to_numpy(index=True, include_headers=True)
 
             # View array
             print(result_array)
@@ -6227,17 +5527,18 @@ class SQLDataModel:
             - Version 0.1.3 (2023-10-15):
                 - New method.
         """
-        if not _has_np:
+        if not optionals._has_np:
             raise ModuleNotFoundError(
                 ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use `.to_numpy()` method""")
-                )            
+                )  
+        _np = optionals._get_np()          
         fetch_stmt = self._generate_sql_stmt(index=index)
         res = self.sql_db_conn.execute(fetch_stmt)
         if include_headers:
             return _np.vstack([_np.array([x[0] for x in res.description]),[_np.array(x) for x in res.fetchall()]])
         return _np.array([_np.array(x) for x in res.fetchall()])
 
-    def to_pandas(self, index:bool=False, include_headers:bool=True) -> _pd.DataFrame:
+    def to_pandas(self, index:bool=False, include_headers:bool=True) -> '_pd.DataFrame':
         """
         Converts ``SQLDataModel`` to a Pandas ``DataFrame`` object.
         Note that the ``pandas`` package must be installed to use this method.
@@ -6255,7 +5556,7 @@ class SQLDataModel:
         Example::
 
             import pandas
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -6266,13 +5567,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df_sdm = sdm.SQLDataModel(data, headers)
 
             # Convert the model to a pandas df
-            df = sdm.to_pandas(include_headers=True, index=True)
+            df_pd = df_sdm.to_pandas(include_headers=True, index=True)
 
             # View result
-            print(df)
+            print(df_pd)
 
         This will output:
 
@@ -6292,10 +5593,11 @@ class SQLDataModel:
             - Version 0.1.3 (2023-10-15):
                 - New method.
         """
-        if not _has_pd:
+        if not optionals._has_pd:
             raise ModuleNotFoundError(
                 ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use `.to_pandas()` method""")
                 )
+        _pd = optionals._get_pd()
         res = self.sql_db_conn.execute(self._generate_sql_stmt(index=index))
         raw_data = res.fetchall()
         data = [x[1:] for x in raw_data] if index else [x for x in raw_data]
@@ -6313,7 +5615,7 @@ class SQLDataModel:
             ``**kwargs``: Additional keyword arguments to pass to the pyarrow ``write_table`` function.
 
         Raises:
-            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``_has_pa`` flag.        
+            ``ModuleNotFoundError``: If the required package ``pyarrow`` is not installed as determined by ``optionals._has_pa`` flag.        
             ``TypeError``: If the ``filename`` argument is not of type 'str' representing a valid parquet file path.
             ``Exception``: If any unexpected exception occurs during the parquet writing process.
         
@@ -6322,26 +5624,26 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Rate']
             data = [('Alice', 25, 26.50), ('Bob', 30, 21.25), ('Will', 35, 24.00)]
             
             # Create the model
-            sdm = SQLDataModel(data,headers, display_index=False)
+            df = sdm.SQLDataModel(data,headers, display_index=False)
 
             # Parquet file
             pq_file = "output.parquet"
 
             # Write the model as parquet file
-            sdm.to_parquet(pq_file)
+            df.to_parquet(pq_file)
 
             # Confirm result by reading back file
-            sdm_result = SQLDataModel.from_parquet(pq_file)
+            df_result = sdm.from_parquet(pq_file)
 
             # View model
-            print(sdm_result)
+            print(df_result)
         
         This will output:
         
@@ -6367,10 +5669,11 @@ class SQLDataModel:
             - Version 0.1.9 (2024-03-19):
                 - New method.
         """
-        if not _has_pa:
+        if not optionals._has_pa:
             raise ModuleNotFoundError(
                 ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.to_parquet()` method")
             )        
+        _pa, _pq = optionals._get_pa_pq()
         if not isinstance(filename, str):
             raise TypeError(
                 ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', argument for `filename` must be of type 'str' representing a valid parquet file path")
@@ -6398,7 +5701,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age']
             data = [
@@ -6409,16 +5712,16 @@ class SQLDataModel:
             ]
             
             # Create the SQLDataModel object
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Save the model's data as a pickle file "output.sdm"
-            sdm.to_pickle("output.sdm")
+            df.to_pickle("output.sdm")
 
             # Alternatively, leave blank to use the current file's name:
-            sdm.to_pickle()
+            df.to_pickle()
 
             # This way the same data can be recreated later by calling the from_pickle() method from the same project:
-            sdm = SQLDataModel.from_pickle()
+            df = sdm.from_pickle()
 
         Note:
             - All data, headers, data types and display properties will be saved when pickling.
@@ -6436,7 +5739,7 @@ class SQLDataModel:
         with open(filename, 'wb') as handle:
             pickle.dump(serialized_sdm, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def to_polars(self, index:bool=False, include_headers:bool=True) -> _pl.DataFrame:
+    def to_polars(self, index:bool=False, include_headers:bool=True) -> '_pl.DataFrame':
         """
         Converts ``SQLDataModel`` to a Polars ``DataFrame`` object.
         Note that the ``polars`` package must be installed to use this method.
@@ -6454,7 +5757,7 @@ class SQLDataModel:
         Example::
 
             import polars
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -6466,13 +5769,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df_sdm = sdm.SQLDataModel(data, headers)
 
             # Convert the model to a polars df with the index
-            df = sdm.to_polars(index=True)
+            df_pl = df_sdm.to_polars(index=True)
 
             # View result
-            print(df)
+            print(df_pl)
 
         This will output:
 
@@ -6501,14 +5804,15 @@ class SQLDataModel:
             - Version 0.3.8 (2024-04-12):
                 - New method.            
         """
-        if not _has_pl:
+        if not optionals._has_pl:
             raise ModuleNotFoundError(
                 ErrorFormat(f"""ModuleNotFoundError: required package not found, polars must be installed in order to use `.to_polars()` method""")
                 )
+        _pl = optionals._get_pl()
         data = self.data(index=index, include_headers=include_headers)
         return _pl.DataFrame(data=data[1:] if include_headers else data,schema=data[0] if include_headers else None, orient='row')
 
-    def to_pyarrow(self, index:bool=False) -> _pa.Table:
+    def to_pyarrow(self, index:bool=False) -> '_pa.Table':
         """
         Returns the current ``SQLDataModel`` in Apache Arrow columnar format as a ``pyarrow.Table``.
 
@@ -6524,17 +5828,17 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Grade']
             data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2)]
             
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Create the pyarrow table
-            table = sdm.to_pyarrow()
+            table = df.to_pyarrow()
 
             # View result
             print(table)        
@@ -6561,10 +5865,11 @@ class SQLDataModel:
             - Version 0.2.3 (2024-03-28):
                 - New method.
         """
-        if not _has_pa:
+        if not optionals._has_pa:
             raise ModuleNotFoundError(
                 ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.to_pyarrow()` method")
-            )        
+            )    
+        _pa, _pq = optionals._get_pa_pq()    
         try:
             table = _pa.Table.from_pydict(self.to_dict(orient='columns', index=index))
         except Exception as e:
@@ -6598,7 +5903,7 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Gender', 'City']
@@ -6611,10 +5916,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Generate a Markdown style representation using 'ID' to represent the index
-            markdown_repr = sdm.to_string(table_style='markdown', index_rep='ID')
+            markdown_repr = df.to_string(table_style='markdown', index_rep='ID')
 
         This will generate a 'Markdown' styled representation:
 
@@ -6632,7 +5937,7 @@ class SQLDataModel:
 
         ```python
             # Set vertical and horizontal limits with custom styling
-            truncated_repr = sdm.to_string(
+            truncated_repr = df.to_string(
                 table_style='polars', 
                 display_max_rows=4, 
                 display_max_width=36,
@@ -6743,8 +6048,8 @@ class SQLDataModel:
         table_repr = """""" # big things...
         table_bare_newline = """\n"""
         row_sep_concat = f"""|| '{row_sep}' ||"""
-        fetch_idx = SQLDataModel.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
-        header_fmt_str = row_sep_concat.join([f"""{SQLDataModel.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment,escape_newline=True,truncation_chars=horizontal_ellipses)}""" if col != horizontal_sep_marker else f"""{SQLDataModel.sqlite_printf_format(horizontal_ellipses,'custom',horizontal_ellipses_width,self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        fetch_idx = utils.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
+        header_fmt_str = row_sep_concat.join([f"""{utils.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment,escape_newline=True,truncation_chars=horizontal_ellipses)}""" if col != horizontal_sep_marker else f"""{utils.sqlite_printf_format(horizontal_ellipses,'custom',horizontal_ellipses_width,self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
         if vertical_truncation_required:
             vertical_sep_fmt_str = f'''{row_lh}{row_sep.join([f"""{vertical_ellipses:^{max(0,header_length_dict[col]+1)}}"""[:header_length_dict[col]] for col in display_headers])}{row_rh}{table_bare_newline}'''
             fetch_fmt_stmt = f"""
@@ -6817,20 +6122,20 @@ class SQLDataModel:
         Example::
 
             import sqlite3
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Grade']
             data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2), ('David', 28, 3.4)]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Create connection object
             sqlite_db_conn = sqlite3.connect('students.db')
 
             # Basic usage, creating a new table
-            sdm.to_sql('users', sqlite_db_conn)
+            df.to_sql('users', sqlite_db_conn)
 
         This will create a new table ``users``, or fail if one already exists:
 
@@ -6849,20 +6154,20 @@ class SQLDataModel:
 
         ```python
             import psycopg2
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Grade']
             data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2), ('David', 28, 3.4)]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Setup the connection, whether using psycopg2 or other supported modules like pyodbc
             con = psycopg2.connect(...)
 
             # Create or replace existing table in database
-            sdm.to_sql('users', con, if_exists='replace', index=False)
+            df.to_sql('users', con, if_exists='replace', index=False)
         ```
 
         This will result in a new table ``users`` in our PostgreSQL database:
@@ -6899,20 +6204,20 @@ class SQLDataModel:
         Using a Primary Key
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['ID', 'User']
             data = [(1001, 'Alice'), (1002, 'Bob'), (1003, 'Charlie'), (1004, 'David')]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Create connection object
             sqlite_db_conn = sqlite3.connect('students.db')
 
             # Create the table using the 'ID' column as the primary key
-            sdm.to_sql('users', sqlite_db_conn, if_exists='replace', index=False, primary_key='ID')
+            df.to_sql('users', sqlite_db_conn, if_exists='replace', index=False, primary_key='ID')
         ```
 
         This will create a ``users`` table with the schema: 
@@ -6953,13 +6258,13 @@ class SQLDataModel:
         
         Note:
             - When providing a ``primary_key`` column it will be assumed unique and the model will not perform any unique-ness constraints.
-            - When ``con`` is provided as a string a connection will be attempted using :meth:`SQLDataModel._create_connection()` if the path does not exist, otherwise a ``sqlite3`` local connection will be attempted.
+            - When ``con`` is provided as a string a connection will be attempted using :meth:`utils._create_connection()` if the path does not exist, otherwise a ``sqlite3`` local connection will be attempted.
             - When ``con`` is provided as an object a connection is assumed to be open and valid, if a cursor cannot be created from the object an exception will be raised. 
             - Connections with write access can be used in the :meth:`SQLDataModel.to_sql()` method for writing to the same connection types, be careful.
             - ValueError will be raised if ``table`` already exists, use ``if_exists = 'replace'`` or ``if_exists = 'append'`` to instead replace or append to the table.
             - See relevant module documentation for additional details or information pertaining to specific database or connection dialect being used.
             - See related :meth:`SQLDataModel.from_sql()` for creating ``SQLDataModel`` from existing SQL database connections.
-            - See utility methods :meth:`SQLDataModel._parse_connection_url()` and :meth:`SQLDataModel._create_connection()` for implementation on creating database connections from urls.
+            - See utility methods :meth:`utils._parse_connection_url()` and :meth:`utils._create_connection()` for implementation on creating database connections from urls.
 
         Changelog:
             - Version 0.9.1 (2024-06-27):
@@ -6980,7 +6285,7 @@ class SQLDataModel:
                         ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to open database connection '{con}'")
                     ).with_traceback(e.__traceback__) from None     
             else: # Connection provided as url with format 'scheme://user:pass@host:port/path'
-                con = SQLDataModel._create_connection(con)
+                con = utils._create_connection(con)
         try:
             ext_c = con.cursor()
         except Exception as e:
@@ -7109,7 +6414,7 @@ class SQLDataModel:
         ----------------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -7120,10 +6425,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data=data, headers=headers)
+            df = sdm.SQLDataModel(data=data, headers=headers)
 
             # Generate text table literal
-            text_table = sdm.to_text()
+            text_table = df.to_text()
 
             # View output
             print(text_table)
@@ -7145,7 +6450,7 @@ class SQLDataModel:
         -------------
 
         ```python            
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -7156,10 +6461,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data=data, headers=headers)
+            df = sdm.SQLDataModel(data=data, headers=headers)
 
             # Write the output to the file, center-aligning all columns
-            sdm.to_text(filename='Table.txt', column_alignment='center')        
+            df.to_text(filename='Table.txt', column_alignment='center')        
         ```
 
         Contents of ``Table.txt``:
@@ -7175,7 +6480,7 @@ class SQLDataModel:
         ```
         
         Important:
-            Unlike output from ``print(sdm)`` or other calls to :meth:`SQLDataModel.__repr__()`, the output from this method includes the full ``SQLDataModel`` and is not restricted by current terminal size or the value set at :py:attr:`SQLDataModel.display_max_rows`. As such, horizontal truncation only occurs on cell values as determined by ``max_column_width`` and no other horizontal or vertical table-wide truncation is performed.
+            Unlike output from ``print(df)`` or other calls to :meth:`SQLDataModel.__repr__()`, the output from this method includes the full ``SQLDataModel`` and is not restricted by current terminal size or the value set at :py:attr:`SQLDataModel.display_max_rows`. As such, horizontal truncation only occurs on cell values as determined by ``max_column_width`` and no other horizontal or vertical table-wide truncation is performed.
 
         Note:
             - If ``filename`` is provided, the method writes the text to the specified file; otherwise, it returns the textual representation as a string.
@@ -7194,7 +6499,7 @@ class SQLDataModel:
                 - Added ``index_rep`` parameter to allow customizing index column name with prior behavior set as default representation. Ignored when ``index = False``.
                 - Modified to use :meth:`SQLDataModel.to_string()` instead of generating independently formatted repr for more consistency between tabular outputs.
             - Version 0.10.4 (2024-07-03):
-                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+                - Modified to escape newline characters through :meth:`utils.sqlite_printf_format()` to avoid wrapping table rows.
             - Version 0.9.3 (2024-06-28):
                 - Added additional options 'rst-simple' and 'rst-grid' for ``table_style`` parameter. 
             - Version 0.3.10 (2024-04-16):
@@ -7274,25 +6579,25 @@ class SQLDataModel:
         Example::
 
             import sqlite3
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             data = [('Alice', 20, 'F'), ('Billy', 25, 'M'), ('Chris', 30, 'M')]
 
             # Create the model
-            sdm = SQLDataModel(data, headers=['Name','Age','Sex'])
+            df = sdm.SQLDataModel(data, headers=['Name','Age','Sex'])
 
             # Filename to use for database
             db_file = "model.db"
 
             # Write the in-memory database model to disk
-            sdm.to_local_db(db_file)
+            df.to_local_db(db_file)
 
             # Loading the model back from disk can now be done at anytime
-            sdm = SQLDataModel.from_sql("sdm", sqlite3.connect(db_file))
+            df = sdm.from_sql("sdm", sqlite3.connect(db_file))
 
             # View restored model
-            print(sdm)
+            print(df)
 
         This will output the model we originally created:
 
@@ -7339,19 +6644,19 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create an empty model
-            sdm = SQLDataModel(headers=['Stage', 'Match', 'Result'])
+            df = sdm.SQLDataModel(headers=['Stage', 'Match', 'Result'])
 
             # Use boolean method to avoid duplicating result
-            if not sdm:
-                sdm[0] = ['Group', 1, 'Scotland Win']
+            if not df:
+                df[0] = ['Group', 1, 'Scotland Win']
             else:
                 print('Match result already stored')
         
         Note:
-            - This method is equivalent to ``sdm.row_count != 0``
+            - This method is equivalent to ``df.row_count != 0``
             - See :meth:`SQLDataModel.__eq__()` and related comparison methods for more details.
 
         Changelog:
@@ -7372,7 +6677,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -7384,13 +6689,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers) 
+            df = sdm.SQLDataModel(data, headers) 
 
             # Filter by 'Age' column
-            sdm = sdm[sdm['Age'] < 40]
+            df = df[df['Age'] < 40]
                     
             # View result
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -7438,7 +6743,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -7450,13 +6755,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers) 
+            df = sdm.SQLDataModel(data, headers) 
 
             # Filter by 'Age' column
-            sdm = sdm[sdm['Age'] <= 40]
+            df = df[df['Age'] <= 40]
                     
             # View result
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -7504,7 +6809,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -7516,13 +6821,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers) 
+            df = sdm.SQLDataModel(data, headers) 
 
             # Filter by 'Gender' column
-            sdm = sdm[sdm['Gender'] == 'Female']
+            df = df[df['Gender'] == 'Female']
                     
             # View result
-            print(sdm)
+            print(df)
 
         This will output:
         
@@ -7565,7 +6870,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -7577,13 +6882,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers) 
+            df = sdm.SQLDataModel(data, headers) 
 
             # Filter by 'First' column
-            sdm = sdm[sdm['First'] != 'John']
+            df = df[df['First'] != 'John']
                     
             # View result
-            print(sdm)
+            print(df)
 
         This will output:
         
@@ -7632,7 +6937,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -7644,13 +6949,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers) 
+            df = sdm.SQLDataModel(data, headers) 
 
             # Filter by 'Service' column
-            sdm = sdm[sdm['Service'] > 5.0]
+            df = df[df['Service'] > 5.0]
                     
             # View result
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -7697,7 +7002,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -7709,13 +7014,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers) 
+            df = sdm.SQLDataModel(data, headers) 
 
             # Filter by 'Hired' column
-            sdm = sdm[sdm['Hired'] >= datetime.date(2020,1,1)]
+            df = df[df['Hired'] >= datetime.date(2020,1,1)]
 
             # View result
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -7767,23 +7072,23 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar addition
-            sdm['x + 100'] = sdm['x'] + 100
+            df['x + 100'] = df['x'] + 100
 
             # Perform vector addition using another column
-            sdm['x + y'] = sdm['x'] + sdm['y']
+            df['x + y'] = df['x'] + df['y']
 
             # View both results
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -7803,23 +7108,23 @@ class SQLDataModel:
         We can also use addition to concatenate strings:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['First', 'Last']
             data = [['Alice', 'Smith'],['Bob', 'Johnson'],['Charlie', 'Hall'],['David', 'Brown']]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Concatenate scalar character
-            sdm['Loud First'] = sdm['First'] + '!'
+            df['Loud First'] = df['First'] + '!'
 
             # Concatenate scalar and vector using existing columns
-            sdm['Full Name'] = sdm['First'] + ' ' + sdm['Last']
+            df['Full Name'] = df['First'] + ' ' + df['Last']
 
             # View it
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -7878,23 +7183,23 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar addition
-            sdm['100 + x'] = 100 + sdm['x']
+            df['100 + x'] = 100 + df['x']
 
             # Perform vector addition using another column
-            sdm['y + x'] = sdm['y'] + sdm['x']
+            df['y + x'] = df['y'] + df['x']
 
             # View both results
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -7914,23 +7219,23 @@ class SQLDataModel:
         We can also use addition to concatenate strings:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['First', 'Last']
             data = [['Alice', 'Smith'],['Bob', 'Johnson'],['Charlie', 'Hall'],['David', 'Brown']]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Concatenate scalar character
-            sdm['Prefixed First'] = 'Name: ' + sdm['First']
+            df['Prefixed First'] = 'Name: ' + df['First']
 
             # Concatenate scalar and vector using existing columns
-            sdm['Full Name'] = sdm['First'] + ' ' + sdm['Last']
+            df['Full Name'] = df['First'] + ' ' + df['Last']
 
             # View it
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -7990,23 +7295,23 @@ class SQLDataModel:
             
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar subtraction
-            sdm['x - 100'] = sdm['x'] - 100
+            df['x - 100'] = df['x'] - 100
 
             # Perform vector subtraction using another column
-            sdm['x - y'] = sdm['x'] - sdm['y']
+            df['x - y'] = df['x'] - df['y']
 
             # View both results
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -8066,23 +7371,23 @@ class SQLDataModel:
             
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar subtraction
-            sdm['100 - x'] = 100 - sdm['x']
+            df['100 - x'] = 100 - df['x']
 
             # Perform vector subtraction using another column
-            sdm['y - x'] = sdm['y'] - sdm['x']
+            df['y - x'] = df['y'] - df['x']
 
             # View both results
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -8142,23 +7447,23 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdmSQLDataModel(data, headers)
 
             # Perform scalar multiplication
-            sdm['x * 10'] = sdm['x'] * 10
+            df['x * 10'] = df['x'] * 10
 
             # Perform vector multiplication using another column
-            sdm['x * y'] = sdm['x'] * sdm['y']
+            df['x * y'] = df['x'] * df['y']
 
             # View results
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -8242,23 +7547,23 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar division
-            sdm['y / 10'] = sdm['y'] / 10
+            df['y / 10'] = df['y'] / 10
 
             # Perform vector division using another column
-            sdm['y / x'] = sdm['y'] / sdm['x']
+            df['y / x'] = df['y'] / df['x']
 
             # View both results
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -8322,23 +7627,23 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar division
-            sdm['10 / y'] = 10 / sdm['y']
+            df['10 / y'] = 10 / df['y']
 
             # Perform vector division using another column
-            sdm['x / y'] = sdm['x'] / sdm['y']
+            df['x / y'] = df['x'] / df['y']
 
             # View both results
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -8403,23 +7708,23 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,10], [4,20], [8,30], [16,40], [32,50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar floor division
-            sdm['y // 10'] = sdm['y'] // 10
+            df['y // 10'] = df['y'] // 10
 
             # Perform vector floor division using another column
-            sdm['y // x'] = sdm['y'] // sdm['x']
+            df['y // x'] = df['y'] // df['x']
 
             # View both results
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -8488,23 +7793,23 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,8], [4,16], [8,32], [32,64], [32,128]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar floor division
-            sdm['128 // y'] = 128 // sdm['y']
+            df['128 // y'] = 128 // df['y']
 
             # Perform vector floor division using another column
-            sdm['y // x'] = sdm['y'] // sdm['x']
+            df['y // x'] = df['y'] // df['x']
 
             # View both results
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -8569,23 +7874,23 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,1], [4,2], [8,3], [16,4], [32,5]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar exponentiation
-            sdm['y ** 2'] = sdm['y'] ** 2
+            df['y ** 2'] = df['y'] ** 2
 
             # Perform vector exponentiation using another column
-            sdm['x ** y'] = sdm['x'] ** sdm['y']
+            df['x ** y'] = df['x'] ** df['y']
 
             # View results
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -8649,23 +7954,23 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['x', 'y']
             data = [[2,1], [4,2], [6,3], [8,4], [10,5]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Perform scalar exponentiation
-            sdm['2 ** y'] = 2 ** sdm['y']
+            df['2 ** y'] = 2 ** df['y']
 
             # Perform vector exponentiation using another column
-            sdm['y ** x'] = sdm['y'] ** sdm['x']
+            df['y ** x'] = df['y'] ** df['x']
 
             # View results
-            print(sdm)  
+            print(df)  
 
         This will output:
 
@@ -8729,7 +8034,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['idx', 'first', 'last', 'age', 'service']
@@ -8741,13 +8046,13 @@ class SQLDataModel:
             ]     
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Modifying first name column with a bang!
-            sdm['first'] += '!'
+            df['first'] += '!'
 
             # View model
-            print(sdm)
+            print(df)
 
         This will output:
         
@@ -8784,7 +8089,7 @@ class SQLDataModel:
 
         Example::     
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age', 'service']
             data = [
@@ -8795,13 +8100,13 @@ class SQLDataModel:
             ]     
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Modifying age column in the best direction
-            sdm['age'] -= 10
+            df['age'] -= 10
 
             # View model
-            print(sdm)
+            print(df)
 
         This will output:
         
@@ -8838,13 +8143,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Salary'])
 
             # Give raises to all!
-            sdm['Salary'] *= 12
+            df['Salary'] *= 12
 
         Changelog:
             - Version 0.1.9 (2024-03-19):
@@ -8868,13 +8173,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Budget'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Budget'])
 
             # Adjust existing column
-            sdm['Budget'] /= 52
+            df['Budget'] /= 52
         
         Changelog:
             - Version 0.1.9 (2024-03-19):
@@ -8898,20 +8203,20 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data
             headers = ['x']
             data = [[10],[20],[30],[40],[50]]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Modify the existing column
-            sdm['x'] //= 3
+            df['x'] //= 3
             
             # View result
-            print(sdm)
+            print(df)
 
         This will output:
         
@@ -8949,13 +8254,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Salary'])
 
             # More raises!
-            sdm['Salary'] **= 2
+            df['Salary'] **= 2
         
         Changelog:
             - Version 0.1.9 (2024-03-19):
@@ -8975,7 +8280,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -8987,14 +8292,14 @@ class SQLDataModel:
             ]  
 
             # Create the sample model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Apply some filtering conditions to both models
-            filter_1 = sdm[sdm['Age'] <= 40]
-            filter_2 = sdm[sdm['Service'] > 2]
+            filter_1 = df[df['Age'] <= 40]
+            filter_2 = df[df['Service'] > 2]
 
             # Perform a bitwise AND operation to return a new model
-            result = sdm[filter_1 & filter_2]
+            result = df[filter_1 & filter_2]
 
             # View result
             print(result)
@@ -9037,7 +8342,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
             data = [
@@ -9049,14 +8354,14 @@ class SQLDataModel:
             ]  
 
             # Create the sample model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Apply some filtering conditions to both models
-            filter_1 = sdm[sdm['Age'] > 40]
-            filter_2 = sdm[sdm['Gender'] == 'Male']
+            filter_1 = df[df['Age'] > 40]
+            filter_2 = df[df['Gender'] == 'Male']
 
             # Perform a bitwise OR operation to return a new model
-            result = sdm[filter_1 | filter_2]
+            result = df[filter_1 | filter_2]
 
             # View result
             print(result) 
@@ -9105,7 +8410,7 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -9116,10 +8421,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Iterate through rows
-            for row in sdm:
+            for row in df:
                 print(row)
 
         This will output:
@@ -9159,19 +8464,32 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
+
+            # Create a sample model
+            headers = ['First', 'Last', 'Age', 'Service', 'Hired', 'Gender']
+            data = [
+                ('John', 'Smith', 27, 1.22, '2023-02-01', 'Male'),
+                ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female'),
+                ('Mike', 'Harlin', 36, 3.9, '2020-08-27', 'Male'),
+                ('Sarah', 'West', 51, 0.7, '2023-10-01', 'Female'),
+                ('Pat', 'Douglas', 42, 11.5, '2015-11-06', 'Male'),
+            ]  
+
+            # Create the sample model
+            df = sdm.SQLDataModel(data, headers)
 
             # Retrieve a specific row by index
-            subset_model = sdm[3]
+            subset_model = df[3]
 
             # Retrieve multiple rows and specific columns using a tuple
-            subset_model = sdm[(1, 2, 5), ["first_name", "age", "job"]]
+            subset_model = df[(1, 2, 4), ["First", "Service", "Age"]]
 
             # Retrieve a range of rows and all columns using a slice
-            subset_model = sdm[2:7]
+            subset_model = df[1:4]
 
             # Retrieve a single column by name
-            subset_model = sdm["first_name"]
+            subset_model = df["First"]
         
         Changelog:
             - Version 0.5.0 (2024-05-09):
@@ -9207,7 +8525,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Job']
@@ -9220,13 +8538,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Update a specific row with new values
-            sdm[2] = ("John", 25, "Engineer")
+            df[2] = ("John", 25, "Engineer")
 
             # See result
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -9246,7 +8564,7 @@ class SQLDataModel:
         Conditional updates can also be made using multiple columns:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['Employee', 'Base', 'Salary']
             data = [
@@ -9259,13 +8577,13 @@ class SQLDataModel:
             ]
 
             # Create sample model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Selectively update values based on conditions
-            sdm[sdm['Salary'].isna(), 'Salary'] = sdm['Base']
+            df[df['Salary'].isna(), 'Salary'] = df['Base']
 
             # View updates
-            print(sdm)
+            print(df)
         ```
 
         This will output the resulting model where 'Salary' was updated with values from 'Base' only if missing:
@@ -9288,10 +8606,10 @@ class SQLDataModel:
 
         ```python
             # Update multiple rows and columns with a list of values
-            sdm[1:5, ["Name", "Age", "Job"]] = [("Alice", 30, "Manager"), ("Bob", 28, "Developer"), ("Charlie", 35, "Designer"), ("David", 32, "Analyst")]
+            df[1:5, ["Name", "Age", "Job"]] = [("Alice", 30, "Manager"), ("Bob", 28, "Developer"), ("Charlie", 35, "Designer"), ("David", 32, "Analyst")]
 
             # See result
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -9313,10 +8631,10 @@ class SQLDataModel:
 
         ```python
             # Create a new column "Hobby" and set the values
-            sdm["Hobby"] = [('Fishing',), ('Biking',), ('Computers',), ('Photography',), ('Studying',)]
+            df["Hobby"] = [('Fishing',), ('Biking',), ('Computers',), ('Photography',), ('Studying',)]
 
             # See result
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -9390,13 +8708,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Get current length
-            num_rows = len(sdm)
+            num_rows = len(df)
 
             # View number
             print(num_rows)
@@ -9429,7 +8747,7 @@ class SQLDataModel:
 
         Examples::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height', 'Birthday']
@@ -9441,13 +8759,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Lets try the round style
-            sdm.set_table_style('round')
+            df.set_table_style('round')
 
             # View it
-            print(sdm)
+            print(df)
 
         This outputs the ``'round'`` table style:
 
@@ -9666,7 +8984,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['idx', 'first', 'last', 'age']
@@ -9678,10 +8996,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data,headers)
+            df = sdm.SQLDataModel(data,headers)
 
             # Display the string representation
-            print(sdm)
+            print(df)
 
         This will output the default alignment, dynamically aligning columns based on their dtype, right-aligned for numeric, left otherwise:
 
@@ -9701,10 +9019,10 @@ class SQLDataModel:
 
         ```python        
             # Using left alignment instead
-            sdm.set_column_alignment("left")
+            df.set_column_alignment("left")
 
             # See difference
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -9725,10 +9043,10 @@ class SQLDataModel:
 
         ```python        
             # Using center alignment instead
-            sdm.set_column_alignment("center")
+            df.set_column_alignment("center")
 
             # See difference
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -9749,10 +9067,10 @@ class SQLDataModel:
 
         ```python        
             # Using right alignment instead
-            sdm.set_column_alignment("right")
+            df.set_column_alignment("right")
 
             # See difference
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -9780,7 +9098,7 @@ class SQLDataModel:
             - Version 0.12.0 (2024-07-06):
                 - Changed default behavior to display a minimum of 4 rows when ``display_max_rows = None`` to retain data visibility when terminal size is below threshold.
             - Version 0.10.4 (2024-07-03):
-                - Modified to escape newline characters through :meth:`SQLDataModel.sqlite_printf_format()` to avoid wrapping table rows.
+                - Modified to escape newline characters through :meth:`utils.sqlite_printf_format()` to avoid wrapping table rows.
             - Version 0.7.0 (2024-06-08):
                 - Modified horizontal truncation behavior to alternate column selection between table start and table end instead of sequential left to right ordering.
         """
@@ -9824,19 +9142,19 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a rowless model
-            sdm = SQLDataModel(headers=['Name', 'Age'])
+            df = sdm.SQLDataModel(headers=['Name', 'Age'])
 
             # Append a row with values
-            sdm.append_row(['Alice', 31])
+            df.append_row(['Alice', 31])
 
             # Append another row
-            sdm.append_row(['John', 48])
+            df.append_row(['John', 48])
 
             # View result
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -9905,21 +9223,21 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Datasets a and b
             data_a = (['A', 1], ['B', 2])
             data_b = (['C', 3], ['D', 4])
 
             # Create the models
-            sdm_a = SQLDataModel(data_a, headers=['letter', 'number'])
-            sdm_b = SQLDataModel(data_b, headers=['letter', 'number'])
+            df_a = SQLDataModel(data_a, headers=['letter', 'number'])
+            df_b = SQLDataModel(data_b, headers=['letter', 'number'])
 
             # Concatenate the two models
-            sdm_ab = sdm_a.concat(sdm_b, inplace=False)
+            df_ab = df_a.concat(df_b, inplace=False)
 
             # View result
-            print(sdm_ab)
+            print(df_ab)
 
         This will output:
         
@@ -9942,10 +9260,10 @@ class SQLDataModel:
             data_e = ['E', 5]
 
             # Append in place
-            sdm_ab.concat(data_e)
+            df_ab.concat(data_e)
 
             # View result
-            print(sdm_ab)
+            print(df_ab)
         ```
 
         This will output:
@@ -10012,7 +9330,7 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height']
@@ -10023,11 +9341,11 @@ class SQLDataModel:
             ]    
 
             # Create the original model with list styling
-            sdm = SQLDataModel(data, headers, table_style='list')
+            df = sdm.SQLDataModel(data, headers, table_style='list')
 
             # Create two copies, one full and one with data only
-            copy_full = sdm.copy()
-            copy_data = sdm.copy(data_only=True)
+            copy_full = df.copy()
+            copy_data = df.copy(data_only=True)
 
             # View both copies
             print(copy_full)
@@ -10086,7 +9404,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data with missing values
             headers = ['Name', 'Age', 'Gender', 'Tenure']
@@ -10098,10 +9416,10 @@ class SQLDataModel:
             ]   
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Get counts
-            counts = sdm.count()
+            counts = df.count()
 
             # View result
             print(counts)
@@ -10143,7 +9461,7 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Gender']
@@ -10154,10 +9472,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Get the value count information
-            count_model = sdm.count_unique()
+            count_model = df.count_unique()
 
             # View the count information
             print(count_model)
@@ -10208,26 +9526,26 @@ class SQLDataModel:
         ----------------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Deduplicate based on a specific column
-            sdm.deduplicate(subset='ID', keep_first=True, inplace=True)
+            df.deduplicate(subset='ID', keep_first=True, inplace=True)
 
         ```
         Based on Multiple Columns
         -------------------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
+            df = sdm.from_csv('example.csv', headers=['ID', 'Name', 'Value'])
 
             # Deduplicate based on multiple columns and save to keep both models
-            sdm_deduped = sdm.deduplicate(subset=['ID', 'Name'], keep_first=False, inplace=False)
+            df_deduped = df.deduplicate(subset=['ID', 'Name'], keep_first=False, inplace=False)
         ```
 
         Note:
@@ -10281,19 +9599,19 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create sample data
             data = [('Alice', 25, None), ('Bob', None, 'N/A'), ('Charlie', 'NaN', ' '), ('David', 30, 'NA')]
 
             # Create the model
-            sdm = SQLDataModel(data, headers=['Name', 'Age', 'Status'])
+            df = SQLDataModel(data, headers=['Name', 'Age', 'Status'])
 
             # Fill missing values with 0
-            sdm_filled = sdm.fillna(value=0, strictly_null=False, inplace=False)
+            df_filled = df.fillna(value=0, strictly_null=False, inplace=False)
 
             # View filled model
-            print(sdm_filled)
+            print(df_filled)
         
         This will output:
         
@@ -10350,7 +9668,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['first', 'last', 'age', 'service', 'hire_date', 'gender']
             data = [
@@ -10361,13 +9679,13 @@ class SQLDataModel:
                 ('Kelly', 'Lee', 32, 8.0, '2016-09-18', 'Female')
             ]        
             # Create the model
-            sdm = SQLDataModel(data, headers, display_float_precision=2, display_index=True)
+            df = sdm.SQLDataModel(data, headers, display_float_precision=2, display_index=True)
 
             # Group by 'gender' column
-            sdm_gender = sdm.group_by("gender")
+            df_gender = df.group_by("gender")
 
             # View model
-            print(sdm_gender)
+            print(df_gender)
         
         This will output:
 
@@ -10384,13 +9702,13 @@ class SQLDataModel:
         Multiple columns can also be used to group by:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('data.csv')
+            df = sdm.from_csv('data.csv')
 
             # Group by multiple columns
-            sdm.group_by(["country", "state", "city"])
+            df.group_by(["country", "state", "city"])
         ```
 
         Note:
@@ -10423,19 +9741,19 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Countries data available for sample dataset
             url = 'https://developers.google.com/public-data/docs/canonical/countries_csv'
 
             # Create the model
-            sdm = SQLDataModel.from_html(url)
+            df = sdm.from_html(url)
 
             # Get head of model
-            sdm_head = sdm.head()
+            df_head = df.head()
 
             # View it
-            print(sdm_head)
+            print(df_head)
 
         This will grab the top 5 rows by default:
 
@@ -10485,17 +9803,17 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create models A and B
-            sdm_a = SQLDataModel([('A', 'B'), ('1', '2')], headers=['A1', 'A2'])
-            sdm_b = SQLDataModel([('C', 'D'), ('3', '4')], headers=['B1', 'B2'])
+            df_a = sdm.SQLDataModel([('A', 'B'), ('1', '2')], headers=['A1', 'A2'])
+            df_b = sdm.SQLDataModel([('C', 'D'), ('3', '4')], headers=['B1', 'B2'])
 
             # Horizontally stack B onto A
-            sdm_ab = sdm_a.hstack(sdm_b)
+            df_ab = df_a.hstack(df_b)
 
             # View stacked model
-            print(sdm_ab)
+            print(df_ab)
 
         This will output the result of stacking B onto A, using each model's headers and dtypes:    
 
@@ -10513,13 +9831,13 @@ class SQLDataModel:
 
         ```python
             # Create a third model C
-            sdm_c = SQLDataModel([('E', 'F'), ('5', '6')], headers=['C1', 'C2'])
+            df_c = sdm.SQLDataModel([('E', 'F'), ('5', '6')], headers=['C1', 'C2'])
 
             # Horizontally stack three models
-            sdm_abc = sdm_a.hstack([sdm_b, sdm_c])
+            df_abc = df_a.hstack([df_b, df_c])
 
             # View stacked result
-            print(sdm_abc)
+            print(df_abc)
         ```
 
         This will output the result of stacking C and B onto A:
@@ -10536,7 +9854,7 @@ class SQLDataModel:
 
         Note:
             - Model dimensions will be truncated or padded to coerce compatible dimensions when stacking, use :meth:`SQLDataModel.merge()` for strict SQL joins instead of hstack.
-            - Headers and data types are inherited from all the models being stacked, this requires aliasing duplicate column names if present, see :meth:`SQLDataModel.alias_duplicates()` for aliasing rules.
+            - Headers and data types are inherited from all the models being stacked, this requires aliasing duplicate column names if present, see :meth:`utils.alias_duplicates()` for aliasing rules.
             - Use ``setitem`` syntax such as ``sdm['New Column'] = values`` to create new columns directly into the current model instead of stacking or see :meth:`SQLDataModel.add_column_with_values()` for convenience method accomplishing the same.
             - See :meth:`SQLDataModel.vstack()` for vertical stacking.
 
@@ -10554,14 +9872,14 @@ class SQLDataModel:
                 ErrorFormat(f"TypeError: invalid type encountered in '{[type(other[n]).__name__ for n in other]}', arguments for `other` must all be of type 'SQLDataModel' to horizontally stack")
             )
         other_headers, other_dtypes = zip(*[(col[0], col[1]) for sdm in other for col in sdm.dtypes.items()])
-        other_headers, other_dtypes = list(SQLDataModel.alias_duplicates([*self.headers,*other_headers])), [*self.dtypes.values(), *other_dtypes]
+        other_headers, other_dtypes = list(utils.alias_duplicates([*self.headers,*other_headers])), [*self.dtypes.values(), *other_dtypes]
         other_data = [(sdm[:self.row_count].data(strict_2d=True)) + [tuple(None for _ in range(sdm.column_count)) for _ in range(self.row_count - sdm.row_count)] for sdm in other]
         other_data = [tuple(item for sublist in row for item in sublist) for row in list(zip(*other_data))]
         if inplace:
             other_headers = other_headers[self.column_count:] # since in place remove current model's headers
             other_dtypes = other_dtypes[self.column_count:] # since in place remove current model's dtypes
             update_sql_script = ";".join([f"""alter table "{self.sql_model}" add column "{col_name}" {self.static_py_to_sql_map_dict.get(col_type, 'TEXT')}""" for col_name, col_type in zip(other_headers, other_dtypes)])
-            col_val_param = ','.join([f""" "{col}" = {SQLDataModel.sqlite_cast_type_format(param='?', dtype=dtype)} """ for col,dtype in zip(other_headers, other_dtypes)])
+            col_val_param = ','.join([f""" "{col}" = {utils.sqlite_cast_type_format(param='?', dtype=dtype)} """ for col,dtype in zip(other_headers, other_dtypes)])
             update_stmt = f"""update "{self.sql_model}" set {col_val_param} where {self.sql_idx} = ?"""
             update_params = [(*other_data[i], row) for i,row in enumerate(self.indicies)]
             try:
@@ -10600,22 +9918,22 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             data = [('Alice', 20, 'F'), ('Billy', 25, 'M'), ('Chris', 30, 'M')]
 
             # Create the model
-            sdm = SQLDataModel(data, headers=['Name','Age','Sex'])    
+            df = sdm.SQLDataModel(data, headers=['Name','Age','Sex'])    
 
             # Insert a new row at index 3
-            sdm.insert_row(3, ['David', 35, 'M'])
+            df.insert_row(3, ['David', 35, 'M'])
 
             # Insert or replace row at index 1
-            sdm.insert_row(1, ['Beth', 27, 'F'], on_conflict='replace')
+            df.insert_row(1, ['Beth', 27, 'F'], on_conflict='replace')
             
             # View result
-            print(sdm)
+            print(df)
 
         This will output the modified model:
 
@@ -10691,13 +10009,13 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['First', 'Last', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['First', 'Last', 'Salary'])
 
             # Iterate over the rows
-            for row in sdm.iter_rows(min_row=2, max_row=4):
+            for row in df.iter_rows(min_row=2, max_row=4):
                 pass # Do stuff
         
         Note:
@@ -10731,13 +10049,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['First', 'Last', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['First', 'Last', 'Salary'])
 
             # Iterate over the namedtuples
-            for row_tuple in sdm.iter_tuples(index=True):
+            for row_tuple in df.iter_tuples(index=True):
                 pass # Do stuff with namedtuples
 
         Note:
@@ -10768,7 +10086,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Birthday', 'Height', 'Date of Hire']
@@ -10779,10 +10097,10 @@ class SQLDataModel:
             ]
 
             # Create the model and infer correct types
-            sdm = SQLDataModel(data, headers, infer_dtypes=True)
+            df = sdm.SQLDataModel(data, headers, infer_dtypes=True)
 
             # View full model
-            print(sdm)
+            print(df)
         
         This will output the sample model we'll be using to calculate mean values for:
 
@@ -10801,10 +10119,10 @@ class SQLDataModel:
 
         ```python
             # Calculate the mean values
-            sdm_mean = sdm.mean()
+            df_mean = df.mean()
 
             # View result
-            print(sdm_mean)
+            print(df_mean)
         ```
 
         This will output the mean values for the "Age", "Birthday", "Height" and "Date of Hire" columns:
@@ -10841,7 +10159,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data with missing values
             headers = ['Name', 'Age', 'Gender', 'Tenure']
@@ -10853,10 +10171,10 @@ class SQLDataModel:
             ]   
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Get minimum values
-            min_values = sdm.min()
+            min_values = df.min()
 
             # View result
             print(min_values)
@@ -10892,7 +10210,7 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data with missing values
             headers = ['Name', 'Age', 'Gender', 'Tenure']
@@ -10904,10 +10222,10 @@ class SQLDataModel:
             ]   
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Get maximum values
-            min_values = sdm.min()
+            min_values = df.min()
 
             # View result
             print(min_values)
@@ -10957,7 +10275,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Left table data with ID column
             left_headers = ["Name", "Age", "ID"]
@@ -10977,8 +10295,8 @@ class SQLDataModel:
             ]
 
             # Create the left and right tables
-            sdm_left = SQLDataModel(left_data, left_headers)
-            sdm_right = SQLDataModel(right_data, right_headers)
+            df_left = sdm.SQLDataModel(left_data, left_headers)
+            df_right = sdm.SQLDataModel(right_data, right_headers)
 
         Here are the left and right tables we will be joining:
             
@@ -11000,10 +10318,10 @@ class SQLDataModel:
 
         ```python
             # Create a model by performing a left join with the tables
-            sdm_joined = sdm_left.merge(sdm_right, how="left")
+            df_joined = df_left.merge(df_right, how="left")
 
             # View result
-            print(sdm_joined)
+            print(df_joined)
         ```
 
         This will output:
@@ -11026,10 +10344,10 @@ class SQLDataModel:
 
         ```python
             # Create a model by performing a right join with the tables
-            sdm_joined = sdm_left.merge(sdm_right, how="right")
+            df_joined = df_left.merge(df_right, how="right")
 
             # View result
-            print(sdm_joined)
+            print(df_joined)
         ```
 
         This will output:
@@ -11052,10 +10370,10 @@ class SQLDataModel:
 
         ```python
             # Create a model by performing an inner join with the tables
-            sdm_joined = sdm_left.merge(sdm_right, how="inner")
+            df_joined = df_left.merge(df_right, how="inner")
 
             # View result
-            print(sdm_joined)
+            print(df_joined)
         ```
 
         This will output:
@@ -11076,10 +10394,10 @@ class SQLDataModel:
 
         ```python
             # Create a model by performing a full outer join with the tables
-            sdm_joined = sdm_left.merge(sdm_right, how="full outer")
+            df_joined = df_left.merge(df_right, how="full outer")
 
             # View result
-            print(sdm_joined)
+            print(df_joined)
         ```
 
         This will output:
@@ -11104,10 +10422,10 @@ class SQLDataModel:
 
         ```python
             # Create a model by performing a cross join with the tables
-            sdm_joined = sdm_left.merge(sdm_right, how="cross")
+            df_joined = df_left.merge(df_right, how="cross")
 
             # View result
-            print(sdm_joined)
+            print(df_joined)
         ```
 
         This will output:
@@ -11139,7 +10457,7 @@ class SQLDataModel:
 
         Note:
             - If ``include_join_column=False`` then only the ``left_on`` join column is included in the result, with the ``right_on`` column removed to avoid redundant shared key values.
-            - If ``include_join_column=True`` then all the columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`SQLDataModel.alias_duplicates()` for details.
+            - If ``include_join_column=True`` then all the columns from both models are included in the result, with aliasing to avoid naming conflicts, see :meth:`utils.alias_duplicates()` for details.
             - The resulting ``SQLDataModel`` is created based on the ``sqlite3`` join definition and specified columns and merge type, for details see ``sqlite3`` documentation.
             - See :meth:`SQLDataModel.hstack()` for horizontally stacking SQLDataModel using shared row dimensions.
             - See :meth:`SQLDataModel.vstack()` for vertically stacking SQLDataModel using shared column dimensions.
@@ -11182,7 +10500,7 @@ class SQLDataModel:
         merge_with.to_sql(tmp_table_name, self.sql_db_conn, if_exists='replace')
         left_headers, right_headers = self.headers, merge_with.headers if include_join_column else [x for x in merge_with.headers if x != right_on]
         all_cols = [*left_headers, *right_headers]
-        headers_str = ",".join([f'a."{col}" as "{alias}"' if i < self.column_count else f'b."{col}" as "{alias}"' for i, (col, alias) in enumerate(zip(all_cols,SQLDataModel.alias_duplicates(all_cols)))])
+        headers_str = ",".join([f'a."{col}" as "{alias}"' if i < self.column_count else f'b."{col}" as "{alias}"' for i, (col, alias) in enumerate(zip(all_cols,utils.alias_duplicates(all_cols)))])
         join_stmt = f"""on a."{left_on}" = b."{right_on}" """ if how != 'cross' else """"""
         fetch_stmt = " ".join(("select",headers_str,f"""from "{self.sql_model}" a {how} join "{tmp_table_name}" b {join_stmt}"""))
         return self.execute_fetch(fetch_stmt)
@@ -11210,7 +10528,7 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Product', 'Units', 'Qtr','Sales']
@@ -11230,10 +10548,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Pivot 'Product' by quarterly sales
-            quarterly_sales = sdm.pivot('Product', 'Qtr', 'Sales')
+            quarterly_sales = df.pivot('Product', 'Qtr', 'Sales')
 
             # View result
             print(quarterly_sales)
@@ -11255,7 +10573,7 @@ class SQLDataModel:
 
         ```python
             # This time pivot by 'Sales' and 'Units'
-            quarterly_metrics = sdm.pivot('Product', 'Qtr', ['Units','Sales'])
+            quarterly_metrics = df.pivot('Product', 'Qtr', ['Units','Sales'])
 
             # View new pivot
             print(quarterly_metrics)
@@ -11325,7 +10643,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age', 'service']
             data = [
@@ -11336,10 +10654,10 @@ class SQLDataModel:
             ]        
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # View current state
-            print(sdm)
+            print(df)
         
         This will output:
 
@@ -11358,13 +10676,11 @@ class SQLDataModel:
         Now reset the index column:
 
         ```python            
-            from SQLDataModel import SQLDataModel
-
             # Reset the index with default start value
-            sdm.reset_index()
+            df.reset_index()
 
             # View updated model
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -11384,13 +10700,11 @@ class SQLDataModel:
         Reset the index to a custom value:
 
         ```python            
-            from SQLDataModel import SQLDataModel
-
             # Reset the index with a different value
-            sdm.reset_index(start_index = -3)
+            df.reset_index(start_index = -3)
 
             # View updated model
-            print(sdm)
+            print(df)
         ```
 
         This will output:
@@ -11450,25 +10764,25 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
+            df = sdm.from_csv('example.csv', headers=['Name', 'Age', 'Salary'])
 
             # Set color using hex value
-            sdm.set_display_color('#A6D7E8')
+            df.set_display_color('#A6D7E8')
             
             # Set color using rgb value
-            sdm.set_display_color((166, 215, 232))
+            df.set_display_color((166, 215, 232))
 
         If you're unsure of which color to use, have one selected for you:
 
         ```python
             # Surprise me! Use a random color
-            sdm.set_display_color(rand_color=True)
+            df.set_display_color(rand_color=True)
 
             # View the value set
-            print(sdm.display_color)
+            print(df.display_color)
         ```
 
         In this case we got a nice 'plum' color:
@@ -11481,10 +10795,10 @@ class SQLDataModel:
 
         ```python
             # Set color to None
-            sdm.set_display_color(color=None)
+            df.set_display_color(color=None)
 
             # View the value set
-            print(sdm.display_color) # None   
+            print(df.display_color) # None   
         ```
 
         This will return None, signifying the default terminal color will be used.
@@ -11524,7 +10838,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['first', 'last', 'age', 'service', 'hire_date']
             data = [
@@ -11536,13 +10850,13 @@ class SQLDataModel:
             ]     
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Sort by last name column
-            sorted_sdm = sdm.sort('last')
+            sorted_df = df.sort('last')
 
             # View sorted model
-            print(sorted_sdm)
+            print(sorted_df)
         
         This will output:
 
@@ -11563,10 +10877,10 @@ class SQLDataModel:
 
         ```python            
             # Sort by multiple columns in descending order
-            sorted_sdm = sdm.sort(['age','hire_date'], asc=False)
+            sorted_df = df.sort(['age','hire_date'], asc=False)
 
             # View sorted
-            print(sorted_sdm)
+            print(sorted_df)
         ```
 
         This will output:
@@ -11623,13 +10937,13 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a single item model
-            sdm = SQLDataModel([[' Hello, World! ']])
+            df = sdm.SQLDataModel([[' Hello, World! ']])
 
             # Strip whitespace and print
-            print(sdm.strip())
+            print(df.strip())
 
         This will output the model after stripping the leading and trailing whitespace characters:
 
@@ -11645,7 +10959,7 @@ class SQLDataModel:
         Non-whitespace characters can also be stripped:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['Col A', 'Col B', 'Col C']
             data = [
@@ -11655,13 +10969,13 @@ class SQLDataModel:
             ]
 
             # Create the sample model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Strip leading and trailing 'A' character
-            sdm_stripped = sdm.strip('A')
+            df_stripped = df.strip('A')
 
             # View result
-            print(sdm_stripped)
+            print(df_stripped)
         ```
 
         This will output a new model where any leading and trailing 'A' characters have been removed:
@@ -11681,10 +10995,10 @@ class SQLDataModel:
 
         ```python
             # Strip multiple characters and this time modify model inplace
-            sdm.strip('123', inplace=True)
+            df.strip('123', inplace=True)
 
             # View result
-            print(sdm)
+            print(df)
         ```
         
         This will output the modified model after stripping leading and trailing '123' characters:
@@ -11745,19 +11059,19 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Countries data available for sample dataset
             url = 'https://developers.google.com/public-data/docs/canonical/countries_csv'
 
             # Create the model
-            sdm = SQLDataModel.from_html(url)
+            df = sdm.from_html(url)
 
             # Get tail of model
-            sdm_tail = sdm.tail()
+            df_tail = df.tail()
 
             # View it
-            print(sdm_tail)
+            print(df_tail)
 
         This will grab the bottom 5 rows by default:
 
@@ -11802,19 +11116,19 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel([('A1', 'A2'), ('B1', 'B2'), ('C1', 'C2')])
+            df = sdm.SQLDataModel([('A1', 'A2'), ('B1', 'B2'), ('C1', 'C2')])
 
             # Transpose it
-            sdm_transposed = sdm.transpose()
+            df_transposed = df.transpose()
 
             # View original
-            print(f"Original:\\n{sdm}")
+            print(f"Original:\\n{df}")
 
             # Along with transposed
-            print(f"Transposed:\\n{sdm_transposed}")
+            print(f"Transposed:\\n{df_transposed}")
 
         This will output the result of the transposition:
 
@@ -11863,7 +11177,7 @@ class SQLDataModel:
         Example:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             data = [
@@ -11876,13 +11190,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers=['Name', 'City'])
+            df = sdm.SQLDataModel(data, headers=['Name', 'City'])
 
             # Create a new model from only unique rows
-            sdm_unique = sdm.unique()
+            df_unique = df.unique()
 
             # View it
-            print(sdm_unique)    
+            print(df_unique)    
         ```
 
         This will output the first unique rows, ignoring the original indicies:
@@ -11902,10 +11216,10 @@ class SQLDataModel:
 
         ```python
             # Do not ignore the indicies
-            sdm_unique_with_idx = sdm.unique(ignore_index=False)
+            df_unique_with_idx = df.unique(ignore_index=False)
 
             # View it
-            print(sdm_unique_with_idx)
+            print(df_unique_with_idx)
         ```
 
         This will output a similar result, but the original indicies from the rows kept is retained:
@@ -11937,10 +11251,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Filter rows by 'Age' and return unique 'Department' values
-            under_30_depts = sdm[sdm['Age'] < 30, 'Department'].unique()
+            under_30_depts = df[df['Age'] < 30, 'Department'].unique()
 
             # View it
             print(under_30_depts)
@@ -11990,17 +11304,17 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create models A and B
-            sdm_a = SQLDataModel([('A', 1), ('B', 2)], headers=['A1', 'A2'])
-            sdm_b = SQLDataModel([('C', 3), ('D', 4)], headers=['B1', 'B2'])
+            df_a = sdm.SQLDataModel([('A', 1), ('B', 2)], headers=['A1', 'A2'])
+            df_b = sdm.SQLDataModel([('C', 3), ('D', 4)], headers=['B1', 'B2'])
 
             # Vertically stack B onto A
-            sdm_ab = sdm_a.vstack(sdm_b)
+            df_ab = df_a.vstack(df_b)
 
             # View stacked model
-            print(sdm_ab)
+            print(df_ab)
 
         This will output the result of stacking B onto A, using the base model columns and dtypes:
 
@@ -12020,13 +11334,13 @@ class SQLDataModel:
 
         ```python
             # Create a third model C
-            sdm_c = SQLDataModel([('E', 5), ('F', 6)], headers=['C1', 'C2'])
+            df_c = sdm.SQLDataModel([('E', 5), ('F', 6)], headers=['C1', 'C2'])
 
             # Vertically stack all three models
-            sdm_abc = sdm_a.vstack([sdm_b, sdm_c])
+            df_abc = df_a.vstack([df_b, df_c])
 
             # View stacked result
-            print(sdm_abc)
+            print(df_abc)
         ```
 
         This will output the result of stacking C and B onto A:
@@ -12066,7 +11380,7 @@ class SQLDataModel:
             )
         other_data = [[cell for cell in sublist] + [None] * (self.column_count - len(sublist)) for sublist in [item for sublist in [sdm[:,:self.column_count].data(index=False, include_headers=False, strict_2d=True) for sdm in other] for item in sublist]]
         if inplace:
-            sql_insert_stmt = f"""insert into "{self.sql_model}" ({','.join([f'"{col}"' for col in self.headers])}) values ({",".join([SQLDataModel.sqlite_cast_type_format(dtype=self.header_master[col][1], as_binding=True) for col in self.headers])})"""
+            sql_insert_stmt = f"""insert into "{self.sql_model}" ({','.join([f'"{col}"' for col in self.headers])}) values ({",".join([utils.sqlite_cast_type_format(dtype=self.header_master[col][1], as_binding=True) for col in self.headers])})"""
             try:
                 self.sql_db_conn.executemany(sql_insert_stmt, other_data)
                 self.sql_db_conn.commit()
@@ -12098,7 +11412,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Job']
@@ -12111,13 +11425,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Filter model by 'Age' > 30
-            sdm_filtered = sdm.where('Age > 20')
+            df_filtered = df.where('Age > 20')
 
             # View result
-            print(sdm_filtered)
+            print(df_filtered)
 
         This will output:
 
@@ -12137,10 +11451,10 @@ class SQLDataModel:
 
         ```python        
             # Filter by 'Job' and 'Age'
-            sdm_filtered = sdm.where("Job = 'Student' and Age < 18")
+            df_filtered = df.where("Job = 'Student' and Age < 18")
 
             # View result
-            print(sdm_filtered)
+            print(df_filtered)
         ```
 
         This will output:
@@ -12193,7 +11507,7 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Height', 'Hired']
@@ -12204,10 +11518,10 @@ class SQLDataModel:
             ]    
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # See what we're working with
-            print(sdm)
+            print(df)
 
         This will output:
 
@@ -12226,13 +11540,13 @@ class SQLDataModel:
 
         ```python
             # Convert the string based 'Hired' column to boolean values
-            sdm['Hired'] = sdm['Hired'].astype('bool')
+            df['Hired'] = df['Hired'].astype('bool')
 
             # Let's also create a new 'Height' column, this time as an integer
-            sdm['Height int'] = sdm['Height'].astype('int')
+            df['Height int'] = df['Height'].astype('int')
 
             # See the new values and their types
-            print(sdm)
+            print(df)
         ```
         
         This will output:
@@ -12252,10 +11566,10 @@ class SQLDataModel:
 
         ```python
             # Convert 'Age' directly to float using the built-in type:
-            sdm['Age float'] = sdm['Age'].astype(float)
+            df['Age float'] = df['Age'].astype(float)
 
             # View updated model
-            print(sdm)
+            print(df)
         ```
 
         This will output the result of mapping the built-in ``float`` type to 'Age' as a new column:
@@ -12283,7 +11597,7 @@ class SQLDataModel:
                 - New method.
         """
         if dtype in ('bool','bytes','date','datetime','float','int','None','str'):
-            str_col_cast = ",".join([SQLDataModel.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
+            str_col_cast = ",".join([utils.sqlite_cast_type_format(param=col, dtype=dtype, as_binding=False, as_alias=True) for col in self.headers])        
             sql_stmt = " ".join(("select",str_col_cast,f'from "{self.sql_model}"'))
             dtype_dict = {col:dtype for col in self.headers}
             return self.execute_fetch(sql_stmt, dtypes=dtype_dict)                
@@ -12321,34 +11635,34 @@ class SQLDataModel:
         -------------------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the SQLDataModel:
-            sdm = SQLDataModel.from_csv('employees.csv', headers=['First Name', 'Last Name', 'City', 'State'])
+            df = sdm.from_csv('employees.csv', headers=['First Name', 'Last Name', 'City', 'State'])
 
             # Create the function:
             def uncase_name(x):
                 return x.lower()
             
             # Apply to existing column:
-            sdm['First Name'] = sdm['First Name'].apply(uncase_name) # existing column will be updated with new values
+            df['First Name'] = df['First Name'].apply(uncase_name) # existing column will be updated with new values
 
             # Or create new one by passing in a new column name:
-            sdm['New Column'] = sdm['First Name'].apply(uncase_name) # new column will be created with returned values
+            df['New Column'] = df['First Name'].apply(uncase_name) # new column will be created with returned values
         ```
 
         Applying to Multiple Columns
         ----------------------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
         
             # Create the function, note that ``func`` must have the same number of args as the model ``.apply()`` is called on:
             def summarize_employee(first, last, city, state)
                 summary = f"{first} {last} is from {city}, {state}"
             
             # Create a new 'Employee Summary' column for the returned values:
-            sdm['Employee Summary'] = sdm.apply(summarize_employee)
+            df['Employee Summary'] = df.apply(summarize_employee)
         ```
 
         Applying a Built-in Function
@@ -12356,29 +11670,29 @@ class SQLDataModel:
 
         ```python            
             import math
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the SQLDataModel:
-            sdm = SQLDataModel.from_csv('number-data.csv', headers=['Number'])
+            df = sdm.from_csv('number-data.csv', headers=['Number'])
 
             # Apply the math.sqrt function to the original 'Number' column:
-            sdm_sqrt = sdm.apply(math.sqrt)
+            df_sqrt = df.apply(math.sqrt)
         ```
 
         Applying a Lambda Function
         --------------------------
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the SQLDataModel:
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
+            df = sdm.from_csv('example.csv', headers=['Column1', 'Column2'])
             
             # Create a new 'Column3' using the values returned from the lambda function:
-            sdm['Column3'] = sdm.apply(lambda x, y: x + y)
+            df['Column3'] = df.apply(lambda x, y: x + y)
 
             # Alternatively, an existing column can be updated in place:
-            sdm['Column1'] = sdm['Column1'].apply(lambda x: x // 4)
+            df['Column1'] = df['Column1'].apply(lambda x: x // 4)
         ```
 
         Note:
@@ -12425,7 +11739,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['first', 'last', 'age', 'service', 'hire_date']
@@ -12438,13 +11752,13 @@ class SQLDataModel:
             ]  
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
             
             # Get all column python dtypes
-            sdm_dtypes = sdm.get_column_dtypes()
+            df_dtypes = df.get_column_dtypes()
 
             # View dict items
-            for col, dtype in sdm_dtypes.items():
+            for col, dtype in df_dtypes.items():
                 print(f"{col}: {dtype}")
         
         This will output:
@@ -12461,10 +11775,10 @@ class SQLDataModel:
 
         ```python            
             # Get specific column sql dtypes
-            sdm_dtypes = sdm.get_column_dtypes(columns=['first','age','service'], dtypes="sql")
+            df_dtypes = df.get_column_dtypes(columns=['first','age','service'], dtypes="sql")
 
             # View dict items
-            for col, dtype in sdm_dtypes.items():
+            for col, dtype in df_dtypes.items():
                 print(f"{col}: {dtype}")
         ```
 
@@ -12514,7 +11828,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['idx', 'First', 'Last', 'Age']
@@ -12526,16 +11840,16 @@ class SQLDataModel:
             ]
             
             # Create the model
-            sdm = SQLDataModel(data, headers)        
+            df = sdm.SQLDataModel(data, headers)        
 
             # Original dtype for comparison
-            old_dtype = sdm.get_column_dtypes('Age')
+            old_dtype = df.get_column_dtypes('Age')
 
             # Set the data type of the 'Age' column to 'float'
-            sdm.set_column_dtypes('Age', 'float')
+            df.set_column_dtypes('Age', 'float')
 
             # Confirm column dtype
-            new_dtype = sdm.get_column_dtypes('Age')
+            new_dtype = df.get_column_dtypes('Age')
 
             # View result
             print(f"Age dtype: {old_dtype} -> {new_dtype}")
@@ -12569,7 +11883,7 @@ class SQLDataModel:
             update_col_sql = """"""
             for val_column, val_dtype in validated_args.items():
                 col_sql_dtype = self.static_py_to_sql_map_dict[val_dtype]
-                dyn_dtype_cast = SQLDataModel.sqlite_cast_type_format(param=val_column, dtype=val_dtype, as_binding=False, as_alias=False)
+                dyn_dtype_cast = utils.sqlite_cast_type_format(param=val_column, dtype=val_dtype, as_binding=False, as_alias=False)
                 update_col_sql = """;""".join((update_col_sql,f"""alter table "{self.sql_model}" add column "{val_column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{val_column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{val_column}"; alter table "{self.sql_model}" rename column "{val_column}_x" to "{val_column}";"""))
             self.execute_transaction(update_col_sql)
         else:
@@ -12581,7 +11895,7 @@ class SQLDataModel:
             update_col_sql = """"""
             for val_column in column:
                 col_sql_dtype = self.static_py_to_sql_map_dict[dtype]
-                dyn_dtype_cast = SQLDataModel.sqlite_cast_type_format(param=val_column, dtype=dtype, as_binding=False, as_alias=False)
+                dyn_dtype_cast = utils.sqlite_cast_type_format(param=val_column, dtype=dtype, as_binding=False, as_alias=False)
                 update_col_sql = """;""".join((update_col_sql,f"""alter table "{self.sql_model}" add column "{val_column}_x" {col_sql_dtype}; update "{self.sql_model}" set "{val_column}_x" = {dyn_dtype_cast}; alter table "{self.sql_model}" drop column "{val_column}"; alter table "{self.sql_model}" rename column "{val_column}_x" to "{val_column}";"""))
             self.execute_transaction(update_col_sql)
         
@@ -12594,13 +11908,13 @@ class SQLDataModel:
         
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
+            df = sdm.from_csv('example.csv', headers=['Column1', 'Column2'])
 
             # Get the current name
-            model_name = sdm.get_model_name()
+            model_name = df.get_model_name()
 
             # View it
             print(f'The model is currently using the table name: {model_name}')
@@ -12626,13 +11940,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
+            df = sdm.from_csv('example.csv', headers=['Column1', 'Column2'])
 
             # Rename the model
-            sdm.set_model_name('custom_table')
+            df.set_model_name('custom_table')
 
         Note:
             - The provided value must be a valid SQL table name.
@@ -12672,23 +11986,23 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('example.csv', headers=['Column1', 'Column2'])
+            df = sdm.from_csv('example.csv', headers=['Column1', 'Column2'])
 
             # Create the SQL query to execute
             query = 'SELECT * FROM sdm WHERE Column1 > 10'
 
             # Fetch and save the result to a new instance
-            result_model = sdm.execute_fetch(query)
+            result_model = df.execute_fetch(query)
 
             # Create a parameterized SQL query to execute
             query = 'SELECT * FROM sdm WHERE Column1 > ? OR Column2 < ?'
             params = (10, 20)
 
             # Provide the SQL and the statement parameters
-            result_parameterized = sdm.execute_fetch(query, params)
+            result_parameterized = df.execute_fetch(query, params)
 
         Important:
             - The default table name is ``'sdm'``, you can use :meth:`SQLDataModel.set_model_name()` to modify the name used by ``SQLDataModel``.
@@ -12742,16 +12056,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('data.csv')
+            df = sdm.from_csv('data.csv')
 
             # Execute statement without results, modifying column in place
-            sdm.execute_statement('UPDATE table SET column = value WHERE condition')
+            df.execute_statement('UPDATE table SET column = value WHERE condition')
 
             # Execute a parameterized with statement by providing values
-            sdm.execute_statement('DELETE FROM table WHERE idx = ? or name = ?', (7,'Bob'))
+            df.execute_statement('DELETE FROM table WHERE idx = ? or name = ?', (7,'Bob'))
 
         Note:
             - To execute a query with the expectation of results, see :meth:`SQLDataModel.execute_fetch()` method.
@@ -12792,10 +12106,10 @@ class SQLDataModel:
 
         Example::
             
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('data.csv')
+            df = sdm.from_csv('data.csv')
 
             # Script to update columns with predicate
             transaction_script = '''
@@ -12804,7 +12118,7 @@ class SQLDataModel:
             '''
 
             # Execute the script
-            sdm.execute_transaction(transaction_script)
+            df.execute_transaction(transaction_script)
 
         Note:
             - Use :meth:`SQLDataModel.execute_fetch()` method if the SQL script is expected to return a selection or result set upon execution.
@@ -12844,7 +12158,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['first', 'last', 'age', 'service', 'hire_date']
             data = [
@@ -12856,13 +12170,13 @@ class SQLDataModel:
             ]   
                 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Freeze index as new column 'id'
-            sdm.freeze_index("id")    
+            df.freeze_index("id")    
 
             # View model
-            print(sdm)
+            print(df)
         
         This will output:
         
@@ -12893,7 +12207,7 @@ class SQLDataModel:
             )
         if column_name is None:
             column_name = "frzn_id"
-        column_name = tuple(SQLDataModel.alias_duplicates([self.sql_idx,*self.headers,column_name]))[-1]
+        column_name = tuple(utils.alias_duplicates([self.sql_idx,*self.headers,column_name]))[-1]
         sql_script = f"""alter table "{self.sql_model}" add column "{column_name}" integer;update "{self.sql_model}" set "{column_name}" = "{self.sql_idx}";"""
         self.execute_transaction(sql_script)
 
@@ -12911,16 +12225,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create model from data
-            sdm = SQLDataModel.from_csv('data.csv')
+            df = sdm.from_csv('data.csv')
 
             # Add new column with default value 42
-            sdm.add_column_with_values('new_column', value=42)
+            df.add_column_with_values('new_column', value=42)
 
             # Add new column by copying values from an existing column
-            sdm.add_column_with_values('new_column', value='existing_column')
+            df.add_column_with_values('new_column', value='existing_column')
         
         Note:
             - Many other methods, including :meth:`SQLDataModel.__setitem__` rely on this method, therefore modifying it may cause unpredictable behavior.
@@ -12996,16 +12310,16 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('data.csv')
+            df = sdm.from_csv('data.csv')
 
             # Apply upper() method using lambda function to column ``name``
-            sdm.apply_function_to_column(lambda x: x.upper(), column='name')
+            df.apply_function_to_column(lambda x: x.upper(), column='name')
 
             # Apply addition through lambda function to column at index 1
-            sdm.apply_function_to_column(lambda x, y: x + y, column=1)
+            df.apply_function_to_column(lambda x, y: x + y, column=1)
 
         Note:
             - This method is a simplified version of the :meth:`SQLDataModel.apply()` method, which can be used for arbitrary function params and inputs.
@@ -13072,13 +12386,13 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create the model
-            sdm = SQLDataModel.from_csv('data.csv')
+            df = sdm.from_csv('data.csv')
 
             # Create the stub
-            stub = sdm.generate_apply_function_stub()
+            stub = df.generate_apply_function_stub()
             
             # View it
             print(stub)
@@ -13124,24 +12438,24 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create an initial 3x3 model filled with dashes
-            sdm = SQLDataModel.from_shape((3,3), fill='---', headers=['A', 'B', 'C'])
+            df = sdm.from_shape((3,3), fill='---', headers=['A', 'B', 'C'])
 
             # Update cell based on integer indicies
-            sdm.update_index_at(0, 0, 'Top Left')
-            sdm.update_index_at(0, 2, 'Top Right')
+            df.update_index_at(0, 0, 'Top Left')
+            df.update_index_at(0, 2, 'Top Right')
 
             # Update cell based on row index and column name
-            sdm.update_index_at(2, 'A', 'Bottom Left')
-            sdm.update_index_at(2, 'C', 'Bottom Right')
+            df.update_index_at(2, 'A', 'Bottom Left')
+            df.update_index_at(2, 'C', 'Bottom Right')
 
             # Update based on negative row and column indexing
-            sdm.update_index_at(-2, -2, 'Center')
+            df.update_index_at(-2, -2, 'Center')
 
             # View result
-            print(sdm)
+            print(df)
 
         This will output cumulative result of our updates:
 
@@ -13201,7 +12515,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['User', 'Key', 'Value', 'Active']
@@ -13213,10 +12527,10 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Calculate the max column widths
-            col_widths = sdm._calculate_col_widths()
+            col_widths = df._calculate_col_widths()
 
             # View result
             print(col_widths)
@@ -13279,7 +12593,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age', 'service_time']
             data = [
@@ -13290,10 +12604,10 @@ class SQLDataModel:
             ]
 
             # Create the model with sample data
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # View header master
-            print(sdm.header_master)
+            print(df.header_master)
 
         This will output:
 
@@ -13308,7 +12622,7 @@ class SQLDataModel:
         Example Attributes Modified:
 
         ```python
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['idx', 'first', 'last', 'age', 'service_time']
             data = [
@@ -13319,19 +12633,19 @@ class SQLDataModel:
             ]
 
             # Create the model with sample data
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Get current column count
-            num_cols_before = sdm.column_count
+            num_cols_before = df.column_count
 
             # Add new column
-            sdm['new_column'] = 'empty'
+            df['new_column'] = 'empty'
 
             # Method is called behind the scenes
-            sdm._update_model_metadata()
+            df._update_model_metadata()
 
             # Get new column count
-            num_cols_after = sdm.column_count
+            num_cols_after = df.column_count
 
             # View difference
             print(f"cols before: {num_cols_before}, cols after: {num_cols_after}")
@@ -13387,9 +12701,9 @@ class SQLDataModel:
         columns = columns if columns else self.headers
         columns = [self.sql_idx,*columns] if index else columns
         if na_rep is None:
-            headers_selection_str = ",".join([f'''"{col}" as "{col_alias}"''' for col,col_alias in zip(columns,SQLDataModel.alias_duplicates(columns))])
+            headers_selection_str = ",".join([f'''"{col}" as "{col_alias}"''' for col,col_alias in zip(columns,utils.alias_duplicates(columns))])
         else:
-            headers_selection_str = ",".join([f'''ifnull("{col}",'{na_rep}') as "{col_alias}"''' for col,col_alias in zip(columns,SQLDataModel.alias_duplicates(columns))])
+            headers_selection_str = ",".join([f'''ifnull("{col}",'{na_rep}') as "{col_alias}"''' for col,col_alias in zip(columns,utils.alias_duplicates(columns))])
         if isinstance(rows, int):
             row_selection_str = f"""where "{self.sql_idx}" = {rows}"""
         elif isinstance(rows, slice):
@@ -13417,13 +12731,13 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a sample model
-            sdm = SQLDataModel.from_shape(shape=(10,3), headers=['Name','Age','Sex'])
+            df = sdm.from_shape(shape=(10,3), headers=['Name','Age','Sex'])
 
             # Generate an SQL statement for all data
-            sql_stmt = sdm._generate_sql_stmt_fetchall(index=False) 
+            sql_stmt = df._generate_sql_stmt_fetchall(index=False) 
 
             # View it
             print(sql_stmt)
@@ -13610,16 +12924,16 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             headers = ['Name', 'Age', 'Height']
             data = [('John', 30, 175.3), ('Alice', 28, 162.0), ('Travis', 35, 185.8)]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Get current valid indicies
-            valid_indicies = sdm.get_indicies()
+            valid_indicies = df.get_indicies()
 
             # View results
             print(valid_indicies)
@@ -13655,19 +12969,25 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
+
+            # Create the model with some sample data
+            df = sdm.SQLDataModel(
+                data=[(23, 'W'), (24, 'X'), (25, 'Y'), (26, 'Z')], 
+                headers=['column1', 'column2']
+            )
 
             # Update specific rows and columns with provided values
-            sdm._update_rows_and_columns_with_values(
+            df._update_rows_and_columns_with_values(
                 rows_to_update=(1, 2, 3),
                 columns_to_update=["column1", "column2"],
                 values_to_update=[(10, 'A'), (20, 'B'), (30, 'C')]
             )
 
             # Create a new column named "new_column" with default values
-            sdm._update_rows_and_columns_with_values(
+            df._update_rows_and_columns_with_values(
                 columns_to_update=["new_column"],
-                values_to_update=[(None,)] * sdm.row_count
+                values_to_update=[(None,)] * df.row_count
             )
 
         Note:
@@ -13748,7 +13068,7 @@ class SQLDataModel:
 
         Example::
         
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             headers = ['idx', 'first', 'last', 'age']
             data = [
@@ -13759,10 +13079,10 @@ class SQLDataModel:
             ]
 
             # Create the sample model
-            sdm = SQLDataModel(data,headers)
+            df = sdm.SQLDataModel(data,headers)
 
             # Retrieve the create statement for the SQLDataModel
-            create_stmt = sdm._get_sql_create_stmt()
+            create_stmt = df._get_sql_create_stmt()
 
             # Print the returned statement
             print(create_stmt)
@@ -13830,10 +13150,10 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a 10 rows x 3 column model
-            sdm = SQLDataModel.from_shape(shape=(10, 3), headers=['A','B','C'])
+            df = sdm.from_shape(shape=(10, 3), headers=['A','B','C'])
             
             # Various row index types
             row_indicies = [
@@ -13916,10 +13236,10 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a 10 rows x 6 column model
-            sdm = SQLDataModel.from_shape((10, 6), headers=['A','B','C','D','E','F'])
+            df = sdm.from_shape((10, 6), headers=['A','B','C','D','E','F'])
             
             # Various column index types
             column_indicies = [
@@ -14042,10 +13362,10 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Create a 10 rows by 4 columns model
-            sdm = SQLDataModel.from_shape(shape=(10,4), headers=['A','B','C','D'])
+            df = sdm.from_shape(shape=(10,4), headers=['A','B','C','D'])
 
             # Index pairs to validate
             input_idx = [
@@ -14061,7 +13381,7 @@ class SQLDataModel:
             # Loop over the [row, col] pairs
             for row, col in input_idx:
                 # Validated and store the pairs
-                valid_idx.append(sdm._validate_indicies((row, col)))
+                valid_idx.append(df._validate_indicies((row, col)))
             
             # View input and validated pairs
             for original, validated in zip(input_idx, valid_idx):
@@ -14130,7 +13450,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data
             headers = ['Name', 'Age', 'Sex', 'City']
@@ -14144,16 +13464,16 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Filter for rows containing the string 'Chicago'
-            matching_indicies = sdm['City'].contains('Chicago')
+            matching_indicies = df['City'].contains('Chicago')
 
             # Apply filter to model
-            sdm_chicago = sdm[matching_indicies]
+            df_chicago = df[matching_indicies]
 
             # View result
-            print(sdm_chicago)
+            print(df_chicago)
 
         This will output the result of applying the filter to the model:
 
@@ -14171,10 +13491,10 @@ class SQLDataModel:
 
         ```python
             # Method can also search all columns, and be applied directly
-            sdm_with_e = sdm[sdm.contains('E', case=False)]
+            df_with_e = df[df.contains('E', case=False)]
             
             # View result
-            print(sdm_with_e)
+            print(df_with_e)
         ```
 
         This will output the result of a case-insensitive search:
@@ -14194,27 +13514,27 @@ class SQLDataModel:
 
         ```python
             # Create a 'State' column with a default value
-            sdm['State'] = None
+            df['State'] = None
             
             # Filter and set the values that contain the pattern
-            sdm[sdm.contains('Chicago'), 'State'] = 'Illinois'
+            df[df.contains('Chicago'), 'State'] = 'Illinois'
 
             # Multiple conditions can be used
-            tx_1 = sdm.contains('Houston')
-            tx_2 = sdm.contains('Austin')
+            tx_1 = df.contains('Houston')
+            tx_2 = df.contains('Austin')
 
             # Then chained together using set notation
-            sdm[(tx_1 | tx_2), 'State'] = 'Texas'
+            df[(tx_1 | tx_2), 'State'] = 'Texas'
 
             # Alternatively, an iterable of patterns can be provided
-            sdm[sdm.contains(['Houston','Austin']), 'State'] = 'Texas'
+            df[df.contains(['Houston','Austin']), 'State'] = 'Texas'
         ```
 
         Note:
             - Any non-string values are converted using ``str(value)`` for comparisons only.
             - See :meth:`SQLDataModel.__eq__()` for strict equality comparison operations.
             - See :meth:`SQLDataModel.__and__()` for more details on bitwise and set operations.
-            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``sdm[row, column] = value`` and correct usage.
+            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``df[row, column] = value`` and correct usage.
             - See :meth:`SQLDataModel.startswith()` and :meth:`SQLDataModel.endswith()` for additional string methods.
 
         Changelog:
@@ -14248,7 +13568,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data
             headers = ['Name', 'Age', 'Sex', 'City']
@@ -14262,16 +13582,16 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Filter for rows where any column starts with the string 'Chi'
-            matching_indices = sdm['City'].startswith('Chi')
+            matching_indices = df['City'].startswith('Chi')
 
             # Apply filter to model
-            sdm_city = sdm[matching_indices]
+            df_city = df[matching_indices]
 
             # View result
-            print(sdm_city)
+            print(df_city)
 
         This will output the result of applying the filter to the model:
 
@@ -14289,10 +13609,10 @@ class SQLDataModel:
 
         ```python
             # Method can also search all columns, and be applied directly
-            sdm_prefix = sdm[sdm.startswith('A', case=False)]
+            df_prefix = df[df.startswith('A', case=False)]
             
             # View result
-            print(sdm_prefix)
+            print(df_prefix)
         ```
 
         This will output the result of a case-insensitive search:
@@ -14311,27 +13631,27 @@ class SQLDataModel:
 
         ```python
             # Create a 'State' column with a default value
-            sdm['State'] = None
+            df['State'] = None
             
             # Filter and set the values that start with the pattern
-            sdm[sdm.startswith('Chi'), 'State'] = 'Illinois'
+            df[df.startswith('Chi'), 'State'] = 'Illinois'
 
             # Multiple conditions can be used
-            tx_1 = sdm.startswith('Hou')
-            tx_2 = sdm.startswith('Aus')
+            tx_1 = df.startswith('Hou')
+            tx_2 = df.startswith('Aus')
 
             # Then chained together using set notation
-            sdm[(tx_1 | tx_2), 'State'] = 'Texas'
+            df[(tx_1 | tx_2), 'State'] = 'Texas'
 
             # Alternatively, an iterable of patterns can be provided
-            sdm[sdm.startswith(['Hou','Aus']), 'State'] = 'Texas'
+            df[df.startswith(['Hou','Aus']), 'State'] = 'Texas'
         ```
 
         Note:
             - Any non-string values are converted using ``str(value)`` for comparisons only.
             - See :meth:`SQLDataModel.__eq__()` for strict equality comparison operations.
             - See :meth:`SQLDataModel.__and__()` for more details on bitwise and set operations.
-            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``sdm[row, column] = value`` and correct usage.
+            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``df[row, column] = value`` and correct usage.
             - See :meth:`SQLDataModel.contains()` and :meth:`SQLDataModel.endswith()` for additional string methods.
 
         Changelog:
@@ -14365,7 +13685,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
             
             # Sample data
             headers = ['Name', 'Age', 'Sex', 'City']
@@ -14379,16 +13699,16 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Filter for rows where any column ends with the string 'ston'
-            matching_indices = sdm['City'].endswith('ston')
+            matching_indices = df['City'].endswith('ston')
 
             # Apply filter to model
-            sdm_suffix = sdm[matching_indices]
+            df_suffix = df[matching_indices]
 
             # View result
-            print(sdm_suffix)  
+            print(df_suffix)  
 
         This will output the result of applying the filter to the model:
 
@@ -14406,10 +13726,10 @@ class SQLDataModel:
 
         ```python
             # Method can also search all columns, and be applied directly
-            sdm_n = sdm[sdm.endswith('N', case=False)]
+            df_n = df[df.endswith('N', case=False)]
             
             # View result
-            print(sdm_n)
+            print(df_n)
         ```
 
         This will output the result of a case-insensitive search:
@@ -14430,22 +13750,22 @@ class SQLDataModel:
 
         ```python
             # Create a new column 'Parity' with a default value
-            sdm['Parity'] = None
+            df['Parity'] = None
             
             # Create patterns for even or odd suffixes
             even_suffixes = [0,2,4,6,8]
             odd_suffixes = [1,3,5,7,9]
 
             # Create the filters for both outcomes
-            even_filter = sdm.endswith(even_suffixes)
-            odd_filter = sdm.endswith(odd_suffixes)
+            even_filter = df.endswith(even_suffixes)
+            odd_filter = df.endswith(odd_suffixes)
 
             # Update values based on filters using setitem syntax
-            sdm[even_filter, 'Parity'] = 'Even'
-            sdm[odd_filter, 'Parity'] = 'Odd'
+            df[even_filter, 'Parity'] = 'Even'
+            df[odd_filter, 'Parity'] = 'Odd'
 
             # View result
-            print(sdm)
+            print(df)
         ```
 
         This will output the result of selectively applying updates based on our filters:
@@ -14468,7 +13788,7 @@ class SQLDataModel:
             - Any non-string values are converted using ``str(value)`` for comparisons only.
             - See :meth:`SQLDataModel.__eq__()` for strict equality comparison operations.
             - See :meth:`SQLDataModel.__and__()` for more details on bitwise and set operations.
-            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``sdm[row, column] = value`` and correct usage.        
+            - See :meth:`SQLDataModel.__setitem__()` for more details on syntax ``df[row, column] = value`` and correct usage.        
             - See :meth:`SQLDataModel.contains()` and :meth:`SQLDataModel.startswith()` for additional string methods.
 
         Changelog:
@@ -14495,7 +13815,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Gender', 'City']
@@ -14508,13 +13828,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Filter for rows where 'Age' is null
-            sdm = sdm[sdm['Age'].isna()]
+            df = df[df['Age'].isna()]
 
             # View result
-            print(sdm)
+            print(df)
 
         This will output the result containing the rows where 'Age' was null:
 
@@ -14533,7 +13853,7 @@ class SQLDataModel:
 
         ```python
             # Filter and set the null values
-            sdm[sdm['Age'].isna(), 'Age'] = 'Missing'
+            df[df['Age'].isna(), 'Age'] = 'Missing'
         ```
 
         Note:
@@ -14557,7 +13877,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Gender', 'City']
@@ -14570,13 +13890,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Filter for rows where 'Age' is not null
-            sdm = sdm[sdm['Age'].notna()]
+            df = df[df['Age'].notna()]
 
             # View result
-            print(sdm)
+            print(df)
 
         This will output the result containing the rows where 'Age' was not null:
 
@@ -14594,10 +13914,10 @@ class SQLDataModel:
 
         ```python
             # Create a 'Notes' column with a default value
-            sdm['Notes'] = 'Missing'
+            df['Notes'] = 'Missing'
             
             # Filter and set the values that are not null
-            sdm[sdm['Age'].notna(), 'Notes'] = 'Valid'    
+            df[df['Age'].notna(), 'Notes'] = 'Valid'    
         ```
 
         Note:
@@ -14634,7 +13954,7 @@ class SQLDataModel:
 
         Example::
 
-            from SQLDataModel import SQLDataModel
+            import sqldatamodel as sdm
 
             # Sample data
             headers = ['Name', 'Age', 'Gender', 'City']
@@ -14647,13 +13967,13 @@ class SQLDataModel:
             ]
 
             # Create the model
-            sdm = SQLDataModel(data, headers)
+            df = sdm.SQLDataModel(data, headers)
 
             # Drop columns with any NA values in place
-            sdm.dropna(axis='columns', how='any', inplace=True)
+            df.dropna(axis='columns', how='any', inplace=True)
 
             # View result
-            print(sdm)
+            print(df)
 
         This will output the updated model after dropping the 'Age' column:
 
@@ -14673,10 +13993,10 @@ class SQLDataModel:
 
         ```python
             # Drop rows with any NA values
-            sdm = sdm.dropna(axis='rows', how='any')
+            df = df.dropna(axis='rows', how='any')
 
             # View result
-            print(sdm)
+            print(df)
         ```
 
         This will output the result containing only the rows where no NA values are present:

@@ -1,7 +1,7 @@
-SQLDataModel
+sqldatamodel
 ============
 
 .. toctree::
    :maxdepth: 4
 
-   SQLDataModel
+   sqldatamodel

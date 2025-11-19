@@ -13,19 +13,19 @@
 SQLDataModel is a fast & lightweight data model with no additional dependencies for quickly fetching and storing your tabular data to and from the most commonly used [databases & data sources](#data-formats) in a couple lines of code. It's as easy as ETL:
 
 ```python
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Extract your data:
-sdm = SQLDataModel.from_html('https://antet.github.io/planets')
+df = sdm.from_html('https://antet.github.io/planets')
 
 # Transform it:
-sdm['Flyable?'] = sdm['Gravity'].apply(lambda x: str(x < 1.0))
+df['Flyable?'] = df['Gravity'].apply(lambda x: str(x < 1.0))
 
 # Filter it
-sdm = sdm[sdm['Flyable?']=='True']
+df = df[df['Flyable?']=='True']
 
 # Load it wherever you need! Let's make a Markdown file
-sdm.to_markdown('Planets.MD')
+df.to_markdown('Planets.MD')
 ```
 
 Now we have a planetary bucket list in `Planets.MD`:
@@ -58,13 +58,13 @@ Then import the main class `SQLDataModel` into your local project, see [usage](#
 A `SQLDataModel` can be created from any number of [sources](#data-formats), as a quick demo lets create one using a Wikipedia page:
 
 ```python
->>> from SQLDataModel import SQLDataModel
+>>> import sqldatamodel as sdm
 >>> 
 >>> url = 'https://en.wikipedia.org/wiki/1998_FIFA_World_Cup'
 >>> 
->>> sdm = SQLDataModel.from_html(url, table_identifier=95)   
+>>> df = sdm.from_html(url, table_identifier=95)   
 >>> 
->>> sdm[:4, ['R', 'Team', 'W', 'Pts.']]
+>>> df[:4, ['R', 'Team', 'W', 'Pts.']]
 ┌──────┬─────────────┬──────┬──────┐
 │ R    │ Team        │ W    │ Pts. │
 ├──────┼─────────────┼──────┼──────┤
@@ -97,19 +97,19 @@ SQLDataModel provides a quick and easy way to import, view, transform and export
 Say we find some cool data online, perhaps some planetary data, and we want to go and get it for our own purposes:
 
 ```python
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Target url with some planetary data we can extract
 url = 'https://antet.github.io/sdm-planets'
 
 # Create a model from the first table element found on the web page
-sdm = SQLDataModel.from_html(url, table_identifier=1)
+df = sdm.from_html(url, table_identifier=1)
 
 # Add some color to it
-sdm.set_display_color('#A6D7E8')
+df.set_display_color('#A6D7E8')
 
 # Lets see!
-print(sdm)
+print(df)
 ```
 `SQLDataModel`'s default output is pretty printed and formatted to fit within the current terminal's width and height, since we added some color here's the result:
 
@@ -119,16 +119,16 @@ Now that we have our data as a `SQLDataModel`, we can do any number of things wi
 
 ```python
 # Extract: Slice by rows and columns
-sdm = sdm[:,['Planet','Gravity']] # or sdm[:,:2]
+df = df[:,['Planet','Gravity']] # or df[:,:2]
 
 # Transform: Create a new column based on existing values
-sdm['Flyable?'] = sdm['Gravity'].apply(lambda x: str(x < 1.0))
+df['Flyable?'] = df['Gravity'].apply(lambda x: str(x < 1.0))
 
 # Filter: Keep only the 'Flyable' planets
-sdm = sdm[sdm['Flyable?'] == 'True']
+df = df[df['Flyable?'] == 'True']
 
 # Load: Let's turn our data into markdown!
-sdm.to_markdown('Planet-Flying.MD')
+df.to_markdown('Planet-Flying.MD')
 ```
 Here's the raw markdown of the new file we created `Planet-Flying.MD`:
 
@@ -146,10 +146,10 @@ Notice that the output from the `to_markdown()` method also aligned our columns 
 
 ```python
 # Let's convert it to a LaTeX table instead
-sdm_latex = sdm.to_latex()
+df_latex = df.to_latex()
 
 # Here's the output
-print(sdm_latex)
+print(df_latex)
 ```
 As with our markdown output, the columns are correctly aligned and pretty printed:
 
@@ -175,7 +175,7 @@ I can't tell you how many times I've found myself searching for information on h
 
 ```python
 import pandas as pd
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Titanic dataset
 df = pd.read_csv('titanic.csv')
@@ -193,15 +193,15 @@ order by
 """
 
 # Extract: Create SQLDataModel from the df
-sdm = SQLDataModel.from_pandas(df)
+df_sdm = sdm.from_pandas(df_pd)
 
 # Transform: Do them in SQLDataModel
-sdm = sdm.execute_fetch(sql_query)
+df_sdm = df_sdm.execute_fetch(sql_query)
 
 # Load: Then hand it back to pandas!
-df = sdm.to_pandas()
+df_pd = df_sdm.to_pandas()
 ```
-Here we're using `SQLDataModel` to avoid performing the complex pandas operations required for aggregation if we already know SQL. Here's the output of the `sdm` we used to do the operations in and the `df`:
+Here we're using `SQLDataModel` to avoid performing the complex pandas operations required for aggregation if we already know SQL. Here's the output of the `df_sdm` we used to do the operations in and the `df_pd`:
 
 ```text
 SQLDataModel:                         pandas:
@@ -228,22 +228,22 @@ Say we have a table located on a remote PostgreSQL server that we want to put on
 ```python
 import psycopg2
 import datetime
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Setup the connection
 psql_conn = psycopg2.connect(...)
 
 # Grab a table with missions to Saturn
-sdm = SQLDataModel.from_sql('saturn_missions', psql_conn) # or SQL statement
+df = sdm.from_sql('saturn_missions', psql_conn) # or SQL statement
 
 # Filter to only 'Future' missions
-sdm = sdm[sdm['Status'] == 'Future']
+df = df[df['Status'] == 'Future']
 
 # Create new column with today's date so it ages better!
-sdm['Updated'] = datetime.date.today()
+df['Updated'] = datetime.date.today()
 
 # Create a new html file with our table
-sdm.to_html('Future-Saturn.html', index=False)
+df.to_html('Future-Saturn.html', index=False)
 ```
 Here's a snippet from the `Future-Saturn.html` file generated by the `to_html()` method:
 ```html
@@ -297,10 +297,10 @@ for epoch in range(num_epochs):
 This ubiquitous setup, where results from each epoch are output to the terminal, has become the `Hello, World!` of ML training loops. While this is great for monitoring the progress of training, it's miserable for actually keeping and analyzing the data afterwards. Here's how we can use `SQLDataModel` to help:
 
 ```python
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Initialize an empty model with headers for the data we want to store
-sdm = SQLDataModel(headers=['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc'])
+df = sdm.SQLDataModel(headers=['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc'])
 
 # ... Training code ...
 ```
@@ -308,7 +308,7 @@ We create an empty `SQLDataModel` that we can use with `headers` corresponding t
 
 ```python
 # Initialize an empty model for training
-sdm = SQLDataModel(headers=['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc'])
+df = sdm.SQLDataModel(headers=['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc'])
 
 # Training loop
 num_epochs = 10
@@ -318,7 +318,7 @@ for epoch in range(num_epochs):
     val_loss, val_acc = validate(model, criterion, val_loader, device)
 
     # Let's store the results first
-    sdm.append_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
+    df.append_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
 
     # Print training results to terminal
     print(f'Epoch [{epoch+1}/{num_epochs}], '
@@ -329,7 +329,7 @@ We use the `append_row()` method to store the results from training, inserting a
 
 ```python
 # ... Training loop ...
-sdm.to_json('Training-Metrics.json')
+df.to_json('Training-Metrics.json')
 ```
 This will export all the training data stored in our model to a new JSON file `Training-Metrics.json`, trimmed for brevity:
 
@@ -362,7 +362,7 @@ In this example we kept the original print statements intact during training, bu
 
 ```python
 # Initialize an empty model for training
-sdm = SQLDataModel(headers=['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc'])
+df = sdm.SQLDataModel(headers=['Epoch', 'Train Loss', 'Train Acc', 'Val Loss', 'Val Acc'])
 
 # Training loop
 num_epochs = 10
@@ -372,18 +372,18 @@ for epoch in range(num_epochs):
     val_loss, val_acc = validate(model, criterion, val_loader, device)
 
     # Let's store the results first
-    sdm.append_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
+    df.append_row([epoch+1, train_loss, train_acc, val_loss, val_acc])
 
     # Pretty print last row of training results to terminal
-    print(sdm[-1])
+    print(df[-1])
 
 # Print all results when training finishes
-print(sdm)
+print(df)
 
 # Export them as a json file
-sdm.to_json('Training-Metrics.json')
+df.to_json('Training-Metrics.json')
 ```
-Here we've removed the previous and rather verbose print statement and replaced it with a simple `print(sdm[-1])`, this will print the last row of data in the model. This results in the following terminal output for each epoch during training:
+Here we've removed the previous and rather verbose print statement and replaced it with a simple `print(df[-1])`, this will print the last row of data in the model. This results in the following terminal output for each epoch during training:
 
 ```shell
 ┌───────┬────────────┬───────────┬──────────┬─────────┐
@@ -392,7 +392,7 @@ Here we've removed the previous and rather verbose print statement and replaced 
 │    10 │     0.2586 │    0.8063 │   0.5391 │  0.7728 │
 └───────┴────────────┴───────────┴──────────┴─────────┘
 ```
-Which, besides having the added benefit of storing our data, is far less code than the prior print statement, and is _in my humble opinion_ much nicer to look at while we wait for training to complete. We've also added one more line, a final `print(sdm)` to output all the training results before saving them to `Training-Metrics.json`. That way, for those of us who still like to see them all in one place, we can have our saved json cake and pretty print it too:
+Which, besides having the added benefit of storing our data, is far less code than the prior print statement, and is _in my humble opinion_ much nicer to look at while we wait for training to complete. We've also added one more line, a final `print(df)` to output all the training results before saving them to `Training-Metrics.json`. That way, for those of us who still like to see them all in one place, we can have our saved json cake and pretty print it too:
 
 ```shell
 ┌───────┬────────────┬───────────┬──────────┬─────────┐
@@ -421,7 +421,7 @@ This example will showcase one of the original motivations of this package, movi
 ```python
 import sqlite3
 import psycopg2
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Setup our postgresql connection
 pg_conn = psycopg2.connect(...)
@@ -430,10 +430,10 @@ pg_conn = psycopg2.connect(...)
 sqlite_conn = sqlite3.connect(...)
 
 # Create our model from a query on our postgresql connection
-sdm = SQLDataModel.from_sql("SELECT * FROM pg_table", pg_conn)
+df = sdm.from_sql("SELECT * FROM pg_table", pg_conn)
 
 # Import it into our sqlite3 connection, appending to existing data
-sdm.to_sql("local_table", sqlite_conn, if_exists='append')
+df.to_sql("local_table", sqlite_conn, if_exists='append')
 ```
 Thats it! What once required installing packages like `pandas`, `numpy`, and `SQLAlchemy`, plus all of their dependencies, just to able to use a nice DataFrame API when interacting with SQL data, is now just a single package, `SQLDataModel`. While I **love** all three of those packages, 99% of what I consistently use them for can be done with far less "package baggage".
 
@@ -444,19 +444,19 @@ Thats it! What once required installing packages like `pandas`, `numpy`, and `SQ
 Perhaps one of the most novel use-cases I've come across for `SQLDataModel` is the ability to embed a table just about anywhere you can type. For example, let's say you want to include a table in a slide show but are struggling with the disparate and confusing application specific rules and constraints, which has been my personal experience for every table formatting interface put out by Microsoft, especially Outlook and PowerPoint. Instead of settling for the application specific sandbox you've been forced into, try `SQLDataModel` instead!
 
 ```python
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Using the Markdown file created in the very first example
-sdm = SQLDataModel.from_markdown('Planets.MD')
+df = sdm.from_markdown('Planets.MD')
 
 # Mercury and Venus are too hot, let's change their 'Flyable?' status
-sdm[:2, 'Flyable?'] = 'False'
+df[:2, 'Flyable?'] = 'False'
 
 # Lets use a different table styling, like the one used by polars
-sdm.set_table_style('polars')
+df.set_table_style('polars')
 
 # Send the table to a text file to copy it from
-sdm.to_text('Planets.txt')
+df.to_text('Planets.txt')
 ```
 
 This will write the table and any styling we applied to `Planets.txt` where we can copy it from. We could just as easily copy it right from the terminal as well. Now that we have the table in our clipboard, we can paste and embed it anywhere we can input text! For example, here's the result of pasting it into a PowerPoint slide, along with a comparison using PowerPoint's native table feature:
@@ -472,16 +472,16 @@ While its true you'll have more control using the application-specific table fea
 For all the `SQLDataModel` examples, the same basic workflow and pattern is present:
 
 ```python
-from SQLDataModel import SQLDataModel
+import sqldatamodel as sdm
 
 # Extract: Create the model from a source
-sdm = SQLDataModel.from_data(...)
+df = sdm.from_data(...)
 
 # Transform: Manipulate the data if needed
-sdm['New Column'] = sdm['Column A'].apply(func)
+df['New Column'] = df['Column A'].apply(func)
 
 # Load: Move it to a destination format
-sdm.to_text('table.txt') # to_csv, to_json, to_latex, to_markdown, to_html, ..., etc.
+df.to_text('table.txt') # to_csv, to_json, to_latex, to_markdown, to_html, ..., etc.
 ```
 We can take a step back and illustrate the broader  **source, transform, destination** flow with `SQLDataModel` like this:
 

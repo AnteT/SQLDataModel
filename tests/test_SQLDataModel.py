@@ -11,13 +11,8 @@ import numpy as np
 PYTHON_VERSION = (sys.version_info.major, sys.version_info.minor)
 """Current Python interpreter version in the format of ``(major, minor)`` to use for determining supported test suite."""
 
-if 'Future' in __file__:
-    from future.SQLDataModel_future import SQLDataModel
-else:
-    try:
-        from src.SQLDataModel.SQLDataModel import SQLDataModel
-    except:
-        from SQLDataModel import SQLDataModel
+from src.sqldatamodel import SQLDataModel
+from src.sqldatamodel import utils    
 
 def get_sqlite3_version() -> tuple[int, int, int]:
     """Returns the system sqlite version instead of the sqlite3 package version, or returns (0, 0, 0) if sqlite not found."""
@@ -1353,7 +1348,7 @@ def test_infer_types_from_data(sample_data):
     input_data, input_headers = sample_data[1:], sample_data[0]
     input_types = [type(x).__name__ if type(x).__name__ != 'NoneType' else 'None' for x in input_data[0]]
     stringified_data = [[str(x) for x in row] for row in input_data]
-    inferred_types = SQLDataModel.infer_types_from_data(stringified_data)
+    inferred_types = utils.infer_types_from_data(stringified_data)
     assert inferred_types == input_types
 
 @pytest.mark.core
@@ -1420,40 +1415,40 @@ def test_flatten_json():
     # Test case 1: Simple JSON list
     json_source = [{"alpha": "A", "value": 1}, {"alpha": "B", "value": 2}, {"alpha": "C", "value": 3}]
     expected = {"alpha": ["A", "B", "C"], "value": [1, 2, 3]}
-    output = SQLDataModel.flatten_json(json_source, flatten_rows=True)
+    output = utils.flatten_json(json_source, flatten_rows=True)
     assert output == expected
     # Test case 2: Simple JSON list without row flattening
     output = {'row_0_alpha': 'A', 'row_0_value': 1, 'row_1_alpha': 'B', 'row_1_value': 2, 'row_2_alpha': 'C', 'row_2_value': 3}
-    output = SQLDataModel.flatten_json(json_source, flatten_rows=False, key_prefix='row_')
+    output = utils.flatten_json(json_source, flatten_rows=False, key_prefix='row_')
     assert output == output
     # Test case 3: JSON with nested structure
     json_source_nested = {"user": {"name": "Alice", "address": {"city": "Wonderland", "zip": "12345"}}}
     expected = {"user_name": ["Alice"], "user_address_city": ["Wonderland"], "user_address_zip": ["12345"]}
-    output = SQLDataModel.flatten_json(json_source_nested, flatten_rows=True)
+    output = utils.flatten_json(json_source_nested, flatten_rows=True)
     assert output == expected
     # Test case 4: JSON with nested list
     json_source_nested_list = {"users": [{"name": "Alice"}, {"name": "Bob"}]}
     expected = {"users_0_name": ["Alice"], "users_1_name": ["Bob"]}
-    output = SQLDataModel.flatten_json(json_source_nested_list, flatten_rows=True)
+    output = utils.flatten_json(json_source_nested_list, flatten_rows=True)
     assert output == expected
     # Test case 5: JSON with key prefix
     expected = {'prefix_0_user_name': 'Alice', 'prefix_0_user_address_city': 'Wonderland', 'prefix_0_user_address_zip': '12345'}
-    output = SQLDataModel.flatten_json(json_source_nested, flatten_rows=False, key_prefix='prefix_')
+    output = utils.flatten_json(json_source_nested, flatten_rows=False, key_prefix='prefix_')
     assert output == expected
     # Test case 6: Single dictionary source
     json_source_single_dict = {"alpha": "A", "value": 1}
     expected = {"alpha": ["A"], "value": [1]}
-    output = SQLDataModel.flatten_json(json_source_single_dict, flatten_rows=True)
+    output = utils.flatten_json(json_source_single_dict, flatten_rows=True)
     assert output == expected
     # Test case 7: Empty JSON source
     json_source_empty = []
     expected = {}
-    output = SQLDataModel.flatten_json(json_source_empty, flatten_rows=True)
+    output = utils.flatten_json(json_source_empty, flatten_rows=True)
     assert output == expected
     # Test case 8: Mixed types in list
     json_source_mixed = [{"alpha": "A", "value": 1}, {"alpha": "B", "value": None}, {"alpha": "C", "value": 3}]
     expected = {"alpha": ["A", "B", "C"], "value": [1, None, 3]}
-    output = SQLDataModel.flatten_json(json_source_mixed, flatten_rows=True)
+    output = utils.flatten_json(json_source_mixed, flatten_rows=True)
     assert output == expected
     # Test case 9: Complex nested structure with lists and dictionaries
     json_source_complex = {
@@ -1466,7 +1461,7 @@ def test_flatten_json():
         "team_members_1_name": ["Bob"],
         "team_members_1_role": ["member"]
     }
-    output = SQLDataModel.flatten_json(json_source_complex, flatten_rows=True)
+    output = utils.flatten_json(json_source_complex, flatten_rows=True)
     assert output == expected
     
 @pytest.mark.core
@@ -1614,47 +1609,47 @@ def test_parse_connection_url():
     # Test local Linux file path for SQLite
     url = '/home/database/users.db'
     url_expected = ConnectionDetails(scheme='file', user=None, cred=None, host=None, port=None, db='/home/database/users.db')
-    assert SQLDataModel._parse_connection_url(url) == url_expected
+    assert utils._parse_connection_url(url) == url_expected
     
     # Test local Windows file path for SQLite
     url = 'C:\\Users\\Bob\\Desktop\\database\\users.db'
     url_expected = ConnectionDetails(scheme='file', user=None, cred=None, host=None, port=None, db='C:/Users/Bob/Desktop/database/users.db')
-    assert SQLDataModel._parse_connection_url(url) == url_expected
+    assert utils._parse_connection_url(url) == url_expected
 
     # Test SQLite
     url, alias = 'file:///home/database/users.db', 'sqlite3:///home/database/users.db'
     url_expected = ConnectionDetails(scheme='file', user=None, cred=None, host=None, port=None, db='/home/database/users.db')
     alias_expected = ConnectionDetails(scheme='sqlite3', user=None, cred=None, host=None, port=None, db='/home/database/users.db')
-    assert SQLDataModel._parse_connection_url(url) == url_expected
-    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+    assert utils._parse_connection_url(url) == url_expected
+    assert utils._parse_connection_url(alias) == alias_expected
 
     # Test PostgreSQL
     url, alias = 'postgresql://scott:tiger@12.34.56.78:5432/pgdb', 'psycopg2://scott:tiger@12.34.56.78:5432/pgdb'
     url_expected = ConnectionDetails(scheme='postgresql', user='scott', cred='tiger', host='12.34.56.78', port=5432, db='pgdb')
     alias_expected = ConnectionDetails(scheme='psycopg2', user='scott', cred='tiger', host='12.34.56.78', port=5432, db='pgdb')
-    assert SQLDataModel._parse_connection_url(url) == url_expected
-    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+    assert utils._parse_connection_url(url) == url_expected
+    assert utils._parse_connection_url(alias) == alias_expected
 
     # Test SQL Server ODBC
     url, alias = 'mssql://user:pass@hostname:1433/dbname', 'pyodbc://user:pass@hostname:1433/dbname'
     url_expected = ConnectionDetails(scheme='mssql', user='user', cred='pass', host='hostname', port=1433, db='dbname')
     alias_expected = ConnectionDetails(scheme='pyodbc', user='user', cred='pass', host='hostname', port=1433, db='dbname')
-    assert SQLDataModel._parse_connection_url(url) == url_expected
-    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+    assert utils._parse_connection_url(url) == url_expected
+    assert utils._parse_connection_url(alias) == alias_expected
 
     # Test Oracle
     url, alias = 'oracle://user:pass@hostname:1521/dbname', 'cxoracle://user:pass@hostname:1521/dbname'
     url_expected = ConnectionDetails(scheme='oracle', user='user', cred='pass', host='hostname', port=1521, db='dbname')
     alias_expected = ConnectionDetails(scheme='cxoracle', user='user', cred='pass', host='hostname', port=1521, db='dbname')
-    assert SQLDataModel._parse_connection_url(url) == url_expected
-    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+    assert utils._parse_connection_url(url) == url_expected
+    assert utils._parse_connection_url(alias) == alias_expected
 
     # Test Teradata
     url, alias = 'teradata://user:pass@hostname:1025/dbname', 'teradatasql://user:pass@hostname:1025/dbname'
     url_expected = ConnectionDetails(scheme='teradata', user='user', cred='pass', host='hostname', port=1025, db='dbname')
     alias_expected = ConnectionDetails(scheme='teradatasql', user='user', cred='pass', host='hostname', port=1025, db='dbname')
-    assert SQLDataModel._parse_connection_url(url) == url_expected
-    assert SQLDataModel._parse_connection_url(alias) == alias_expected
+    assert utils._parse_connection_url(url) == url_expected
+    assert utils._parse_connection_url(alias) == alias_expected
 
 @pytest.mark.core
 def test_to_from_sql_connection(sample_data):
