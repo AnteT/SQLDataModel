@@ -33,9 +33,8 @@ class HTMLParser(HTMLParser):
         if table_identifier is None:
             table_identifier = 0
         if not isinstance(table_identifier, (str,int)):
-            raise TypeError(
-                ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', argument for `table_identifier` must be one of 'int' or 'str' representing table index location or HTML 'name' or 'id' attribute")
-            )
+            msg = ErrorFormat(f"TypeError: invalid type '{type(table_identifier).__name__}', argument for `table_identifier` must be one of 'int' or 'str' representing table index location or HTML 'name' or 'id' attribute")
+            raise TypeError(msg)
         self.table_identifier = table_identifier
         self._cell_sep = cell_sep
         self._in_td = False
@@ -139,22 +138,18 @@ class HTMLParser(HTMLParser):
         if not self.found_target:
             if (num_tables_found := self.table_counter) < 1:
                 if num_tables_found < 1:
-                    raise ValueError(
-                        ErrorFormat(f"ValueError: zero table elements found in provided source, confirm `html_source` is valid HTML or check integrity of data")
-                    )
+                    msg = ErrorFormat(f"ValueError: zero table elements found in provided source, confirm `html_source` is valid HTML or check integrity of data")
+                    raise ValueError(msg)
             else:
                 if isinstance(self.table_identifier, int):
-                    raise ValueError(
-                        ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found at provided index '{self.table_identifier}'")
-                    )
+                    msg = ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found at provided index '{self.table_identifier}'")
+                    raise ValueError(msg)
                 else:
-                    raise ValueError(
-                        ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found with 'id' or 'name' attribute matching provided indentifier '{self.table_identifier}'")
-                    )
+                    msg = ErrorFormat(f"ValueError: found '{num_tables_found}' tables in source within range '0:{num_tables_found}' but none found with 'id' or 'name' attribute matching provided indentifier '{self.table_identifier}'")
+                    raise ValueError(msg)
         if len(self.target_table) < 1:
-            raise ValueError(
-                ErrorFormat(f"ValueError: found potential match for table identifier '{self.table_identifier}' but failed to parse table from data, check integrity of source")
-            )
+            msg = ErrorFormat(f"ValueError: found potential match for table identifier '{self.table_identifier}' but failed to parse table from data, check integrity of source")
+            raise ValueError(msg)
         if len(self.target_table) == 1:
             return self.target_table, None
         data = []

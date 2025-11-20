@@ -159,17 +159,15 @@ class ANSIColor:
         """
         text_color = ANSIColor.Colors[random.choice(list(ANSIColor.Colors.keys()))] if text_color is None else text_color # Use random color if None
         if not isinstance(text_color, (tuple,list,str)):
-            raise TypeError(
-                ErrorFormat(f"TypeError: invalid `text_color` type '{type(text_color).__name__}' received, expected value of type 'tuple' or 'str'")
-            )
+            msg = ErrorFormat(f"TypeError: invalid `text_color` type '{type(text_color).__name__}' received, expected value of type 'tuple' or 'str'")
+            raise TypeError(msg)
         self.text_bold = "\033[1m" if text_bold else ""
         if isinstance(text_color, str): # assume hex
             try:
                 fg_r, fg_g, fg_b = tuple(int(text_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
             except:
-                raise ValueError(
-                    ErrorFormat(f"ValueError: invalid value '{text_color}', string argument for `text_color` must be a valid hexadecimal value between `#000000` and `#ffffff`")
-                ) from None
+                msg = ErrorFormat(f"ValueError: invalid value '{text_color}', string argument for `text_color` must be a valid hexadecimal value between `#000000` and `#ffffff`")
+                raise ValueError(msg) from None
             self.text_color_str = text_color
             """``str``: The input color used to create the pen in the originally provided format."""
             self.text_color_hex = text_color.upper()
@@ -178,16 +176,14 @@ class ANSIColor:
             """``tuple[int, int, int]``: The RGB value of the color as a tuple of integers reflecting the (red, green, blue) values satisfying ``0 <= value <= 255``."""
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
-                    raise ValueError(
-                        ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
-                    )
+                    msg = ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
+                    raise ValueError(msg)
         if isinstance(text_color, (tuple, list)): # assume rgb
             try:
                 fg_r, fg_g, fg_b = text_color
             except:
-                raise ValueError(
-                    ErrorFormat(f"ValueError: invalid value '{text_color}', tuple argument for `text_color` must be a valid rgb tuple `(r, g, b)` with values between `0` and `255`")
-                ) from None  
+                msg = ErrorFormat(f"ValueError: invalid value '{text_color}', tuple argument for `text_color` must be a valid rgb tuple `(r, g, b)` with values between `0` and `255`")
+                raise ValueError(msg) from None  
             self.text_color_str = str(text_color)
             """``str``: The input color used to create the pen in the originally provided format."""
             self.text_color_hex = f"#{fg_r:02X}{fg_g:02X}{fg_b:02X}"
@@ -196,9 +192,8 @@ class ANSIColor:
             """``tuple[int, int, int]``: The RGB value of the color as a tuple of integers reflecting the (red, green, blue) values satisfying ``0 <= value <= 255``."""
             for color_value in self.text_color_rgb:
                 if color_value < 0 or color_value > 255:
-                    raise ValueError(
-                        ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
-                    )            
+                    msg = ErrorFormat(f"ValueError: invalid value '{color_value}' in rgb color '{self.text_color_rgb}', all values must be in range `0 <= value <= 255`")
+                    raise ValueError(msg)            
         self._ansi_start = f"""{self.text_bold}\033[38;2;{fg_r};{fg_g};{fg_b}m"""
         self._ansi_stop = "\033[0m\033[39m\033[49m"
 

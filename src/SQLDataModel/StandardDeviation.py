@@ -24,7 +24,7 @@ class StandardDeviation:
         ``k`` (int): The count of non-null input values.
 
     Note:
-        - See :py:mod:`SQLDataModel.describe() <SQLDataModel.SQLDataModel.SQLDataModel.describe>` for statistical implementation.
+        - See :py:mod:`SQLDataModel.describe() <sqldatamodel.sqldatamodel.SQLDataModel.describe>` for statistical implementation.
     """    
     def __init__(self):
         self.M = 0.0

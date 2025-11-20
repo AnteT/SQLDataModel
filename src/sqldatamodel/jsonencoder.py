@@ -11,7 +11,7 @@ class DataTypesEncoder(json.JSONEncoder):
         - ``bytes``: Decoded to a UTF-8 encoded string.
 
     Note:
-        - The date and datetime types can be recovered using SQLDataModels ``infer_dtypes()`` method.
+        - The date and datetime types can be recovered using :py:mod:`SQLDataModel.infer_dtypes() <sqldatamodel.sqldatamodel.SQLDataModel.infer_dtypes>` method.
         - The bytes information is not decoded back into bytes.
     """    
     def default(self, obj:Any):

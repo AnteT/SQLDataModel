@@ -34,50 +34,44 @@ except:
 
 def _get_dateparser():
     if not _has_dateutil:
-        raise ModuleNotFoundError(
-            ErrorFormat(f"ModuleNotFoundError: required package not found, python-dateutil must be installed in order to use advanced datetime parsing. Install directly or using optional flag `pip install sqldatamodel[dateutil]`")
-        ) 
+        msg = ErrorFormat(f"ModuleNotFoundError: required package not found, python-dateutil must be installed in order to use advanced datetime parsing. Install directly or using optional flag `pip install sqldatamodel[dateutil]`")
+        raise ModuleNotFoundError(msg) 
     from dateutil.parser import parse as dateparser
     return dateparser
 
 def _get_np():
     if not _has_np:
-        raise ModuleNotFoundError(
-            ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use the `from_numpy()` method. Install directly or using optional flag `pip install sqldatamodel[numpy]`""")
-        )
+        msg = ErrorFormat(f"""ModuleNotFoundError: required package not found, numpy must be installed in order to use the `from_numpy()` method. Install directly or using optional flag `pip install sqldatamodel[numpy]`""")
+        raise ModuleNotFoundError(msg)
     import numpy as np
     return np
 
 def _get_pd():
     if not _has_pd:
-        raise ModuleNotFoundError(
-            ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use `.to_pandas()` method. Install directly or using optional flag `pip install sqldatamodel[pandas]`""")
-        )
+        msg = ErrorFormat(f"""ModuleNotFoundError: required package not found, pandas must be installed in order to use `.to_pandas()` method. Install directly or using optional flag `pip install sqldatamodel[pandas]`""")
+        raise ModuleNotFoundError(msg)
     import pandas as pd
     return pd
 
 def _get_pl():
     if not _has_pl:
-        raise ModuleNotFoundError(
-            ErrorFormat(f"""ModuleNotFoundError: required package not found, polars must be installed in order to use `.to_polars()` method. Install directly or using optional flag `pip install sqldatamodel[polars]`""")
-        )
+        msg = ErrorFormat(f"""ModuleNotFoundError: required package not found, polars must be installed in order to use `.to_polars()` method. Install directly or using optional flag `pip install sqldatamodel[polars]`""")
+        raise ModuleNotFoundError(msg)
     import polars as pl
     return pl
 
 def _get_pa_pq():
     """Return (pyarrow, pyarrow.parquet). Raises an exception if either is missing."""
     if not _has_pa:
-        raise ModuleNotFoundError(
-            ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.to_parquet()` method. Install directly or using optional flag `pip install sqldatamodel[pyarrow]`")
-        )        
+        msg = ErrorFormat(f"ModuleNotFoundError: required package not found, pyarrow must be installed in order to use `.to_parquet()` method. Install directly or using optional flag `pip install sqldatamodel[pyarrow]`")
+        raise ModuleNotFoundError(msg)        
     import pyarrow as pa
     import pyarrow.parquet as pq
     return pa, pq
 
 def _get_xl():
     if not _has_xl:
-        raise ModuleNotFoundError(
-            ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method. Install directly or using optional flag `pip install sqldatamodel[openpyxl]`")
-        )
+        msg = ErrorFormat(f"ModuleNotFoundError: required package not found, `openpyxl` must be installed in order to use `from_excel()` method. Install directly or using optional flag `pip install sqldatamodel[openpyxl]`")
+        raise ModuleNotFoundError(msg)
     import openpyxl as xl
     return xl
