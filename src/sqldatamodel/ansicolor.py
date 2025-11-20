@@ -226,7 +226,7 @@ class ANSIColor:
 
         Changelog:
             - Version 0.10.2 (2024-06-30):
-                - Added to allow a random color to be selected for :mod:`SQLDataModel.SQLDataModel.set_display_color()`
+                - Added to allow a random color to be selected for :mod:`sqldatamodel.SQLDataModel.set_display_color()`
                 - New method.
         """
         rand_color = ANSIColor.Colors[random.choice(list(ANSIColor.Colors.keys()))]

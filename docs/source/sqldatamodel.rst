@@ -1,43 +1,43 @@
-Modules & Documentation
-=======================
-
 sqldatamodel
+============
+
+SQLDataModel
 ------------
 
-.. automodule:: sqldatamodel.sqldatamodel
+.. autoclass:: sqldatamodel.sqldatamodel.SQLDataModel
    :members:
    :undoc-members:
    :show-inheritance:
 
-ansicolor
+ANSIColor
 ---------
 
-.. automodule:: sqldatamodel.ansicolor
+.. autoclass:: sqldatamodel.ansicolor.ANSIColor
    :members:
    :undoc-members:
    :show-inheritance:
 
-htmlparser
+HTMLParser
 ----------
 
-.. automodule:: sqldatamodel.htmlparser
+.. autoclass:: sqldatamodel.htmlparser.HTMLParser
    :members:
    :undoc-members:
    :show-inheritance:
 
-jsonencoder
+JSONEncoder
 -----------
 
-.. automodule:: sqldatamodel.jsonencoder
+.. autoclass:: sqldatamodel.jsonencoder.DataTypesEncoder
    :members:
    :undoc-members:
    :show-inheritance:
 
 
-standarddeviation
+StandardDeviation
 -----------------
 
-.. automodule:: sqldatamodel.standarddeviation
+.. autoclass:: sqldatamodel.standarddeviation.StandardDeviation
    :members:
    :undoc-members:
    :show-inheritance:
@@ -46,14 +46,6 @@ utils
 -----
 
 .. automodule:: sqldatamodel.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: sqldatamodel
    :members:
    :undoc-members:
    :show-inheritance:

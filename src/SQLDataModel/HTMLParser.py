@@ -132,7 +132,7 @@ class HTMLParser(HTMLParser):
             ``ValueError``: If the target table is not found or cannot be parsed.
 
         Note:
-            - :py:mod:`SQLDataModel.from_html() <SQLDataModel.SQLDataModel.SQLDataModel.from_html>` uses this class to extract valid HTML tables from either web or file content.
+            - :py:mod:`SQLDataModel.from_html() <sqldatamodel.sqldatamodel.SQLDataModel.from_html>` uses this class to extract valid HTML tables from either web or file content.
             - If a row is found with mismatched dimensions, it will be filled with ``None`` values to ensure tabular output.
         """   
         if not self.found_target:

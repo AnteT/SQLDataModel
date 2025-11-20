@@ -6,7 +6,7 @@ SQLDataModel
    :caption: Contents:
 
    introduction
-   modules
+   sqldatamodel
 
 Indices and tables
 ==================
