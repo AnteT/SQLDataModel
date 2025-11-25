@@ -835,6 +835,14 @@ def test_headers(sample_data):
     output_headers = sdm.headers
     assert output_headers == expected_headers      
 
+    # Test renaming a subset of existing headers to ensure order of prior headers is retained
+    input_headers = ['First Column', 'Second Column', 'Third Column', 'Fourth Column']
+    input_data = [[f"{x},{y}" for y in range(len(input_headers))] for x in range(10)]
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    expected_headers = ['First Column', '2nd', 'Third Column', '4th']
+    sdm.rename_headers(expected_headers)
+    output_headers = sdm.get_headers()
+    assert output_headers == expected_headers
 
 @pytest.mark.core
 def test_py_sql_dtypes():

@@ -1021,6 +1021,7 @@ class SQLDataModel:
             ``TypeError``: If the ``new_headers`` type is not a valid type (list or tuple) or contains instances that are not of type 'str'.
             ``DimensionError``: If the length of ``new_headers`` does not match the column count.
             ``TypeError``: If the type of the first element in ``new_headers`` is not a valid type (str, int, or float).
+            ``SQLProgrammingError``: If an error is encountered while attempting to rename the SQL columns of the model.
 
         Returns:
             ``None``
@@ -1039,6 +1040,8 @@ class SQLDataModel:
             df.set_headers(lambda headers: [header.replace(' ', '_') for header in headers])
         
         Changelog:
+            - Version 2.1.1 (2025-11-25):
+                - Modified to retain original column ordering when existing model headers match a subset of ``new_headers``, raising ``SQLProgrammingError`` if error encountered.
             - Version 1.2.0 (2025-01-28):
                 - Added ability to provide a callable for ``new_headers`` to apply a transformation using existing headers.
                 - Added additional validation ensuring all headers provided are of type 'str', raising ``TypeError`` otherwise.
@@ -1061,7 +1064,15 @@ class SQLDataModel:
             msg = ErrorFormat("TypeError: invalid new header type(s), all values in `new_headers` must be of type 'str'")
             raise TypeError(msg)        
         sql_stmt = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
-        self.execute_transaction(sql_stmt, update_row_meta=False)
+        try:
+            self.sql_db_conn.executescript(f"begin transaction; {sql_stmt}; end transaction;")
+            self.sql_db_conn.commit()
+        except Exception as e:
+            self.sql_db_conn.rollback()
+            msg = ErrorFormat(f'SQLProgrammingError: unable to update headers, SQL execution failed with: "{e}"')
+            raise SQLProgrammingError(msg) from None
+        self.headers = new_headers
+        self._update_model_metadata(update_row_meta=False)        
 
     def normalize_headers(self, apply_function:Callable=None) -> None:
         """
