@@ -13,6 +13,7 @@ PYTHON_VERSION = (sys.version_info.major, sys.version_info.minor)
 
 from src.sqldatamodel import SQLDataModel
 from src.sqldatamodel import utils    
+from src.sqldatamodel.exceptions import DimensionError
 
 def get_sqlite3_version() -> tuple[int, int, int]:
     """Returns the system sqlite version instead of the sqlite3 package version, or returns (0, 0, 0) if sqlite not found."""
@@ -2849,6 +2850,96 @@ def test_rename_column():
     output_headers = sdm.headers
     output_expected = [str(i+1) for i in range(6)]
     assert output_headers == output_expected
+
+@pytest.mark.core
+def test_rename_headers():
+    """More thoroughly test renaming headers after subtle bugs discovered in v2.0.0, added rename by dict."""
+    base_data = [
+        (1, 2, 3, 4),
+        (5, 6, 7, 8)
+    ]
+    base_headers = ['ColA', 'ColB', 'ColC', 'ColD']
+
+    # 1. Test List/Tuple (Standard complete rename)
+    # ---------------------------------------------------------
+    df = SQLDataModel(base_data, base_headers)
+    df.set_headers(['A', 'B', 'C', 'D'])
+    assert df.get_headers() == ['A', 'B', 'C', 'D']
+
+    # 2. Test Callable (Transformation)
+    # ---------------------------------------------------------
+    df = SQLDataModel(base_data, base_headers)
+    # Transform to uppercase
+    df.set_headers(lambda h: [x.upper() for x in h])
+    assert df.get_headers() == ['COLA', 'COLB', 'COLC', 'COLD']
+
+    # 3. Test Dictionary: String Keys (Partial Rename)
+    # ---------------------------------------------------------
+    df = SQLDataModel(base_data, base_headers)
+    # Rename 'ColA' -> 'Alpha' and 'ColC' -> 'Gamma'. Leave B and D alone.
+    df.set_headers({'ColA': 'Alpha', 'ColC': 'Gamma'})
+    assert df.get_headers() == ['Alpha', 'ColB', 'Gamma', 'ColD']
+
+    # 4. Test Dictionary: Integer Keys (Positive Indices)
+    # ---------------------------------------------------------
+    df = SQLDataModel(base_data, base_headers)
+    # Rename index 1 ('ColB') -> 'Beta'
+    df.set_headers({1: 'Beta'})
+    assert df.get_headers() == ['ColA', 'Beta', 'ColC', 'ColD']
+
+    # 5. Test Dictionary: Integer Keys (Negative Indices)
+    # ---------------------------------------------------------
+    df = SQLDataModel(base_data, base_headers)
+    # Rename index -1 ('ColD') -> 'Delta'
+    df.set_headers({-1: 'Delta'})
+    assert df.get_headers() == ['ColA', 'ColB', 'ColC', 'Delta']
+
+    # 6. Test Dictionary: Mixed Keys (Str, Int, Negative Int)
+    # ---------------------------------------------------------
+    df = SQLDataModel(base_data, base_headers)
+    # Rename: 
+    # 0 ('ColA') -> 'First'
+    # 'ColC'     -> 'Third'
+    # -1 ('ColD')-> 'Last'
+    # 'ColB' remains untouched
+    df.set_headers({0: 'First', 'ColC': 'Third', -1: 'Last'})
+    assert df.get_headers() == ['First', 'ColB', 'Third', 'Last']
+
+    # ---------------------------------------------------------
+    # Exception Handling / Validation Tests
+    # ---------------------------------------------------------
+    
+    df = SQLDataModel(base_data, base_headers)
+
+    # A. DimensionError (List length mismatch)
+    with pytest.raises(DimensionError) as exc:
+        df.set_headers(['Too', 'Few'])
+    assert "invalid header dimensions" in str(exc.value)
+
+    # B. ValueError (String key not found in current headers)
+    with pytest.raises(ValueError) as exc:
+        df.set_headers({'NonExistentColumn': 'NewName'})
+    assert "header 'NonExistentColumn' not found" in str(exc.value)
+
+    # C. IndexError (Integer key out of bounds)
+    with pytest.raises(IndexError) as exc:
+        df.set_headers({99: 'OutOfBounds'})
+    assert "out of range" in str(exc.value)
+
+    # D. IndexError (Negative integer key out of bounds)
+    with pytest.raises(IndexError) as exc:
+        df.set_headers({-10: 'OutOfBounds'})
+    assert "out of range" in str(exc.value)
+
+    # E. TypeError (Invalid Value Type - New header must be str)
+    with pytest.raises(TypeError) as exc:
+        df.set_headers({'ColA': 12345}) # Passing int instead of str
+    assert "value must be of type 'str'" in str(exc.value)
+
+    # F. TypeError (Invalid Key Type - Key must be int or str)
+    with pytest.raises(TypeError) as exc:
+        df.set_headers({3.14: 'Pi'}) # Float is not a valid index or name
+    assert "dictionary keys must be 'int' (index) or 'str'" in str(exc.value)
 
 @pytest.mark.core
 def test_group_by():

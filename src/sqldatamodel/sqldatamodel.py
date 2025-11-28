@@ -1008,20 +1008,27 @@ class SQLDataModel:
                 - New method.        
         """
         return self.headers
-    
-    def set_headers(self, new_headers:list[str] | Callable[[list[str]], list[str]]) -> None:
+
+    def set_headers(self, new_headers:list[str] | dict[str|int, str] | Callable[[list[str]], list[str]]) -> None:
         """
-        Renames the current ``SQLDataModel`` headers to values provided in ``new_headers``. Headers must match the existing column count.
+        Renames the current ``SQLDataModel`` headers to values in ``new_headers``, which can be provided as:
+
+        1. A sequence (list/tuple) of strings matching the full column count.
+        2. A dictionary mapping existing indices (int) or names (str) to new names (str).
+        3. A callable that transforms the existing header list.
 
         Parameters:
-            ``new_headers`` (list[str] or Callable[[list[str]], list[str]]): A sequence (e.g., list, tuple) of new header names
-                or a callable that takes the existing headers and returns a new list of header names.
+            ``new_headers`` (list[str] | dict[str|int, str] | Callable): The new header configuration.
+                - If **list/tuple**: Must be same length as column count.
+                - If **dict**: Keys can be current column names or indices (supporting negative indexing). Values are new names. Unspecified columns remain unchanged.
+                - If **callable**: Receives current headers list, returns new headers list.
                 
         Raises:
-            ``TypeError``: If the ``new_headers`` type is not a valid type (list or tuple) or contains instances that are not of type 'str'.
-            ``DimensionError``: If the length of ``new_headers`` does not match the column count.
-            ``TypeError``: If the type of the first element in ``new_headers`` is not a valid type (str, int, or float).
-            ``SQLProgrammingError``: If an error is encountered while attempting to rename the SQL columns of the model.
+            ``TypeError``: If ``new_headers`` contains invalid types.
+            ``DimensionError``: If the length of the resulting header list does not match the column count.
+            ``IndexError``: If a dictionary key is an integer index out of bounds.
+            ``ValueError``: If a dictionary key is a string name not found in current headers.
+            ``SQLProgrammingError``: If an error is encountered while attempting to rename the SQL columns.
 
         Returns:
             ``None``
@@ -1033,37 +1040,82 @@ class SQLDataModel:
             # Create model
             df = sdm.from_csv('example.csv', headers=['First Name', 'Last Name', 'Salary'])
 
-            # Set new headers
+            # 1. Rename all using list
             df.set_headers(['First_Name', 'Last_Name', 'Payment'])
 
-            # Alternatively, provide a callable argument to transform headers using existing names
-            df.set_headers(lambda headers: [header.replace(' ', '_') for header in headers])
+            # 2. Rename specific columns using dict (mixed keys allowed)
+            # Rename 'Payment' (index -1) to 'Annual_Salary' and 'First_Name' to 'FName'
+            df.set_headers({-1: 'Annual_Salary', 'First_Name': 'FName'})
+
+            # 3. Transform using callable
+            df.set_headers(lambda headers: [h.upper() for h in headers])
         
         Changelog:
+            - Version 2.2.0 (2025-11-28):
+                - Added support for ``dict`` input to allow partial renaming and mixed index/name keys.
             - Version 2.1.1 (2025-11-25):
-                - Modified to retain original column ordering when existing model headers match a subset of ``new_headers``, raising ``SQLProgrammingError`` if error encountered.
+                - Modified to retain original column ordering when existing model headers match a subset of ``new_headers``.
             - Version 1.2.0 (2025-01-28):
-                - Added ability to provide a callable for ``new_headers`` to apply a transformation using existing headers.
-                - Added additional validation ensuring all headers provided are of type 'str', raising ``TypeError`` otherwise.
+                - Added ability to provide a callable for ``new_headers``.
             - Version 0.1.5 (2023-11-24):
                 - New method.                
         """
-        # Handle the option to provide a callable to map a transformation using the existing headers
+        # 1. Handle Callable
         if callable(new_headers):
             new_headers = new_headers(self.headers)
+        # 2. Handle Dictionary (Partial/Mixed Renaming)
+        if isinstance(new_headers, dict):
+            # Start with a copy of current headers
+            final_headers = list(self.headers)
+            for key, val in new_headers.items():
+                # Validate the new name is a string
+                if not isinstance(val, str):
+                    msg = ErrorFormat(f"TypeError: invalid new header value type '{type(val).__name__}' for key '{key}', value must be of type 'str'")
+                    raise TypeError(msg)
+                target_idx = None
+                # key is index (int)
+                if isinstance(key, int):
+                    # Validate bounds (handle negative indexing standard logic)
+                    if key < -self.column_count or key >= self.column_count:
+                        msg = ErrorFormat(f"IndexError: header index '{key}' out of range for model with {self.column_count} columns, use `get_headers()` to veiw current valid arguments")
+                        raise IndexError(msg)
+                    target_idx = key % self.column_count
+                # key is column name (str)
+                elif isinstance(key, str):
+                    try:
+                        target_idx = self.headers.index(key)
+                    except ValueError:
+                        msg = ErrorFormat(f"ValueError: header '{key}' not found, use `.get_headers()` to view current valid model headers")
+                        raise ValueError(msg) from None
+                else:
+                    msg = ErrorFormat(f"TypeError: invalid key type '{type(key).__name__}', dictionary keys must be 'int' (index) or 'str' (current header name)")
+                    raise TypeError(msg)
+                final_headers[target_idx] = val
+            new_headers = final_headers
+        # 3. Validate Sequence Type
         if not isinstance(new_headers, Iterable) or isinstance(new_headers, str):
-            msg = ErrorFormat(f"TypeError: invalid type '{type(new_headers).__name__}', `new_headers` must be a collection or sequence of type 'str' representing the new header names")
+            msg = ErrorFormat(f"TypeError: invalid type '{type(new_headers).__name__}', `new_headers` must be a list, tuple, dict, or callable returning a sequence of strings")
             raise TypeError(msg)
-        # Ensure new headers are now subscriptable so we can index into them using the column count index
+        # Ensure it is subscriptable list for comparisons
         new_headers = list(new_headers)
+        # 4. Validate Dimensions
         if len(new_headers) != self.column_count:
-            msg = ErrorFormat(f"DimensionError: invalid header dimensions, provided headers length '{len(new_headers)} != {self.column_count}' column count, please provide correct dimensions")
+            msg = ErrorFormat(f"DimensionError: invalid header dimensions, resulting headers length '{len(new_headers)}' != '{self.column_count}' column count")
             raise DimensionError(msg)
-        # Ensure new headers are of type 'str'
+        # 5. Validate Content Types
         if not all(isinstance(header, str) for header in new_headers):
             msg = ErrorFormat("TypeError: invalid new header type(s), all values in `new_headers` must be of type 'str'")
             raise TypeError(msg)        
-        sql_stmt = ";".join([f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """ for i in range(self.column_count)])
+        # 6. Generate SQL (Only for columns that actually changed)
+        rename_ops = []
+        for i in range(self.column_count):
+            if self.headers[i] != new_headers[i]:
+                # Escape double quotes in column names if necessary, though simpler standard is usually enough
+                rename_ops.append(f"""alter table "{self.sql_model}" rename column "{self.headers[i]}" to "{new_headers[i]}" """)
+        # If nothing changed, just return
+        if not rename_ops:
+            return
+        sql_stmt = ";".join(rename_ops)
         try:
             self.sql_db_conn.executescript(f"begin transaction; {sql_stmt}; end transaction;")
             self.sql_db_conn.commit()
@@ -1072,7 +1124,7 @@ class SQLDataModel:
             msg = ErrorFormat(f'SQLProgrammingError: unable to update headers, SQL execution failed with: "{e}"')
             raise SQLProgrammingError(msg) from None
         self.headers = new_headers
-        self._update_model_metadata(update_row_meta=False)        
+        self._update_model_metadata(update_row_meta=False)
 
     def normalize_headers(self, apply_function:Callable=None) -> None:
         """
