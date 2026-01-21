@@ -337,6 +337,8 @@ class SQLDataModel:
             - Use :meth:`SQLDataModel.set_display_max_rows()` to modify the number of rows output in the representations.
         
         Changelog:
+            - Version 2.3.0 (2026-01-21):
+                - Modified to handle `decimal.Decimal` type by lossy conversion to python's float type
             - Version 0.12.0 (2024-07-06):
                 - Modified the default minimum number of displayed rows from 1 to 4 when :py:attr:`SQLDataModel.display_max_rows` is None.
             - Version 0.11.0 (2024-07-05):
@@ -455,7 +457,7 @@ class SQLDataModel:
         """``tuple[int, int]``: The current dimensions of the model as a tuple of ``(rows, columns)``."""
         self.display_color = ANSIColor(display_color) if isinstance(display_color, (str,tuple)) else display_color if isinstance(display_color,ANSIColor) else None
         """``ANSIColor``: The display color to use for string representations of the model. Default is ``None``, using the standard terminal color."""
-        self.static_py_to_sql_map_dict = {'None': 'TEXT','int': 'INTEGER','float': 'REAL','str': 'TEXT','bytes': 'BLOB', 'date': 'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER'}
+        self.static_py_to_sql_map_dict = {'None': 'TEXT', 'int': 'INTEGER', 'float': 'REAL', 'str': 'TEXT', 'bytes': 'BLOB', 'date': 'DATE', 'datetime': 'TIMESTAMP', 'NoneType':'TEXT', 'bool':'INTEGER', 'Decimal': 'REAL', 'memoryview': 'BLOB'}        
         """``dict``: The data type mapping to use when converting python types to SQL column types."""
         self.static_sql_to_py_map_dict = {'NULL': 'None','INTEGER': 'int','REAL': 'float','TEXT': 'str','BLOB': 'bytes', 'DATE': 'date', 'TIMESTAMP': 'datetime','':'str'}
         """``dict``: The data type mapping to use when converting SQL column types to python types."""

@@ -1,4 +1,4 @@
-import sqlite3, datetime
+import sqlite3, datetime, decimal
 
 def register_adapters_and_converters():
     def adapt_date(val):
@@ -9,6 +9,9 @@ def register_adapters_and_converters():
         """Unchanged from sqlite3 default adapters"""
         return val.isoformat(" ")
 
+    def adapt_decimal(val):
+        return str(val)
+    
     def convert_date(val):
         """Modified to avoid ValueError on parsing date from datetime and restrict input to first 10 items of val"""
         return datetime.date(*map(int, val[:10].split(b"-")))
@@ -31,6 +34,7 @@ def register_adapters_and_converters():
 
     sqlite3.register_adapter(datetime.date, adapt_date)
     sqlite3.register_adapter(datetime.datetime, adapt_datetime)
+    sqlite3.register_adapter(decimal.Decimal, adapt_decimal)
     sqlite3.register_converter("date", convert_date)
     sqlite3.register_converter("timestamp", convert_timestamp)
 

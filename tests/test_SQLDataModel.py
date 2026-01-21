@@ -1,5 +1,5 @@
 from __future__ import annotations
-import datetime, os, tempfile, csv, sqlite3, random, string, sys
+import datetime, os, tempfile, csv, sqlite3, random, string, sys, decimal
 from typing import Literal, Iterable
 from itertools import cycle, islice
 from collections import Counter, namedtuple
@@ -3052,6 +3052,19 @@ def test_validate_indicies():
     for test_index, test_validation in test_indicies:
         output_indicies = sdm._validate_indicies(test_index)
         assert output_indicies == test_validation    
+
+@pytest.mark.core
+def test_handle_decimal_type():
+    input_headers = ['idx', 'Decimal']
+    input_data = [
+        (0, decimal.Decimal('0.0')),
+        (1, decimal.Decimal('1.1')),
+        (2, decimal.Decimal('2.2')),
+    ]
+    sdm = SQLDataModel(input_data, input_headers)
+    output_data = sdm.data(strict_2d=True, index=True)
+    expected_data = [(row[0], float(row[1])) for row in input_data]
+    assert output_data == expected_data
 
 @pytest.mark.core
 def test_unique():
