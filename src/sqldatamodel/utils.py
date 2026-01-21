@@ -101,6 +101,8 @@ def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-
         - If the input object is not a string or cannot be parsed, its type is determined based on its Python type (bool, int, float, bytes, or None).
     
     Changelog:
+        - Version 2.3.0 (2026-01-21):
+            - Added additional check for possible `bytes` data if obj matches format of `X'<BYTES>' where bytes are valid hexadecimal format.
         - Version 0.1.9 (2024-03-19):
             - New method.
     """        
@@ -109,7 +111,12 @@ def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-
     try:
         obj = literal_eval(obj)
     except (ValueError, SyntaxError):
-        pass
+        if isinstance(obj, str) and obj.startswith("X'") and obj.endswith("'") and len(obj) > 2:
+            try:
+                obj = bytes.fromhex(obj[2:-1])
+            except (ValueError, SyntaxError):
+                pass
+            
     if isinstance(obj, (bool, bytes, int, type(None))):
         return type(obj).__name__ if obj is not None else 'None'
     if isinstance(obj, float):
@@ -191,6 +198,8 @@ def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','s
         - Used by :meth:`SQLDataModel.__init__()` with ``as_binding=True`` to allow parameterized inserts to cast to appropriate data type.
 
     Changelog:
+        - Version 2.3.0 (2026-01-21):
+            - Added support for alternate bytes format `X'<BYTES>'` so that binary data is correctly handled when formatted as hexadecimal and prefixed by either `'b'` or `'X'`.
         - Version 0.7.6 (2024-06-16):
             - Added support for additional date formats when ``dtype='date'`` including: ``'%m/%d/%Y'``, ``'%m-%d-%Y'``, ``'%m.%d.%Y'``, ``'%Y/%m/%d'``, ``'%Y-%m-%d'``, ``'%Y.%m.%d'``.
             - Modified behavior when ``dtype='bytes'`` to avoid the need for any additional checks after insert.
@@ -205,7 +214,27 @@ def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','s
     elif dtype == 'float':
         return '''CAST(NULLIF(NULLIF(?,'None'),'') as REAL)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as REAL) {param_alias}'''
     elif dtype == 'bytes':
-        return """(SELECT CAST(CASE WHEN (SUBSTR(val,1,2) = 'b''' AND SUBSTR(val,-1,1) ='''') THEN SUBSTR(val,3,LENGTH(val)-3) ELSE NULLIF(NULLIF(val,'None'),'') END as BLOB) FROM (SELECT ? AS val))""" if as_binding else f"""CAST(CASE WHEN (SUBSTR("{param}",1,2) = 'b''' AND SUBSTR("{param}",-1,1) ='''') THEN SUBSTR("{param}",3,LENGTH("{param}")-3) ELSE NULLIF(NULLIF("{param}",'None'),'') END as BLOB) {param_alias} """
+        # return """(SELECT CAST(CASE WHEN ((SUBSTR(val,1,2) = 'b''' OR SUBSTR(val,1,2) = 'X''') AND SUBSTR(val,-1,1) ='''') THEN SUBSTR(val,3,LENGTH(val)-3) ELSE NULLIF(NULLIF(val,'None'),'') END as BLOB) FROM (SELECT ? AS val))""" if as_binding else f"""CAST(CASE WHEN ((SUBSTR("{param}",1,2) = 'b''' OR (SUBSTR("{param}",1,2) = 'X''') AND SUBSTR("{param}",-1,1) ='''') THEN SUBSTR("{param}",3,LENGTH("{param}")-3) ELSE NULLIF(NULLIF("{param}",'None'),'') END as BLOB) {param_alias} """
+        return r"""(
+            SELECT
+            CASE
+                -- If looks like an SQLite blob literal X'...'
+                WHEN SUBSTR(val,1,2) = 'X''' AND SUBSTR(val,-1,1) = ''''
+                THEN unhex(SUBSTR(val,3,LENGTH(val)-3))
+                -- If looks like a Python bytes repr b'...'
+                WHEN SUBSTR(val,1,2) = 'b''' AND SUBSTR(val,-1,1) = ''''
+                THEN CAST(SUBSTR(val,3,LENGTH(val)-3) AS BLOB)
+                ELSE CAST(NULLIF(NULLIF(val,'None'),'') AS BLOB)
+            END
+            FROM (SELECT ? AS val)
+        )""" if as_binding else rf"""CASE
+                WHEN SUBSTR("{param}",1,2) = 'X''' AND SUBSTR("{param}",-1,1) = ''''
+                THEN unhex(SUBSTR("{param}",3,LENGTH("{param}")-3))
+                WHEN SUBSTR("{param}",1,2) = 'b''' AND SUBSTR("{param}",-1,1) = ''''
+                THEN CAST(SUBSTR("{param}",3,LENGTH("{param}")-3) AS BLOB)
+                ELSE CAST(NULLIF(NULLIF("{param}",'None'),'') AS BLOB)
+            END {param_alias}"""
+
     elif dtype == 'date':
         return '''(SELECT CASE WHEN SUBSTR(val, 3, 1) = '-' THEN DATE(SUBSTR(val, 7, 4) || '-' ||SUBSTR(val, 1, 2) || '-' ||SUBSTR(val, 4, 2)) ELSE DATE(NULLIF(NULLIF(val, 'None'), '')) END FROM (SELECT REPLACE(REPLACE(?, '/', '-'), '.', '-') AS val))''' if as_binding else f'''CASE WHEN SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'),3,1) = '-' THEN DATE(SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 7, 4) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 1, 2) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 4, 2)) ELSE DATE(NULLIF(NULLIF(REPLACE(REPLACE("{param}",'/','-'),'.','-'),'None'),'')) END {param_alias} '''
     elif dtype == 'datetime':
@@ -237,6 +266,8 @@ def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precisi
         - The return ``str`` is not valid SQL by itself, representing only the single column select portion.
 
     Changelog:
+        - Version 2.3.0 (2026-01-21):
+            - Modified handling for bytes dtype to more closely align with conventional representation of `X'<BYTES>'` instead of previous approach.
         - Version 0.11.0 (2024-07-05):
             - Added ``truncation_chars`` keyword argument to allow custom truncation characters when column value exceeds maximum width.
         - Version 0.10.4 (2024-07-03):
@@ -254,7 +285,8 @@ def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precisi
         elif dtype == 'int':
             select_item_fmt = f"""printf('%{max_pad_width}s', CASE WHEN length("{column}") <= ({max_pad_width}) THEN "{column}" ELSE substr("{column}",1,({max_pad_width})-{len(truncation_chars)})||'{truncation_chars}' END) """
         elif dtype == 'bytes':
-            select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}",1,({max_pad_width})-{len(truncation_chars)})||'{truncation_chars}' END) """
+            col_fmt = f"""quote("{column}")"""
+            select_item_fmt = f"""printf('%!-{max_pad_width}s', CASE WHEN (length({col_fmt})) <= ({max_pad_width}) THEN {col_fmt} ELSE substr({col_fmt},1,({max_pad_width})-{len(truncation_chars)})||'{truncation_chars}' END) """
         elif dtype == 'index':
             select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
         else:
@@ -267,7 +299,8 @@ def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precisi
             if dtype == 'float':
                 select_item_fmt = f"""(CASE WHEN "{column}" IS NULL THEN printf('%{dyn_left_right}{max_pad_width}s', '') WHEN LENGTH(printf('%{dyn_left_right}.{float_precision}f',"{column}")) <= {max_pad_width} THEN printf('%.{max_pad_width}s', printf('%{dyn_left_right}{max_pad_width}.{float_precision}f',"{column}")) ELSE SUBSTR(printf('%{dyn_left_right}.{float_precision}f',"{column}"),1,{max_pad_width}-{len(truncation_chars)}) || '{truncation_chars}' END)"""
             elif dtype == 'bytes':
-                select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN (length("{column}")+3) <= ({max_pad_width}) THEN ('b'''||"{column}"||'''') ELSE substr('b'''||"{column}"||'''',1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END) """
+                col_fmt = f"""quote("{column}")"""
+                select_item_fmt = f"""printf('%!{dyn_left_right}{max_pad_width}s', CASE WHEN (length({col_fmt})) <= ({max_pad_width}) THEN {col_fmt} ELSE substr({col_fmt},1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END) """
             elif dtype == 'index':
                 select_item_fmt = f"""printf('%{max_pad_width}s', "{column}") """
             else:
@@ -288,7 +321,7 @@ def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precisi
                 elif dtype == 'int':
                     col_discriminator = f"""(CASE WHEN LENGTH("{column}") <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_INT} /* [Favor left (-) or right (+) on uneven split] */ - length("{column}"))/2),"{column}") ELSE SUBSTR(printf('%!s',"{column}"),1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END)"""                        
                 elif dtype == 'bytes':
-                    col_discriminator = f"""(CASE WHEN LENGTH("{column}")+3 <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_BYTES} /* [Favor left (-) or right (+) on uneven split] */ - (length("{column}")+3))/2),('b'''||"{column}"||'''')) ELSE SUBSTR('b'''||"{column}"||'''',1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END)"""
+                    col_discriminator = f"""(CASE WHEN LENGTH(QUOTE("{column}")) <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_BYTES} /* [Favor left (-) or right (+) on uneven split] */ - (length(quote("{column}"))))/2),quote("{column}")) ELSE SUBSTR(QUOTE("{column}"),1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END)"""
                 else:
                     column = f'"{column}"' if not escape_newline else  "".join((f'REPLACE("{column}",',"'\n','\\n')"))
                     col_discriminator = f"""(CASE WHEN LENGTH({column}) <= {max_pad_width} THEN printf('%!*s',{max_pad_width}-(({max_pad_width}+{ON_UNEVEN_SPLIT_REMAINING} /* [Favor left (-) or right (+) on uneven split] */ - length({column}))/2),{column}) ELSE SUBSTR(printf('%!s',{column}),1,{max_pad_width}-{len(truncation_chars)})||'{truncation_chars}' END)"""

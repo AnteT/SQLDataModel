@@ -1037,14 +1037,14 @@ def test_repr():
         assert output_repr_lines[i] == baseline_repr_lines[i]
     ### test short data appearance ###
     input_headers = ['string','integer','bytes','float','datetime']
-    input_data = [['string', 12_345, b'binary', 3.14159, datetime.datetime(1989, 11, 9, 6, 15, 25)]]
+    input_data = [['string', 12_345, b'ABC', 3.14159, datetime.datetime(1989, 11, 9, 6, 15, 25)]]
     sdm = SQLDataModel(data=input_data, headers=input_headers, column_alignment='dynamic', min_column_width=4, max_column_width=32, display_index=True, display_float_precision=4, display_max_rows=2)
     output_repr = sdm.__repr__()
     baseline_repr = """
     ┌───┬────────┬─────────┬───────────┬─────────┬─────────────────────┐
     │   │ string │ integer │ bytes     │   float │ datetime            │
     ├───┼────────┼─────────┼───────────┼─────────┼─────────────────────┤
-    │ 0 │ string │   12345 │ b'binary' │  3.1416 │ 1989-11-09 06:15:25 │
+    │ 0 │ string │   12345 │ X'414243' │  3.1416 │ 1989-11-09 06:15:25 │
     └───┴────────┴─────────┴───────────┴─────────┴─────────────────────┘
     [1 rows x 5 columns]   
     """
@@ -1054,14 +1054,14 @@ def test_repr():
         assert output_repr_lines[i] == baseline_repr_lines[i]   
     ### test truncated data appearance ###
     input_headers = ['string','integer','bytes','float','datetime']
-    input_data = [['string', 12_345, b'binary', 3.14159, datetime.datetime(1989, 11, 9, 6, 15, 25)]]
+    input_data = [['string', 12_345, b'ABC', 3.14159, datetime.datetime(1989, 11, 9, 6, 15, 25)]]
     sdm = SQLDataModel(data=input_data, headers=input_headers, column_alignment='dynamic', min_column_width=4, max_column_width=4, display_index=True, display_float_precision=4, display_max_rows=2)
     output_repr = sdm.__repr__()
     baseline_repr = """
     ┌───┬──────┬──────┬──────┬──────┬──────┐
     │   │ st⠤⠄ │ in⠤⠄ │ by⠤⠄ │ fl⠤⠄ │ da⠤⠄ │
     ├───┼──────┼──────┼──────┼──────┼──────┤
-    │ 0 │ st⠤⠄ │ 12⠤⠄ │ b'⠤⠄ │  3⠤⠄ │ 19⠤⠄ │
+    │ 0 │ st⠤⠄ │ 12⠤⠄ │ X'⠤⠄ │  3⠤⠄ │ 19⠤⠄ │
     └───┴──────┴──────┴──────┴──────┴──────┘
     [1 rows x 5 columns]
     """
@@ -3106,3 +3106,27 @@ def test_unique():
     output_data = sdm.unique(ignore_index=True).data(strict_2d=True, index=True)
     output_expected = [tuple((i, *sublist[1:])) for (i, sublist) in enumerate(output_expected)]
     assert output_expected == output_data    
+
+@pytest.mark.core
+def test_sql_empty_results():
+    # Test as query literal
+    initial_data = [('P', 'A', 'S', 'S')]
+    initial_headers = ['A', 'B', 'C', 'D']
+    df_initial = SQLDataModel(data=initial_data, headers=initial_headers)
+    sql_empty = """SELECT 'P' as 'A', 'A' as 'B', 'S' as 'C', 'S' as 'D' FROM sdm where (1=0)""" # Should return zero rows but still initialize an empty model with the headers
+    df_empty = SQLDataModel.from_sql(sql_empty, df_initial.sql_db_conn)
+    output_data = df_empty.data(strict_2d=True, include_headers=True, index=False)
+    assert output_data == [tuple(initial_headers)]
+
+@pytest.mark.core
+def test_exotic_type_conversion():
+    input_headers = ['idx','int_col','float_col','decimal_col','bool_col','str_col','bytes_col','memview_col','timestamptz_col','date_col']
+    input_data = [
+        (0, 1, 1.25, decimal.Decimal('0.3333'), False, 'row 1', b'ABC1', memoryview(b'\xc4\xcaB8\xa0\xb9#\x82\r\xccP\x9aou\x84\x9b'), datetime.datetime(2024, 2, 1, 9, 0), datetime.date(2024, 1, 2)),
+        (1, 2, 2.5, decimal.Decimal('0.6667'), True, 'row 2', b'ABC2', memoryview(b'\xc8\x1er\x8d\x9dL/co\x06\x7f\x89\xcc\x14\x86,'), datetime.datetime(2024, 3, 1, 9, 0), datetime.date(2024, 1, 3)),
+        (2, 3, 3.75, decimal.Decimal('1.0000'), False, 'row 3', b'ABC3', memoryview(b'\xec\xcb\xc8~K\\\xe2\xfe(0\x8f\xd9\xf2\xa7\xba\xf3'), datetime.datetime(2024, 4, 1, 9, 0), datetime.date(2024, 1, 4)),
+    ]
+    df = SQLDataModel(data=input_data, headers=input_headers)
+    output_data = df.data(strict_2d=True, index=True)
+    output_expected = [tuple(c if not isinstance(c, (decimal.Decimal, memoryview)) else float(c) if isinstance(c, decimal.Decimal) else c.tobytes() for c in row) for row in input_data]
+    assert output_data == output_expected

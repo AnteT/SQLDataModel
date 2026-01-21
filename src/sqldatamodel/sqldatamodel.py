@@ -4068,6 +4068,8 @@ class SQLDataModel:
             - See utility methods :meth:`utils._parse_connection_url()` and :meth:`utils._create_connection()` for implementation on creating database connections from urls.                      
 
         Changelog:
+            - Version 2.3.0 (2026-01-21):
+                - Modified to allow returning an empty result set from the execution of ``sql``, constructing an empty model using the headers returned from the cursor.
             - Version 0.9.1 (2024-06-27):
                 - Modified handling of ``con`` parameter to allow database connection url to also be provided as ``'scheme://user:pass@host:port/db'``
             - Version 0.8.2 (2024-06-24):
@@ -4120,11 +4122,11 @@ class SQLDataModel:
             msg = ErrorFormat(f"SQLProgrammingError: provided SQL query is invalid or malformed, failed with: '{e}'")
             raise SQLProgrammingError(msg) from None
         data = sql_c.fetchall()
-        if (len(data) < 1) or (data is None):
+        if (((len(data) < 1) or (data is None)) and sql_c.description is None): # Allows no rows to be used so long as some metadata is available
             msg = ErrorFormat("DimensionError: provided SQL query returned no data, please provide a valid query with sufficient data to construct a model")
             raise DimensionError(msg)
         headers = [x[0] for x in sql_c.description]
-        return cls(data=data, headers=headers, dtypes=dtypes, **kwargs)
+        return cls(data=data if len(data) >= 1 else None, headers=headers, dtypes=dtypes, **kwargs)
 
     @classmethod
     def from_text(cls, text_source:str, table_identifier:int=1, encoding:str='utf-8', headers:list[str]=None, **kwargs) -> SQLDataModel:
@@ -5799,7 +5801,7 @@ class SQLDataModel:
             msg = ErrorFormat(f"{type(e).__name__}: {e} encountered when trying to convert to pyarrow format")
             raise type(e)(msg).with_traceback(e.__traceback__) from None        
         return table
-
+    
     def to_string(self, index:bool=None, display_max_rows:int=None, display_max_width:int=None, min_column_width:int=None, max_column_width:int=None, float_precision:int=None, vertical_ellipses:str='⠒⠂', horizontal_ellipses:str='⠤⠄',  display_dimensions:bool=False, index_rep:str=None, column_alignment:Literal['dynamic', 'left', 'center', 'right']=None, table_style:Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']=None) -> str:
         """
         Generate a tabular representation of the model based on custom parameters and bounds.
@@ -5894,6 +5896,8 @@ class SQLDataModel:
             - See :meth:`SQLDataModel.set_table_style()` for available style options and output examples.
 
         Changelog:
+            - Version 2.3.0 (2026-01-21):
+                - Fixed issue where providing ``float_precision`` had no actual impact on dispaly float precision used in output.
             - Version 0.11.0 (2024-07-05):
                 - New method.
         """
@@ -5969,7 +5973,7 @@ class SQLDataModel:
         table_bare_newline = """\n"""
         row_sep_concat = f"""|| '{row_sep}' ||"""
         fetch_idx = utils.sqlite_printf_format(self.sql_idx,"index",header_length_dict[self.sql_idx]) + row_sep_concat if display_index else ""
-        header_fmt_str = row_sep_concat.join([f"""{utils.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],self.display_float_precision,alignment=column_alignment,escape_newline=True,truncation_chars=horizontal_ellipses)}""" if col != horizontal_sep_marker else f"""{utils.sqlite_printf_format(horizontal_ellipses,'custom',horizontal_ellipses_width,self.display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
+        header_fmt_str = row_sep_concat.join([f"""{utils.sqlite_printf_format(col,header_py_dtype_dict[col],header_length_dict[col],display_float_precision,alignment=column_alignment,escape_newline=True,truncation_chars=horizontal_ellipses)}""" if col != horizontal_sep_marker else f"""{utils.sqlite_printf_format(horizontal_ellipses,'custom',horizontal_ellipses_width,display_float_precision,alignment=column_alignment)}""" for col in display_headers if col != self.sql_idx])
         if vertical_truncation_required:
             vertical_sep_fmt_str = f'''{row_lh}{row_sep.join([f"""{vertical_ellipses:^{max(0,header_length_dict[col]+1)}}"""[:header_length_dict[col]] for col in display_headers])}{row_rh}{table_bare_newline}'''
             fetch_fmt_stmt = f"""
@@ -12359,6 +12363,8 @@ class SQLDataModel:
             - Used by :meth:`SQLDataModel.to_string()` to determine appropriate column representation widths.
 
         Changelog:
+            - Version 2.3.0 (2026-01-21):
+                - Modified handling of bytes/blob data to use sqlite's `quote` function instead of `printf` to align with related methods in order to improve bytes representation
             - Version 0.11.0 (2024-07-05):
                 - New method.
         """
@@ -12374,9 +12380,9 @@ class SQLDataModel:
         else:
             check_width_scope = ''   
         header_py_dtype_dict = self.dtypes
-        header_printf_modifiers_dict = {col:(f"'% .{display_float_precision}f'" if dtype == 'float' else "'%!s'" if dtype != 'bytes' else "'b''%!s'''") for col,dtype in header_py_dtype_dict.items()}
+        header_printf_modifiers_dict = {col:(f"'% .{display_float_precision}f'" if dtype == 'float' else "'%!s'") for col,dtype in header_py_dtype_dict.items()}
         # Required to escape newlines when calculating column widths
-        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] != 'str' else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ ))) for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" {check_width_scope} order by "{self.sql_idx}" asc'))
+        headers_sub_select = " ".join(("select",f"""max(length("{self.sql_idx}")) as "{self.sql_idx}",""" if display_index else "",",".join([f"""max(max(length(printf({header_printf_modifiers_dict[col]},"{col}"))),length('{col}')) as "{col}" """ if header_py_dtype_dict[col] not in ('bytes','str') else ("".join((f"""max(max(length(printf({header_printf_modifiers_dict[col]},REPLACE("{col}", """, """'\n','\\n' )""", f"""))),length('{col}')) as "{col}" """ ))) if header_py_dtype_dict[col] != 'bytes' else f"""max(max(length(quote("{col}"))),length('{col}')) as "{col}" """ for col in display_headers if col != self.sql_idx]),f'from "{self.sql_model}" {check_width_scope} order by "{self.sql_idx}" asc'))
         headers_parse_lengths_select = " ".join(("select",",".join([f"""min(max(ifnull("{col}",length('{col}')),{min_column_width}),{max_column_width})""" if col != self.sql_idx else f"""max(ifnull("{col}",1),{0 if not index_rep else len(index_rep)})""" for col in display_headers]),"from"))
         headers_full_select = f"""{headers_parse_lengths_select}({headers_sub_select})"""
         length_meta = self.sql_db_conn.execute(headers_full_select).fetchone()
