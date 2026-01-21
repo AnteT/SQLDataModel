@@ -11842,7 +11842,7 @@ class SQLDataModel:
             - Display properties such as float precision, index column or table styling are also passed to the new instance when not provided in ``kwargs``.
         
         Changelog:
-            - Version 2.2.3 (2026-01-21):
+            - Version 2.3.0 (2026-01-21):
                 - Modified to allow returning empty result set from execution of ``sql_query`` returning model with zero rows using query metadata for column names and dimension.
             - Version 0.6.2 (2024-05-15):
                 - Inclusion of :py:attr:`SQLDataModel.table_style` argument in returned ``SQLDataModel`` to inherit all display properties in result.
