@@ -11842,6 +11842,8 @@ class SQLDataModel:
             - Display properties such as float precision, index column or table styling are also passed to the new instance when not provided in ``kwargs``.
         
         Changelog:
+            - Version 2.2.3 (2026-01-21):
+                - Modified to allow returning empty result set from execution of ``sql_query`` returning model with zero rows using query metadata for column names and dimension.
             - Version 0.6.2 (2024-05-15):
                 - Inclusion of :py:attr:`SQLDataModel.table_style` argument in returned ``SQLDataModel`` to inherit all display properties in result.
             - Version 0.1.9 (2024-03-19):
@@ -11858,13 +11860,13 @@ class SQLDataModel:
             msg = ErrorFormat(f"SQLProgrammingError: '{e}' encountered when trying to fetch and parse SQL query results")
             raise SQLProgrammingError(msg) from None            
         fetch_headers = [x[0] for x in res.description]
-        if (rows_returned := len(fetch_result)) < 1:
-            msg = ErrorFormat(f"ValueError: nothing to return, provided query returned '{rows_returned}' rows which is insufficient to return or generate a new model from")
+        if fetch_result is None:
+            msg = ErrorFormat(f"ValueError: nothing to return, provided query returned null result set which is insufficient to return or generate a new model from")
             raise ValueError(msg)
         sdm_args = self._get_display_args(include_dtypes=True)
         if kwargs:
             sdm_args.update({k:v for k,v in kwargs.items()})
-        return type(self)(fetch_result, headers=fetch_headers, **sdm_args)
+        return type(self)(fetch_result if len(fetch_result) >= 1 else None, headers=fetch_headers, **sdm_args)
 
     def execute_statement(self, sql_stmt:str, sql_params:tuple=None, update_row_meta:bool=True) -> None:
         """

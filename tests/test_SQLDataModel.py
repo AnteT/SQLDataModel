@@ -3119,6 +3119,16 @@ def test_sql_empty_results():
     assert output_data == [tuple(initial_headers)]
 
 @pytest.mark.core
+def test_sql_empty_execute_fetch(sample_data):
+    input_data, input_headers = sample_data[1:], sample_data[0]
+    sdm = SQLDataModel(data=input_data, headers=input_headers)
+    sql_fetch_no_results = """SELECT """ + ",".join(f""""{col}" AS '{col}_new'""" for col in input_headers) + """ FROM sdm WHERE (1=0)"""
+    sdm_empty = sdm.execute_fetch(sql_fetch_no_results)
+    output_data = sdm_empty.data(strict_2d=True, include_headers=True)
+    expected_data = [tuple(f"{col}_new" for col in input_headers)] # Expect only modified headers to be returned from empty query
+    assert output_data == expected_data
+
+@pytest.mark.core
 def test_exotic_type_conversion():
     input_headers = ['idx','int_col','float_col','decimal_col','bool_col','str_col','bytes_col','memview_col','timestamptz_col','date_col']
     input_data = [
