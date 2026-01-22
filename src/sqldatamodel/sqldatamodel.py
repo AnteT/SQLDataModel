@@ -4246,7 +4246,7 @@ class SQLDataModel:
 
         Raises:
             ``TypeError``: If ``xml_source`` is not a string type.
-            ``ValueError``: If value for ``orient``is not one of `'rows'` or `'columns'` representing the data orientation.
+            ``ValueError``: If value for ``orient`` is not one of `'rows'` or `'columns'` representing the data orientation.
         
         Example::
 
