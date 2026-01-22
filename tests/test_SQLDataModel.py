@@ -3129,6 +3129,15 @@ def test_sql_empty_execute_fetch(sample_data):
     assert output_data == expected_data
 
 @pytest.mark.core
+def test_interaction_with_empty_model():
+    headers = ['str_col', 'float_col', 'int_col']
+    data = [(f'text {i}', 0.0 + i * 3.1415926535, i) for i in range(10)]
+    df_A = SQLDataModel(data=data, headers=headers)
+    df_B = df_A.execute_fetch('select * from sdm where 1=0') # produces empty dataset
+    df_C = df_A.vstack(df_B) # concats that empty dataset onto the original set
+    assert df_A.data(strict_2d=True, include_headers=True, index=True) == df_C.data(strict_2d=True, include_headers=True, index=True) # they should be equal if all went as expected
+
+@pytest.mark.core
 def test_exotic_type_conversion():
     input_headers = ['idx','int_col','float_col','decimal_col','bool_col','str_col','bytes_col','memview_col','timestamptz_col','date_col']
     input_data = [
@@ -3140,3 +3149,76 @@ def test_exotic_type_conversion():
     output_data = df.data(strict_2d=True, index=True)
     output_expected = [tuple(c if not isinstance(c, (decimal.Decimal, memoryview)) else float(c) if isinstance(c, decimal.Decimal) else c.tobytes() for c in row) for row in input_data]
     assert output_data == output_expected
+
+@pytest.mark.core
+def test_to_from_xml():
+    input_headers = ('int_col','float_col','bool_col','str_col','bytes_col','timestamptz_col','date_col')
+    input_data = [
+        (11111, 1.25, False, 'row 1', b'ABC-0', datetime.datetime(2024, 2, 1, 9, 1, 50), datetime.date(2024, 1, 2)),
+        (22222, 2.5, True, 'row 2', b'DEF-1', datetime.datetime(2024, 3, 1, 9, 2, 51), datetime.date(2024, 1, 3)),
+        (33333, 3.75, False, 'row 3', b'HIJ-2', datetime.datetime(2024, 4, 1, 9, 3, 52), datetime.date(2024, 1, 4)),
+        (44444, 5.0, True, 'row 4', b'KLM-3', datetime.datetime(2024, 5, 1, 9, 4, 53), datetime.date(2024, 1, 5)),
+        (55555, 6.25, False, 'row 5', b'NOP-4', datetime.datetime(2024, 6, 1, 9, 5, 54), datetime.date(2024, 1, 6)),
+        (66666, 7.5, True, 'row 6', b'QRS-5', datetime.datetime(2024, 7, 1, 9, 6, 55), datetime.date(2024, 1, 7)),
+        (77777, 8.75, False, 'row 7', b'TUV-6', datetime.datetime(2024, 8, 1, 9, 7, 56), datetime.date(2024, 1, 8)),
+        (88888, 10.0, True, 'row 8', b'WXY-7', datetime.datetime(2024, 9, 1, 9, 8, 57), datetime.date(2024, 1, 9)),
+        (99999, 11.25, False, 'row 9', b'ZAB-8', datetime.datetime(2024, 10, 1, 9, 9, 58), datetime.date(2024, 1, 10)),
+        (100000, 12.5, True, 'row 10', b'CDE-9', datetime.datetime(2024, 11, 1, 9, 10, 59), datetime.date(2024, 1, 11)),
+    ]    
+    df_initial = SQLDataModel(data=input_data, headers=input_headers)
+
+    # Roundtrip test orientation by rows
+    outputs = SQLDataModel.from_xml(df_initial.to_xml(orient='rows'), orient='rows').data(strict_2d=True, index=False, include_headers=True)
+    output_headers, output_data = outputs[0], outputs[1:]
+    assert output_headers == input_headers
+    assert output_data == input_data
+
+    # Roundtrip test orientation by columns
+    outputs = SQLDataModel.from_xml(df_initial.to_xml(orient='columns'), orient='columns').data(strict_2d=True, index=False, include_headers=True)
+    output_headers, output_data = outputs[0], outputs[1:]
+    assert output_headers == input_headers
+    assert output_data == input_data
+
+    # XML Literal output and pretty foramt tests
+    grid = [tuple(f"{x},{y}" for y in range(3)) for x in range(3)]
+    df = SQLDataModel(data=grid, headers=['A','B','C'])
+    # Orient by rows
+    output_received = df.to_xml(pretty=True, orient='rows', index=False)
+    assert output_received == """<?xml version="1.0" encoding="utf-8"?>
+<data>
+    <row>
+        <A>0,0</A>
+        <B>0,1</B>
+        <C>0,2</C>
+    </row>
+    <row>
+        <A>1,0</A>
+        <B>1,1</B>
+        <C>1,2</C>
+    </row>
+    <row>
+        <A>2,0</A>
+        <B>2,1</B>
+        <C>2,2</C>
+    </row>
+</data>"""
+    # Orient by columns
+    output_received = df.to_xml(pretty=True, orient='columns', index=False)
+    assert output_received == """<?xml version="1.0" encoding="utf-8"?>
+<data>
+    <column name="A">
+        <value>0,0</value>
+        <value>1,0</value>
+        <value>2,0</value>
+    </column>
+    <column name="B">
+        <value>0,1</value>
+        <value>1,1</value>
+        <value>2,1</value>
+    </column>
+    <column name="C">
+        <value>0,2</value>
+        <value>1,2</value>
+        <value>2,2</value>
+    </column>
+</data>"""    

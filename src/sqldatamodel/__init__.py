@@ -1636,3 +1636,102 @@ def from_text(text_source:str, table_identifier:int=1, encoding:str='utf-8', hea
             - New method.
     """
     return SQLDataModel.from_text(text_source, table_identifier, encoding, headers, **kwargs)
+
+def from_xml(xml_source: str, orient: typing.Literal["rows", "columns"] = "rows", row_tag: str = "row", column_tag: str = "column", value_tag: str = "value", root_tag: str | None = None, encoding: str = "utf-8", infer_types: bool = True, **kwargs) -> SQLDataModel:
+    """
+    Creates a new ``SQLDataModel`` instance from an XML source.
+
+    Parameters:
+        ``xml_source`` (str): File path, URL, or raw XML string.
+        ``orient`` (Literal['rows','columns']): Orientation of XML data where `'rows'` treats as row as a record and `'columns'` treats each column as a list of values.
+        ``row_tag`` (str): Row tag name when ``orient='rows'``.
+        ``column_tag`` (str): Column tag name when ``orient='columns'``.
+        ``value_tag`` (str): Value tag name inside column elements.
+        ``root_tag`` (str | None): Optional root element selector.
+        ``encoding`` (str): Encoding for file or URL input.
+        ``infer_types`` (bool): Whether to infer column types.
+
+    Returns:
+        ``SQLDataModel``: The SQLDataModel object created from the provided XML data.
+
+    Raises:
+        ``TypeError``: If ``xml_source`` is not a string type.
+        ``ValueError``: If value for ``orient``is not one of `'rows'` or `'columns'` representing the data orientation.
+    
+    Example::
+
+        import sqldatamodel as sdm
+
+        # XML data as string literal
+        xml_literal = '''
+        <data>
+            <row>
+                <Name>Alice</Name>
+                <Age>25</Age>
+                <Grade>3.8</Grade>
+            </row>
+            <row>
+                <Name>Bob</Name>
+                <Age>30</Age>
+                <Grade>3.9</Grade>
+            </row>
+            <row>
+                <Name>Charlie</Name>
+                <Age>35</Age>
+                <Grade>3.2</Grade>
+            </row>
+        </data>'''
+        
+        # Create the model from the XML data
+        df = sdm.SQLDataModel.from_xml(xml_literal)
+
+        # View the resulting model
+        print(df)
+
+    This will output:
+
+    ```shell
+        ┌───┬─────────┬─────┬───────┐
+        │   │ Name    │ Age │ Grade │
+        ├───┼─────────┼─────┼───────┤
+        │ 0 │ Alice   │  25 │  3.80 │
+        │ 1 │ Bob     │  30 │  3.90 │
+        │ 2 │ Charlie │  35 │  3.20 │
+        └───┴─────────┴─────┴───────┘    
+        [3 rows x 3 columns]            
+    ```    
+    
+    Alternatively, column names can be parsed from ``name`` attributes of ``<col>`` tags:
+
+    ```python
+        import sqldatamodel as sdm
+
+        # Sample XML str literal
+        xml = '''
+        <data>
+            <row>
+                <col name="1">Alice</col>
+                <col name="2">30</col>
+            </row>
+            <row>
+                <col name="1">Bob</col>
+                <col name="2">25</col>
+            </row>
+        </data>
+        '''
+
+        df = sdm.SQLDataModel.from_xml(xml)
+        print(df.headers) # [1, 2]
+
+        print(df.to_json(index=False))
+        # [{"1": "Alice", "2": 30}, {"1": "Bob", "2": 25}]            
+    ```
+
+    Note:
+        - The headers will be parsed from either a direct self-named ``<COLUMN_NAME>`` tag, or from a generic ``<col>`` tag's ``name`` attribute if serialized accordingly.
+
+    Changelog:
+        - Version 2.3.1 (2026-01-22):
+            - New method.
+    """
+    return SQLDataModel.from_xml(xml_source, orient = orient, row_tag = row_tag, column_tag = column_tag, value_tag = value_tag, root_tag = root_tag, encoding = encoding, infer_types = infer_types, **kwargs)

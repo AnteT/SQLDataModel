@@ -3,6 +3,8 @@ import sqlite3, os, csv, sys, datetime, pickle, re, shutil, datetime, json, rand
 from collections.abc import Callable, Iterator, Iterable
 from collections import namedtuple
 from typing import Literal, Any, Type, NamedTuple
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
 from io import StringIO
 
 from . import optionals
@@ -155,6 +157,7 @@ class SQLDataModel:
         df.to_parquet("output.parquet")
         df.to_pickle("output.sdm")
         df.to_text("output.txt")
+        df.to_xml("output.xml")
         df.to_local_db("output.db")
 
         # Reload it back again from more formats:
@@ -170,6 +173,7 @@ class SQLDataModel:
         df = sdm.from_parquet("output.parquet")
         df = sdm.from_pickle("output.sdm")
         df = sdm.from_sql("output", sqlite3.connect('output.db'))
+        df = sdm.from_xml("output.xml")
     ```
     
     Data Formats
@@ -207,6 +211,8 @@ class SQLDataModel:
           - ``:``: Colon separated values.
           - ``,``: Comma separated values or ``.csv`` files.
 
+        - ``XML``: Extract from xml formats and write to and from ``.xml`` files including XML formatted string literals.
+        
         - ``Python objects``:
 
           - ``dictionaries``: Convert to and from collections of python ``dict`` objects.
@@ -242,7 +248,7 @@ class SQLDataModel:
         - Use :meth:`SQLDataModel.get_supported_sql_connections()` to view supported SQL connection packages, please reach out with any issues or questions, thanks!
     """
     __slots__ = ('sql_idx','sql_model','display_max_rows','min_column_width','max_column_width','column_alignment','display_color','display_index','row_count','headers','column_count','static_py_to_sql_map_dict','static_sql_to_py_map_dict','sql_db_conn','display_float_precision','header_master','indicies','dtypes','shape','table_style')
-    
+        
     def __init__(self, data:list[list]=None, headers:list[str]=None, dtypes:dict[str,str]=None, display_max_rows:int=None, min_column_width:int=3, max_column_width:int=38, column_alignment:Literal['dynamic','left','center','right']='dynamic', display_color:str=None, display_index:bool=True, display_float_precision:int=2, infer_types:bool=False, table_style:Literal['ascii','bare','dash','default','double','latex','list','markdown','outline','pandas','polars','postgresql','round','rst-grid','rst-simple']='default'):
         """
         Initializes a new instance of ``SQLDataModel``.
@@ -2344,6 +2350,7 @@ class SQLDataModel:
               - ``'.tsv'``: passed to :meth:`SQLDataModel.from_csv()` as csv source data.
               - ``'.txt'``: passed to :meth:`SQLDataModel.from_text()` as text source data.
               - ``'.xlsx'``: passed to :meth:`SQLDataModel.from_excel()` as excel source data.
+              - ``'.xml'``: passed to :meth:`SQLDataModel.from_xml()` as xml source data.
 
         Returns:
             ``SQLDataModel``: The SQLDataModel object created from the provided data.
@@ -2400,7 +2407,7 @@ class SQLDataModel:
         if not isinstance(data, (list, tuple, str, dict)) and (type(data).__name__ not in ('ndarray','DataFrame')):
             msg = ErrorFormat(f"TypeError: invalid type '{type(data).__name__}', argument for ``data`` must be one of 'list', 'tuple', 'str', 'dict' or a supported external object type")
             raise TypeError(msg)
-        supported_ext = ('.csv','.html','.json','.md','.parquet','.pkl','.sdm','.tex','.tsv','.txt','.xlsx')
+        supported_ext = ('.csv','.html','.json','.md','.parquet','.pkl','.sdm','.tex','.tsv','.txt','.xlsx','.xml')
         ext_operation = {
              '.csv': cls.from_csv
             ,'.html': cls.from_html
@@ -2413,6 +2420,7 @@ class SQLDataModel:
             ,'.tsv': cls.from_delimited
             ,'.txt': cls.from_text
             ,'.xlsx': cls.from_excel
+            ,'.xml': cls.from_xml
         }
         if isinstance(data, dict):
             if all(value in ('None','int','float','str','bytes','date','datetime','NoneType','bool') for value in data.values()):
@@ -4217,6 +4225,196 @@ class SQLDataModel:
         if headers is None:
             headers = table.pop(0)        
         return cls(data=table, headers=headers, **kwargs)
+
+    @classmethod
+    def from_xml(cls, xml_source: str, orient: Literal["rows", "columns"] = "rows", row_tag: str = "row", column_tag: str = "column", value_tag: str = "value", root_tag: str | None = None, encoding: str = "utf-8", infer_types: bool = True, **kwargs) -> SQLDataModel:
+        """
+        Creates a new ``SQLDataModel`` instance from an XML source.
+
+        Parameters:
+            ``xml_source`` (str): File path, URL, or raw XML string.
+            ``orient`` (Literal['rows','columns']): Orientation of XML data where `'rows'` treats as row as a record and `'columns'` treats each column as a list of values.
+            ``row_tag`` (str): Row tag name when ``orient='rows'``.
+            ``column_tag`` (str): Column tag name when ``orient='columns'``.
+            ``value_tag`` (str): Value tag name inside column elements.
+            ``root_tag`` (str | None): Optional root element selector.
+            ``encoding`` (str): Encoding for file or URL input.
+            ``infer_types`` (bool): Whether to infer column types.
+
+        Returns:
+            ``SQLDataModel``: The SQLDataModel object created from the provided XML data.
+
+        Raises:
+            ``TypeError``: If ``xml_source`` is not a string type.
+            ``ValueError``: If value for ``orient``is not one of `'rows'` or `'columns'` representing the data orientation.
+        
+        Example::
+
+            import sqldatamodel as sdm
+
+            # XML data as string literal
+            xml_literal = '''
+            <data>
+                <row>
+                    <Name>Alice</Name>
+                    <Age>25</Age>
+                    <Grade>3.8</Grade>
+                </row>
+                <row>
+                    <Name>Bob</Name>
+                    <Age>30</Age>
+                    <Grade>3.9</Grade>
+                </row>
+                <row>
+                    <Name>Charlie</Name>
+                    <Age>35</Age>
+                    <Grade>3.2</Grade>
+                </row>
+            </data>'''
+            
+            # Create the model from the XML data
+            df = sdm.SQLDataModel.from_xml(xml_literal)
+
+            # View the resulting model
+            print(df)
+
+        This will output:
+
+        ```shell
+            ┌───┬─────────┬─────┬───────┐
+            │   │ Name    │ Age │ Grade │
+            ├───┼─────────┼─────┼───────┤
+            │ 0 │ Alice   │  25 │  3.80 │
+            │ 1 │ Bob     │  30 │  3.90 │
+            │ 2 │ Charlie │  35 │  3.20 │
+            └───┴─────────┴─────┴───────┘    
+            [3 rows x 3 columns]            
+        ```    
+        
+        Alternatively, column names can be parsed from ``name`` attributes of ``<col>`` tags:
+
+        ```python
+            import sqldatamodel as sdm
+
+            # Sample XML str literal
+            xml = '''
+            <data>
+                <row>
+                    <col name="1">Alice</col>
+                    <col name="2">30</col>
+                </row>
+                <row>
+                    <col name="1">Bob</col>
+                    <col name="2">25</col>
+                </row>
+            </data>
+            '''
+
+            df = sdm.SQLDataModel.from_xml(xml)
+            print(df.headers) # [1, 2]
+
+            print(df.to_json(index=False))
+            # [{"1": "Alice", "2": 30}, {"1": "Bob", "2": 25}]            
+        ```
+
+        Note:
+            - The headers will be parsed from either a direct self-named ``<COLUMN_NAME>`` tag, or from a generic ``<col>`` tag's ``name`` attribute if serialized accordingly.
+
+        Changelog:
+            - Version 2.3.1 (2026-01-22):
+                - New method.
+        """
+        import xml.etree.ElementTree as ET
+
+        if not isinstance(xml_source, str):
+            msg = ErrorFormat(
+                f"TypeError: invalid type '{type(xml_source).__name__}', "
+                f"`xml_source` must be of type 'str'"
+            )
+            raise TypeError(msg)
+
+        if orient not in ("rows", "columns"):
+            msg = ErrorFormat(
+                f"ValueError: invalid orient '{orient}', expected 'rows' or 'columns'"
+            )
+            raise ValueError(msg)
+        try:
+            if xml_source.startswith("http"):
+                xml_source = urllib.request.urlopen(xml_source).read().decode(encoding)
+            elif os.path.exists(xml_source):
+                with open(xml_source, "r", encoding=encoding) as f:
+                    xml_source = f.read()
+        except Exception as e:
+            msg = ErrorFormat(f"{type(e).__name__}: {e} encountered while loading XML")
+            raise type(e)(msg).with_traceback(e.__traceback__) from None
+
+        try:
+            root = ET.fromstring(xml_source)
+        except Exception as e:
+            msg = ErrorFormat(f"ValueError: failed to parse XML due to '{e}'")
+            raise ValueError(msg) from None
+
+        if root_tag:
+            target = root.find(f".//{root_tag}")
+            if target is None:
+                msg = ErrorFormat(f"ValueError: root tag '{root_tag}' not found in XML")
+                raise ValueError(msg)
+            root = target
+
+        # ROW-ORIENTED
+        if orient == "rows":
+            def flatten(elem, out=None):
+                if out is None:
+                    out = {}
+                for child in elem:
+                    # Column name comes from `name` attribute or tag
+                    key = child.attrib.get("name", child.tag)
+                    # Include non-name attributes (rare, but supported)
+                    for k, v in child.attrib.items():
+                        if k == "name":
+                            continue
+                        out[f"{key}@{k}"] = v
+                    # Leaf value
+                    out[key] = child.text
+                return out
+
+            rows = []
+            for r in root.findall(f".//{row_tag}"):
+                rows.append(flatten(r))
+
+            if not rows:
+                msg = ErrorFormat("ValueError: no row elements found in XML")
+                raise ValueError(msg)
+
+            headers = list(dict.fromkeys(k for r in rows for k in r.keys()))
+            data = [[r.get(h) for h in headers] for r in rows]
+
+            return cls(data=data, headers=headers, infer_types=infer_types, **kwargs)
+
+        # COLUMN-ORIENTED
+
+        columns = {}
+        max_len = 0
+
+        for col in root.findall(f".//{column_tag}"):
+            name = col.attrib.get("name")
+            if not name:
+                continue
+            values = [v.text for v in col.findall(value_tag)]
+            columns[name] = values
+            max_len = max(max_len, len(values))
+
+        if not columns:
+            msg = ErrorFormat("ValueError: no column elements found in XML")
+            raise ValueError(msg)
+
+        headers = list(columns.keys())
+        data = [
+            [columns[h][i] if i < len(columns[h]) else None for h in headers]
+            for i in range(max_len)
+        ]
+
+        return cls(data=data, headers=headers, infer_types=infer_types, **kwargs)
 
     @classmethod
     def get_supported_sql_connections(cls) -> tuple:
@@ -6469,6 +6667,193 @@ class SQLDataModel:
         else:
             return table_repr
         
+    def to_xml(self, filename: str | None = None, root_tag: str = "data", row_tag: str = "row", column_tag: str = "column", value_tag: str = "value", orient: Literal["rows", "columns"] = "rows", index: bool | None = None, encoding: str = "utf-8", pretty: bool = True, xml_declaration: bool = True) -> str | None:
+        """
+        Converts the ``SQLDataModel`` instance to XML format. If ``filename`` is specified, writes the XML to file; otherwise returns the XML string literal.
+
+        Parameters:
+            ``filename`` (str | None): Output file path. If None, returns XML as string.
+            ``root_tag`` (str, optional): Root element name. Default is `'data'`.
+            ``row_tag`` (str, optional): Row element name. Default is `'row'`.
+            ``column_tag`` (str, optional): column element name. Default is `'column'`.
+            ``value_tag`` (str, optional): value element name. Default is `'value'`.
+            ``orient`` (Literal['rows','columns'], optional): Orientation of the XML output.
+                - ``'rows'`` (default): Each row is serialized as a ``<row>`` element.
+                - ``'columns'``: Each column is serialized as a ``<column>`` element containing one or more ``<value>`` elements.            
+            ``index`` (bool | None): Whether to include index column. Defaults to `display_index`.
+            ``encoding`` (str, optional): Output encoding. Default `'utf-8'`.
+            ``pretty`` (bool, optional): Whether to pretty-print XML output. Default `True`.
+            ``xml_declaration`` (bool, optional): Whether to include the XML declaration ``<?xml version="1.0" encoding="utf-8"?>`` at the top of the output. Default is ``True``.
+
+        Raises:
+            ``TypeError``: If ``filename`` is provided and is not of type ``str`` representing a filepath to write the XML data to.
+            ``OSError``: If an error is encountered when trying to access or write to the specified file.
+
+        Returns:
+            ``str``: If ``filename`` is None, returns the XML representation as a string. If ``filename`` is provided, writes the XML representation to the specified file and returns None.
+
+        Example::
+
+            import sqldatamodel as sdm
+
+            # Sample data
+            headers = ['Name', 'Age', 'Grade']
+            data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2)]
+            
+            # Create the model and generate the XML data
+            df = sdm.SQLDataModel(data, headers)
+            xml_data = df.to_xml(index=False)
+
+            # View the resulting XML literal
+            print(xml_data)
+
+        This will output the XML representation of our sample data:
+
+        ```shell
+            <data>
+                <row>
+                    <Name>Alice</Name>
+                    <Age>25</Age>
+                    <Grade>3.8</Grade>
+                </row>
+                <row>
+                    <Name>Bob</Name>
+                    <Age>30</Age>
+                    <Grade>3.9</Grade>
+                </row>
+                <row>
+                    <Name>Charlie</Name>
+                    <Age>35</Age>
+                    <Grade>3.2</Grade>
+                </row>
+            </data>    
+        ````
+        
+        Orient by columns:
+
+        ```python
+            import sqldatamodel as sdm
+
+            # Sample data
+            headers = ['Name', 'Age', 'Grade']
+            data = [('Alice', 25, 3.8), ('Bob', 30, 3.9), ('Charlie', 35, 3.2)]
+            
+            # Create the model
+            df = sdm.SQLDataModel(data, headers)
+            
+            # Alternatively, we can orient the XML data by columns instead of rows
+            xml_by_cols = df.to_xml(orient='columns', index=False)
+
+            # View the resulting XML literal
+            print(xml_data)
+        ```
+
+        This will output the data in columnar orientation:
+
+        ```shell
+            <data>
+                <column name="Name">
+                    <value>Alice</value>
+                    <value>Bob</value>
+                    <value>Charlie</value>
+                </column>
+                <column name="Age">
+                    <value>25</value>
+                    <value>30</value>
+                    <value>35</value>
+                </column>
+                <column name="Grade">
+                    <value>3.8</value>
+                    <value>3.9</value>
+                    <value>3.2</value>
+                </column>
+            </data>        
+        ```
+
+        Note:
+            - Columns with names that are not valid XML tags are serialized using a ``<col>`` element with the original name stored in a ``name`` attribute for round-trip safety.
+            - The XML declaration can be excluded by setting ``xml_declaration=False``, which is useful when embedding the output as an XML fragment inside a larger document.
+            - When ``orient='columns'`` is used, the output is fully compatible with :meth:`SQLDataModel.from_xml(orient='columns')` for lossless round-trip conversion.
+            
+        Changelog:
+            - Version 2.3.1 (2026-01-22):
+                - New method.
+        """
+        if not isinstance(filename, str) and filename is not None:
+            msg = ErrorFormat(f"TypeError: invalid type '{type(filename).__name__}', `filename` must be of type 'str'")
+            raise TypeError(msg)
+
+        if orient not in ("rows", "columns"):
+            msg = ErrorFormat(f"ValueError: invalid orient '{orient}', expected 'rows' or 'columns'")
+            raise ValueError(msg)
+
+        def is_valid_xml_tag(tag: str) -> bool:
+            return bool(re.match(r"^[A-Za-z_][\w.-]*$", tag))
+
+        index = self.display_index if index is None else index
+        headers = [self.sql_idx, *self.headers] if index else self.headers
+        root = ET.Element(root_tag)
+
+        # ROW-ORIENTED
+        if orient == "rows":
+            for row in self.iter_rows(index=index):
+                r = ET.SubElement(root, row_tag)
+                for col, val in zip(headers, row):
+                    col_name = str(col)
+
+                    if is_valid_xml_tag(col_name):
+                        c = ET.SubElement(r, col_name)
+                    else:
+                        c = ET.SubElement(r, "col")
+                        c.set("name", col_name)
+
+                    if val is not None:
+                        c.text = str(val)
+
+        # COLUMN-ORIENTED
+        else:
+            model_data = self.data(strict_2d=True, include_headers=True, index=index)
+            model_headers, model_data = model_data[0], model_data[1:]
+            for (cid, col) in enumerate(model_headers):
+                col_name = str(col)
+
+                if is_valid_xml_tag(col_name):
+                    c = ET.SubElement(root, column_tag)
+                    c.set("name", col_name)
+                else:
+                    c = ET.SubElement(root, column_tag)
+                    c.set("name", col_name)
+
+                for row in model_data:
+                    val = row[cid]
+                    v = ET.SubElement(c, value_tag)
+                    if val is not None:
+                        v.text = str(val)
+
+        xml_bytes = ET.tostring(root, encoding=encoding)
+
+        if pretty:
+            xml_bytes = minidom.parseString(xml_bytes).toprettyxml(
+                indent="    ",
+                encoding=encoding
+            )
+
+        if not xml_declaration:
+            xml_text = xml_bytes.decode(encoding)
+            if xml_text.startswith("<?xml"):
+                xml_text = xml_text.split("?>", 1)[1].lstrip()
+            xml_bytes = xml_text.encode(encoding)
+
+        if filename is not None:
+            try:
+                with open(filename, "wb") as f:
+                    f.write(xml_bytes)
+            except Exception as e:
+                msg = ErrorFormat(f"{type(e).__name__}: {e} encountered when writing XML")
+                raise type(e)(msg).with_traceback(e.__traceback__) from None
+        else:
+            return xml_bytes.decode(encoding).removesuffix('\n')
+
     def to_local_db(self, filename:str) -> None:
         """
         Writes the ``SQLDataModel`` in-memory database to disk as a SQLite database file using the specified filename.
@@ -12950,17 +13335,19 @@ class SQLDataModel:
             args['dtypes'] = self.dtypes
         return args
 
-    def _validate_row(self, row:int|slice|Iterable[int], unmodified:bool=False) -> tuple[int]:
+    def _validate_row(self, row:int|slice|Iterable[int], unmodified:bool=False, allow_zero_rows:bool=True) -> tuple[int]:
         """
         Utility function used to validate row selection and return parsed values.
 
         Parameters:
             ``row`` (int|slice|Iterable[int]): The row selection to validate, argument should reflect the integer indexes of the rows to select.
             ``unmodified`` (bool, optional): Whether ``row`` should be returned as originally indexed. Default is False, returning as tuple.
+            ``allow_zero_rows`` (bool, optional): Whether ``row``, when provided as a slice, is allowed to return zero valid row indicies. Default is True, validating on any slice argument.
 
         Raises:
             ``TypeError``: If ``row`` is not one of type 'int', 'slice' or 'Iterable' representing the integer index of row(s) to select.
             ``IndexError``: If ``row`` is outside of current model range bounded by :py:attr:`SQLDataModel.row_count` whether positively or negatively indexed.
+                Is not raised when ``allow_zero_rows`` is True and ``row`` is provided as a slice of indicies.
             
         Returns:
             ``tuple[int]``: A tuple containing the validated row values resulting from the selection.
@@ -13004,6 +13391,8 @@ class SQLDataModel:
             - See :meth:`SQLDataModel._validate_column()` for validating column indicies and returning the corresponding headers.
 
         Changelog:
+            - Version 2.3.1 (2026-01-22):
+                - Modified to allow validation of slice index regardless of number of rows returned when ``allow_zero_rows`` is True.
             - Version 0.7.9 (2024-06-20):
                 - New method.
         """
@@ -13019,7 +13408,7 @@ class SQLDataModel:
             return (validated_row,) if not unmodified else row
         elif isinstance(row, slice):
             validated_row = self.indicies[row]
-            if (num_rows_in_scope := len(validated_row)) < 1:
+            if not allow_zero_rows and (num_rows_in_scope := len(validated_row)) < 1:
                 msg = ErrorFormat(f"IndexError: insufficient rows '{num_rows_in_scope}', provided row slice returned no valid row indicies within current model range of '0:{self.row_count}'")
                 raise IndexError(msg)
             return validated_row if not unmodified else row

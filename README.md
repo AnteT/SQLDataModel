@@ -520,6 +520,7 @@ Regardless of where the data originated or where it ends up, `SQLDataModel`'s be
     - **`|`**: Pipe separated values.
     - **`:`**: Colon separated values.
     - **`,`**: Comma separated values or `.csv` files.
+- **XML**: Extract from xml formats and write to and from `.xml` files including XML formatted string literals.    
 - **Python** objects:
     - **dictionaries**: Convert to and from collections of python `dict` objects.
     - **lists**: Convert to and from collections of python `list` objects.
