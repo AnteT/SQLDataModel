@@ -3,10 +3,10 @@ import datetime, os, tempfile, csv, sqlite3, random, string, sys, decimal
 from typing import Literal, Iterable
 from itertools import cycle, islice
 from collections import Counter, namedtuple
-import pytest
-import pandas as pd
-import polars as pl
-import numpy as np
+import pytest       # type: ignore
+import pandas as pd # type: ignore  
+import polars as pl # type: ignore 
+import numpy as np  # type: ignore 
 
 PYTHON_VERSION = (sys.version_info.major, sys.version_info.minor)
 """Current Python interpreter version in the format of ``(major, minor)`` to use for determining supported test suite."""

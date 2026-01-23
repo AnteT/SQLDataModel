@@ -18,10 +18,10 @@ from .ansicolor import ANSIColor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import numpy as _np
-    import pandas as _pd
-    import polars as _pl
-    import pyarrow as _pa
+    import numpy as _np   # type: ignore
+    import pandas as _pd  # type: ignore
+    import polars as _pl  # type: ignore
+    import pyarrow as _pa # type: ignore
 
 class SQLDataModel:
     """
