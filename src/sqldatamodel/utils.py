@@ -101,6 +101,8 @@ def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-
         - If the input object is not a string or cannot be parsed, its type is determined based on its Python type (bool, int, float, bytes, or None).
     
     Changelog:
+        - Version 2.3.2 (2026-01-23):
+            - Modified check for possible to bytes to include lower cased prefix format of `x'<BYTES>'`
         - Version 2.3.0 (2026-01-21):
             - Added additional check for possible `bytes` data if obj matches format of `X'<BYTES>' where bytes are valid hexadecimal format.
         - Version 0.1.9 (2024-03-19):
@@ -111,7 +113,7 @@ def infer_str_type(obj:str, date_format:str='%Y-%m-%d', datetime_format:str='%Y-
     try:
         obj = literal_eval(obj)
     except (ValueError, SyntaxError):
-        if isinstance(obj, str) and obj.startswith("X'") and obj.endswith("'") and len(obj) > 2:
+        if isinstance(obj, str) and (obj.startswith("X'") or obj.startswith("x'")) and obj.endswith("'") and len(obj) > 2:
             try:
                 obj = bytes.fromhex(obj[2:-1])
             except (ValueError, SyntaxError):
@@ -198,6 +200,8 @@ def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','s
         - Used by :meth:`SQLDataModel.__init__()` with ``as_binding=True`` to allow parameterized inserts to cast to appropriate data type.
 
     Changelog:
+        - Version 2.3.2 (2026-01-23):
+            - Modified handling for bytes dtype further to handle parsing values of mixed ASCII encoded bytes and escaped hexadecimal bytes.    
         - Version 2.3.0 (2026-01-21):
             - Added support for alternate bytes format `X'<BYTES>'` so that binary data is correctly handled when formatted as hexadecimal and prefixed by either `'b'` or `'X'`.
         - Version 0.7.6 (2024-06-16):
@@ -206,44 +210,142 @@ def sqlite_cast_type_format(param:str='?', dtype:Literal['None','int','float','s
         - Version 0.3.3 (2024-04-03):
             - New method.
     """
-    param_alias =  f'''as "{param}"''' if as_alias else ''''''
-    if dtype in ('str','None','NoneType'):
-        return '''CAST(NULLIF(NULLIF(?,'None'),'') as TEXT)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as TEXT) {param_alias}'''
-    elif dtype == 'int':
-        return '''CAST(NULLIF(NULLIF(?,'None'),'') as INTEGER)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as INTEGER) {param_alias}'''
-    elif dtype == 'float':
-        return '''CAST(NULLIF(NULLIF(?,'None'),'') as REAL)''' if as_binding else f'''CAST(NULLIF(NULLIF("{param}",'None'),'') as REAL) {param_alias}'''
-    elif dtype == 'bytes':
-        # return """(SELECT CAST(CASE WHEN ((SUBSTR(val,1,2) = 'b''' OR SUBSTR(val,1,2) = 'X''') AND SUBSTR(val,-1,1) ='''') THEN SUBSTR(val,3,LENGTH(val)-3) ELSE NULLIF(NULLIF(val,'None'),'') END as BLOB) FROM (SELECT ? AS val))""" if as_binding else f"""CAST(CASE WHEN ((SUBSTR("{param}",1,2) = 'b''' OR (SUBSTR("{param}",1,2) = 'X''') AND SUBSTR("{param}",-1,1) ='''') THEN SUBSTR("{param}",3,LENGTH("{param}")-3) ELSE NULLIF(NULLIF("{param}",'None'),'') END as BLOB) {param_alias} """
-        return r"""(
+    # Normalize how we reference the value and aliases to avoid painful bifurcation over something so trivial
+    val_expr = '?' if as_binding else f'"{param}"'
+    param_alias = f' as "{param}"' if as_alias else ''
+
+    # Common wrappers
+    def _nullified(expr: str) -> str:
+        return f"NULLIF(NULLIF({expr},'None'),'')"
+
+    def _simple_cast(sql_type: str) -> str:
+        return f"CAST({_nullified(val_expr)} as {sql_type}){param_alias}"
+
+    def _bytes_sql(expr: str) -> str:
+        # Single source of truth for bytes handling; accepts any SQL expression as input.
+        return f"""(
+            WITH norm(val) AS (
+                SELECT {expr}
+            ),
+            parts AS (
+                SELECT
+                    val,
+                    typeof(val) AS t,
+                    CASE WHEN typeof(val) = 'text' THEN SUBSTR(val,1,2) END AS prefix,
+                    CASE WHEN typeof(val) = 'text' THEN SUBSTR(val,-1,1) END AS suffix,
+                    CASE
+                        WHEN typeof(val) = 'text' AND LENGTH(val) >= 3
+                        THEN SUBSTR(val,3,LENGTH(val)-3)
+                    END AS body
+                FROM norm
+            )
             SELECT
             CASE
-                -- If looks like an SQLite blob literal X'...'
-                WHEN SUBSTR(val,1,2) = 'X''' AND SUBSTR(val,-1,1) = ''''
-                THEN unhex(SUBSTR(val,3,LENGTH(val)-3))
-                -- If looks like a Python bytes repr b'...'
-                WHEN SUBSTR(val,1,2) = 'b''' AND SUBSTR(val,-1,1) = ''''
-                THEN CAST(SUBSTR(val,3,LENGTH(val)-3) AS BLOB)
-                ELSE CAST(NULLIF(NULLIF(val,'None'),'') AS BLOB)
-            END
-            FROM (SELECT ? AS val)
-        )""" if as_binding else rf"""CASE
-                WHEN SUBSTR("{param}",1,2) = 'X''' AND SUBSTR("{param}",-1,1) = ''''
-                THEN unhex(SUBSTR("{param}",3,LENGTH("{param}")-3))
-                WHEN SUBSTR("{param}",1,2) = 'b''' AND SUBSTR("{param}",-1,1) = ''''
-                THEN CAST(SUBSTR("{param}",3,LENGTH("{param}")-3) AS BLOB)
-                ELSE CAST(NULLIF(NULLIF("{param}",'None'),'') AS BLOB)
-            END {param_alias}"""
+                -- 1) Already a BLOB → passthrough
+                WHEN t = 'blob'
+                THEN val
 
-    elif dtype == 'date':
-        return '''(SELECT CASE WHEN SUBSTR(val, 3, 1) = '-' THEN DATE(SUBSTR(val, 7, 4) || '-' ||SUBSTR(val, 1, 2) || '-' ||SUBSTR(val, 4, 2)) ELSE DATE(NULLIF(NULLIF(val, 'None'), '')) END FROM (SELECT REPLACE(REPLACE(?, '/', '-'), '.', '-') AS val))''' if as_binding else f'''CASE WHEN SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'),3,1) = '-' THEN DATE(SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 7, 4) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 1, 2) || '-' || SUBSTR(REPLACE(REPLACE("{param}",'/','-'),'.','-'), 4, 2)) ELSE DATE(NULLIF(NULLIF(REPLACE(REPLACE("{param}",'/','-'),'.','-'),'None'),'')) END {param_alias} '''
-    elif dtype == 'datetime':
-        return '''DATETIME(NULLIF(NULLIF(?,'None'),''))''' if as_binding else f'''DATETIME(NULLIF(NULLIF("{param}",'None'),'')) {param_alias}'''
-    elif dtype == 'bool':
-        return '''CAST(CASE COALESCE(NULLIF(?,''),'None') WHEN 'None' THEN null WHEN 'False' THEN 0 WHEN '0' THEN 0 WHEN 0 THEN 0 ELSE 1 END as INTEGER)''' if as_binding else f'''CAST(CASE coalesce(NULLIF("{param}",''),'None') WHEN 'None' THEN null WHEN 'False' THEN 0 WHEN '0' THEN 0 WHEN 0 THEN 0 ELSE 1 END as INTEGER) {param_alias}'''
-    else:
-        return '''NULLIF(NULLIF(?,'None'),'')''' if as_binding else f'''NULLIF(NULLIF("{param}",'None'),'') {param_alias}'''
-    
+                -- 2) NULL / empty / 'None'
+                WHEN val IS NULL
+                 OR val = ''
+                 OR val = 'None'
+                THEN NULL
+
+                -- 3) SQLite hex literal X'CAFE' / x'cafe'
+                WHEN t = 'text'
+                 AND (prefix = 'X''' OR prefix = 'x''')
+                 AND suffix = ''''
+                THEN unhex(body)
+
+                -- 4) Python repr: b'AB' (no hex escapes)
+                WHEN t = 'text'
+                 AND prefix = 'b'''
+                 AND suffix = ''''
+                 AND INSTR(body, '\\x') = 0
+                THEN CAST(body AS BLOB)
+
+                -- 5) Python repr with hex escapes, possibly mixed: b'AB\\xFF\\xBE\\xEF'
+                WHEN t = 'text'
+                 AND prefix = 'b'''
+                 AND suffix = ''''
+                 AND INSTR(body, '\\x') > 0
+                THEN (
+                    WITH RECURSIVE
+                      scan(i, n, s, hexout) AS (
+                        -- i: 1-based index into s
+                        -- n: length(s)
+                        -- s: the body string
+                        -- hexout: accumulated hex string
+                        SELECT 1, LENGTH(body), body, ''
+                        UNION ALL
+                        SELECT
+                          CASE
+                            WHEN SUBSTR(s, i, 2) = '\\x'
+                                 AND i + 3 <= n
+                                 AND INSTR('0123456789abcdefABCDEF', SUBSTR(s, i+2, 1)) > 0
+                                 AND INSTR('0123456789abcdefABCDEF', SUBSTR(s, i+3, 1)) > 0
+                            THEN i + 4
+                            ELSE i + 1
+                          END,
+                          n,
+                          s,
+                          hexout ||
+                          CASE
+                            WHEN SUBSTR(s, i, 2) = '\\x'
+                                 AND i + 3 <= n
+                                 AND INSTR('0123456789abcdefABCDEF', SUBSTR(s, i+2, 1)) > 0
+                                 AND INSTR('0123456789abcdefABCDEF', SUBSTR(s, i+3, 1)) > 0
+                            THEN SUBSTR(s, i+2, 2)
+                            ELSE HEX(CAST(SUBSTR(s, i, 1) AS BLOB))
+                          END
+                        FROM scan
+                        WHERE i <= n
+                      )
+                    SELECT unhex(hexout)
+                    FROM scan
+                    WHERE i > n
+                    ORDER BY i DESC
+                    LIMIT 1
+                )
+
+                -- 6) Fallback: raw text → blob
+                ELSE CAST(val AS BLOB)
+            END
+            FROM parts
+        ){param_alias}"""
+
+    # Fast-path mapping for trivial cases
+    if dtype in ('str', 'None', 'NoneType'):
+        return _simple_cast('TEXT')
+    if dtype == 'int':
+        return _simple_cast('INTEGER')
+    if dtype == 'float':
+        return _simple_cast('REAL')
+    if dtype == 'datetime':
+        return f"DATETIME({_nullified(val_expr)}){param_alias}"
+    if dtype == 'bool':
+        # Preserve the original truthy/falsy mapping and null handling
+        return (
+            f"CAST(CASE COALESCE(NULLIF({val_expr},''),'None') "
+            f"WHEN 'None' THEN NULL "
+            f"WHEN 'False' THEN 0 WHEN '0' THEN 0 WHEN 0 THEN 0 "
+            f"ELSE 1 END as INTEGER){param_alias}"
+        )
+    if dtype == 'date':
+        # Reuse normalized 'val' via subquery
+        return (
+            f"(SELECT CASE "
+            f"WHEN SUBSTR(val, 3, 1) = '-' "
+            f"THEN DATE(SUBSTR(val, 7, 4) || '-' || SUBSTR(val, 1, 2) || '-' || SUBSTR(val, 4, 2)) "
+            f"ELSE DATE(NULLIF(NULLIF(val, 'None'), '')) END "
+            f"FROM (SELECT REPLACE(REPLACE({val_expr}, '/', '-'), '.', '-') AS val)){param_alias}"
+        )
+    if dtype == 'bytes':
+        return _bytes_sql(val_expr)
+
+    # Fallback preserves your previous behavior (no CAST, just null-strip)
+    return f"{_nullified(val_expr)}{param_alias}"
+
 def sqlite_printf_format(column:str, dtype:str, max_pad_width:int, float_precision:int=4, alignment:str=None, escape_newline:bool=False, truncation_chars:str='⠤⠄') -> str:
     """
     Formats SQLite SELECT clauses based on column parameters to provide preformatted fetches, providing most of the formatting for ``repr`` output.

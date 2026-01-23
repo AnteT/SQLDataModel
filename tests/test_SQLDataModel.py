@@ -3222,3 +3222,33 @@ def test_to_from_xml():
         <value>2,2</value>
     </column>
 </data>"""    
+
+@pytest.mark.core
+def test_concat_empty():
+    headers, data = ['A', 'B'], [('A1', 'B1'), ('A2', 'B2')]
+    df_A = SQLDataModel(data, headers)
+    df_B = SQLDataModel(headers=headers)
+    df_AB = df_A.concat(df_B, inplace=False)
+    assert df_AB == df_A
+
+    df_AB = df_A.copy()
+    df_AB.concat(df_B, inplace=True)
+    assert df_AB == df_A
+
+@pytest.mark.core
+def test_bytes_from_mixed_str_encoding():
+    input_headers = ['bytes_simple', 'bytes_mixed', 'bytes_quoted','bytes_escaped']
+    input_dtypes = {'bytes_simple': 'bytes', 'bytes_mixed': 'bytes', 'bytes_quoted': 'bytes','bytes_escaped': 'bytes'}
+    input_data = [
+        ("b'blob-1'", (r"""b'ABC\xc4\xcaB8\xa0\xb9#\x82\r\xccP\x9aou\x84\x9b'"""), """X'cafebeef68656C6C6F00a1'""","""b'\\x41\\x42\\x43\\x51\\x52\\x53'"""),
+        ("b'blob-2'", (r"""b'DEF\xc8\x1er\x8d\x9dL/co\x06\x7f\x89\xcc\x14\x86,'"""), """X'cafebeef68656C6C6F00b2'""","""b'\\x44\\x45\\x46\\x54\\x55\\x56'"""),
+        ("b'blob-3'", (r"""b'GHI\xec\xcb\xc8~K\\xe2\xfe(0\x8f\xd9\xf2\xa7\xba\xf3'"""), """X'cafebeef68656C6C6F00c3'""","""b'\\x47\\x48\\x49\\x57\\x58\\x59'"""),
+    ]    
+    df = SQLDataModel(data=input_data, headers=input_headers, dtypes=input_dtypes)
+    output_received = df.data(strict_2d=True, include_headers=False, index=False)
+    output_expected = [
+        (b'blob-1', b'ABC\xc4\xcaB8\xa0\xb9#\x82\\r\xccP\x9aou\x84\x9b', b'\xca\xfe\xbe\xefhello\x00\xa1', b'ABCQRS'),
+        (b'blob-2', b'DEF\xc8\x1er\x8d\x9dL/co\x06\x7f\x89\xcc\x14\x86,', b'\xca\xfe\xbe\xefhello\x00\xb2', b'DEFTUV'),
+        (b'blob-3', b'GHI\xec\xcb\xc8~K\\\xe2\xfe(0\x8f\xd9\xf2\xa7\xba\xf3', b'\xca\xfe\xbe\xefhello\x00\xc3', b'GHIWXY'),
+    ]  
+    assert output_received == output_expected
